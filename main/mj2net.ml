@@ -67,13 +67,16 @@ let rec tr_exp e = match e.e_desc with
   | Evar id -> Netlist_ast.Earg (Netlist_ast.Avar (string_of_ident id))
   | Econst v ->  Netlist_ast.Earg (Netlist_ast.Aconst (tr_value v))
   | Ereg e -> Netlist_ast.Ereg (expect_ident e)
-  | Ecall ("not", _, [e]) -> Netlist_ast.Enot (expect_arg e)
-  | Ecall (("or" | "xor" | "and" | "nand") as op, _, [e1; e2]) ->
+  | Ecall (("n_not" | "not"), _, [e]) -> Netlist_ast.Enot (expect_arg e)
+  | Ecall (("n_or" | "or" 
+          | "n_xor"| "xor" 
+          | "n_and"| "and"
+          | "nand") as op, _, [e1; e2]) ->
       let op =
         match op with
-          | "or" -> Netlist_ast.Or
-          | "xor" -> Netlist_ast.Xor
-          | "and" -> Netlist_ast.And
+          | "or" | "n_or" -> Netlist_ast.Or
+          | "xor"| "n_xor" -> Netlist_ast.Xor
+          | "and"| "n_and" -> Netlist_ast.And
           | "nand" -> Netlist_ast.Nand
           | _ -> assert false
       in

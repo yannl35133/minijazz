@@ -80,11 +80,21 @@ module Modules = struct
     env := Ast.NameEnv.add n s !env
 
   let _ =
-    add_sig "and" [TBit;TBit] [TBit];
-    add_sig "xor" [TBit;TBit] [TBit];
-    add_sig "or"  [TBit;TBit] [TBit];
-    add_sig "not" [TBit] [TBit];
-    add_sig "reg" [TBit] [TBit];
+    let n_binop name =
+        add_sig name [TBit;TBit] [TBit];
+        let var_t = TBitArray (mk_static_var "n") in
+        add_sig ~params:["n"] ("n_"^name) [var_t;var_t] [var_t]
+    in let n_unnop name =
+        add_sig name [TBit] [TBit];
+        let var_t = TBitArray (mk_static_var "n") in
+        add_sig ~params:["n"] ("n_"^name) [var_t] [var_t]
+    in 
+    n_binop "and";
+    n_binop "xor";
+    n_binop "or";
+
+    n_unnop "not";
+
     add_sig "mux" [TBit;TBit;TBit] [TBit];
     add_sig ~params:["n"] "print" [TBitArray (mk_static_var "n"); TBit] [TBit];
     add_sig ~params:["n"] "input" [TBit] [TBitArray (mk_static_var "n")];
@@ -298,8 +308,8 @@ let rec type_exp env e =
       | Econst (VBitArray a) -> e.e_desc, TBitArray (mk_static_int (Array.length a))
       | Evar id -> Evar id, IdentEnv.find id env
       | Ereg e ->
-          let e = expect_exp env e TBit in
-          Ereg e, TBit
+          let e, e_ty = type_exp env e in
+          Ereg e, e_ty
       | Emem (MRom, addr_size, word_size, file, args) ->
           (* addr_size > 0 *)
           add_constraint (mk_static_exp (SBinOp (SLess, mk_static_int 0, addr_size)));

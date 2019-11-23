@@ -1,0 +1,13 @@
+INPUT a, b
+OUTPUT o_or, o_and, o_xor, o_not, o_reg
+VAR
+  _l_12 : 4, a : 4, b : 4, o_and : 4, o_not : 4, o_or : 4, o_reg : 4, 
+  o_xor : 4
+IN
+o_reg = REG _l_12
+o_not = NOT a
+o_xor = XOR a b
+o_and = AND a b
+o_or = OR a b
+_l_12 = NOT a
+
