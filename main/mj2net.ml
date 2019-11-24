@@ -83,6 +83,10 @@ let rec tr_exp e = match e.e_desc with
       Netlist_ast.Ebinop (op, expect_arg e1, expect_arg e2)
   | Ecall (("mux" | "n_mux"), _, [e1; e2; e3]) ->
       Netlist_ast.Emux (expect_arg e1, expect_arg e2, expect_arg e3)
+  | Ecall ("n_zero", n::_, []) ->
+      let nb = expect_int n in
+      Netlist_ast.Earg (Netlist_ast.Aconst 
+                (VBitArray (Array.make nb false)))
   | Ecall("select", idx::_, [e]) ->
       Netlist_ast.Eselect (expect_int idx, expect_arg e)
   | Ecall("slice", min::max::_, [e]) ->

@@ -46,6 +46,8 @@ o1 = n_or<n>(a,b)
 
 `reg` peut être utilisé sur des nappes avec la même syntaxe que pour les fils.
 
+`n_zero<n>()` créer une nappe initialisée à 0.
+
 Voir [n_ops](./test/n_ops.mj).
 
 Crédits

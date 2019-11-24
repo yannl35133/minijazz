@@ -99,6 +99,8 @@ module Modules = struct
 
     n_op [fix_ty TBit; var_ty; var_ty] "mux";
 
+    add_sig ~params:["n"] "n_zero" [] [TBitArray (mk_static_var "n")];
+
     add_sig ~params:["n"] "print" [TBitArray (mk_static_var "n"); TBit] [TBit];
     add_sig ~params:["n"] "input" [TBit] [TBitArray (mk_static_var "n")];
     let constr1 = mk_static_exp (SBinOp(SLess, mk_static_var "i", mk_static_var "n")) in
