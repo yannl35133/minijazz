@@ -86,7 +86,7 @@ let rec tr_exp e = match e.e_desc with
   | Ecall ("n_zero", n::_, []) ->
       let nb = expect_int n in
       Netlist_ast.Earg (Netlist_ast.Aconst 
-                (VBitArray (Array.make nb false)))
+                (Netlist_ast.VBitArray (Array.make nb false)))
   | Ecall("select", idx::_, [e]) ->
       Netlist_ast.Eselect (expect_int idx, expect_arg e)
   | Ecall("slice", min::max::_, [e]) ->

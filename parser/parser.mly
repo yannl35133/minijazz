@@ -49,7 +49,7 @@ let fresh_param () =
 %left DOT
 %left OR PLUS
 %left LEQ EQUAL
-%right MINUS
+%left MINUS
 %left NAND XOR AND
 %left STAR SLASH
 %right NOT REG
