@@ -71,17 +71,17 @@ let rec tr_exp e = match e.e_desc with
   | Ecall (("n_or" | "or" 
           | "n_xor"| "xor" 
           | "n_and"| "and"
-          | "nand") as op, _, [e1; e2]) ->
+          | "n_nand" | "nand") as op, _, [e1; e2]) ->
       let op =
         match op with
           | "or" | "n_or" -> Netlist_ast.Or
           | "xor"| "n_xor" -> Netlist_ast.Xor
           | "and"| "n_and" -> Netlist_ast.And
-          | "nand" -> Netlist_ast.Nand
+          | "nand"| "n_nand" -> Netlist_ast.Nand
           | _ -> assert false
       in
       Netlist_ast.Ebinop (op, expect_arg e1, expect_arg e2)
-  | Ecall ("mux", _, [e1; e2; e3]) ->
+  | Ecall (("mux" | "n_mux"), _, [e1; e2; e3]) ->
       Netlist_ast.Emux (expect_arg e1, expect_arg e2, expect_arg e3)
   | Ecall("select", idx::_, [e]) ->
       Netlist_ast.Eselect (expect_int idx, expect_arg e)

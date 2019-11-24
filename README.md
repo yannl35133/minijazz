@@ -37,10 +37,11 @@ Modifications
 Cette version est modifiée afin de tirer partie des simulateurs de netlist
 permettant l'application des opérations aux nappes.
 
-Les opérateurs `or`,`and`,`xor` et `not` peuvent êtres utilisés sur des nappes:
+Les opérateurs `or`,`and`,`xor`,`nand`, `not` et `mux` peuvent êtres utilisés
+sur des nappes:
 
 ```
-o1 = n_or<4>(a,b)
+o1 = n_or<n>(a,b)
 ```
 
 `reg` peut être utilisé sur des nappes avec la même syntaxe que pour les fils.

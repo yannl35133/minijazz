@@ -80,22 +80,25 @@ module Modules = struct
     env := Ast.NameEnv.add n s !env
 
   let _ =
-    let n_binop name =
-        add_sig name [TBit;TBit] [TBit];
-        let var_t = TBitArray (mk_static_var "n") in
-        add_sig ~params:["n"] ("n_"^name) [var_t;var_t] [var_t]
-    in let n_unnop name =
-        add_sig name [TBit] [TBit];
-        let var_t = TBitArray (mk_static_var "n") in
-        add_sig ~params:["n"] ("n_"^name) [var_t] [var_t]
-    in 
-    n_binop "and";
-    n_binop "xor";
-    n_binop "or";
+    let fix_ty ty0 _ = ty0
+    in let var_ty ty = ty
+    in let n_op params name =
+        let p_ty ty = List.map (fun p -> p ty) params
+        in let var_t = TBitArray (mk_static_var "n") in
+        add_sig name (p_ty TBit) [TBit];
+        add_sig ~params:["n"] ("n_"^name) (p_ty var_t) [var_t]
+    in let unop_params = [var_ty]
+    in let binop_params = [var_ty;var_ty]
+    in
+    n_op binop_params "and";
+    n_op binop_params "xor";
+    n_op binop_params "or";
+    n_op binop_params "nand";
 
-    n_unnop "not";
+    n_op unop_params "not";
 
-    add_sig "mux" [TBit;TBit;TBit] [TBit];
+    n_op [fix_ty TBit; var_ty; var_ty] "mux";
+
     add_sig ~params:["n"] "print" [TBitArray (mk_static_var "n"); TBit] [TBit];
     add_sig ~params:["n"] "input" [TBit] [TBitArray (mk_static_var "n")];
     let constr1 = mk_static_exp (SBinOp(SLess, mk_static_var "i", mk_static_var "n")) in
