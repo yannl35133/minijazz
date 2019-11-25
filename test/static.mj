@@ -1,0 +1,7 @@
+equ_1<n>() = (o:[n]) where
+	o = 0
+end where
+
+main() = (o:[1]) where
+	o = equ_1<1 + (2-1-1)*((2-1+1)-2)*(2-1*2)*(1-2/2)>()
+end where

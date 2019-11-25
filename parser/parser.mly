@@ -46,10 +46,9 @@ let fresh_param () =
 %token <string> BOOL_INT
 %token <bool> BOOL
 
-%left DOT
-%left OR PLUS
 %left LEQ EQUAL
-%left MINUS
+%left DOT
+%left OR PLUS MINUS
 %left NAND XOR AND
 %left STAR SLASH
 %right NOT REG
