@@ -167,6 +167,9 @@ rule token = parse
                               Loc (comment_start, comment_end)))
         end;
         token lexbuf }
+  | "#"
+      { preprocess lexbuf;
+        token lexbuf }
   | eof            {EOF}
   | _              {raise (Lexical_error (Illegal_character,
                       Loc (Lexing.lexeme_start_p lexbuf,
@@ -199,6 +202,7 @@ and comment = parse
   | eof
       { raise(Lexical_error(Unterminated_comment, Loc(dummy_pos,
                             Lexing.lexeme_start_p lexbuf))) }
+  | newline {new_line lexbuf; comment lexbuf}
   | _
       { comment lexbuf }
 
@@ -219,6 +223,12 @@ and string = parse
   | _
       { store_string_char(Lexing.lexeme_char lexbuf 0);
         string lexbuf }
+
+and preprocess = parse
+  | newline
+      { new_line lexbuf }
+  | _
+      { preprocess lexbuf }
 
 (* eof *)
 
