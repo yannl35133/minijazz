@@ -167,6 +167,19 @@ rule token = parse
                               Loc (comment_start, comment_end)))
         end;
         token lexbuf }
+  | "#" " "* (['0'-'9']+ as line) " "*
+    '"' ((['\032' - '\126']#['\\' '"'])* as file) '"' 
+     [' ' '0'-'9']* newline
+        {
+            let l = int_of_string line in
+            lexbuf.lex_curr_p <- {
+                lexbuf.lex_curr_p with
+                pos_fname = file;
+                pos_lnum  = l;
+                pos_bol = lexbuf.lex_curr_p.pos_cnum
+            };
+            token lexbuf
+        }
   | "#"
       { preprocess lexbuf;
         token lexbuf }

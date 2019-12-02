@@ -53,15 +53,21 @@ let error_prompt = ">"
 (** Prints [n] times char [c] on [oc]. *)
 let prints_n_chars ff n c = for i = 1 to n do pp_print_char ff c done
 
+let seek_line ic ln =
+    seek_in ic 0;
+    for i=0 to ln-2 do
+       let _ = input_line ic in ()
+    done
+
 (** Prints out to [oc] a line designed to be printed under [line] from file [ic]
   underlining from char [first] to char [last] with char [ch].
   [line] is the index of the first char of line. *)
-let underline_line ic ff ch line first last =
+let underline_line ic ff ch ln first last =
   let c = ref ' '
   and f = ref first
   and l = ref (last-first) in
   ( try
-    seek_in ic line;
+    seek_line ic ln;
     pp_print_string ff error_prompt;
     while c := input_char ic; !c != '\n' do
       if !f > 0 then begin
@@ -103,12 +109,10 @@ let skip_lines n ic =
 let print_location ff (Loc(p1,p2)) =
   let n1 = p1.pos_cnum - p1.pos_bol in (* character number *)
   let n2 = p2.pos_cnum - p2.pos_bol in
-  let np1 = p1.pos_cnum in (* character position *)
-  let np2 = p2.pos_cnum in
+  let np2 = p2.pos_cnum in (* character position *)
   let l1 = p1.pos_lnum in (* line number *)
   let l2 = p2.pos_lnum in
-  let lp1 = p1.pos_bol in (* line position *)
-  let lp2 = p2.pos_bol in
+  let lp2 = p2.pos_bol in (* line position *)
   let f1 = p1.pos_fname in (* file name *)
   let f2 = p2.pos_fname in
 
@@ -129,12 +133,13 @@ let print_location ff (Loc(p1,p2)) =
 
       if l1 == l2 then (
         (* Only one line : copy full line and underline *)
-        seek_in ic lp1;
+        seek_line ic l1;
         copy_lines 1 ic ff ">";
-        underline_line ic ff '^' lp1 n1 n2 )
+        underline_line ic ff '^' l1 n1 n2 )
       else (
-        underline_line ic ff '.' lp1 0 n1; (* dots until n1 *)
-        seek_in ic np1;
+        underline_line ic ff '.' l1 0 n1; (* dots until n1 *)
+        seek_line ic l1;
+        seek_in ic ((pos_in ic) + n1);
         (* copy the end of the line l1 after the dots *)
         copy_lines 1 ic ff "";
         if l2 - l1 <= 8 then
