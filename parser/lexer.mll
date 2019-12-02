@@ -202,6 +202,7 @@ and comment = parse
   | eof
       { raise(Lexical_error(Unterminated_comment, Loc(dummy_pos,
                             Lexing.lexeme_start_p lexbuf))) }
+  | newline {new_line lexbuf; comment lexbuf}
   | _
       { comment lexbuf }
 
@@ -225,7 +226,7 @@ and string = parse
 
 and preprocess = parse
   | newline
-      { () }
+      { new_line lexbuf }
   | _
       { preprocess lexbuf }
 
