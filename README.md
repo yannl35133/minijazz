@@ -34,7 +34,7 @@ sujet du TP1 du cours L3 de *systèmes numériques* à l'ENS.
 Modifications
 =======
 
-Cette version est modifiée afin de tirer partie des simulateurs de netlist
+Cette version est modifiée afin de tirer partie des simulateurs de net-list
 permettant l'application des opérations aux nappes.
 
 Les opérateurs `or`,`and`,`xor`,`nand`, `not` et `mux` peuvent êtres utilisés
@@ -50,6 +50,13 @@ o1 = n_or<n>(a,b)
 
 Voir [n_ops](./test/n_ops.mj).
 
+
+Quelques changement ont été apportés au comportement de MiniJazz:
+
+- interprétation des marqueurs de lignes tels que produits par le préprocesseur `cpp`
+
+- optimisation des net-lists produites: les chaînes de `Earg` sont court-circuitées. 
+
 Crédits
 =======
 
@@ -58,7 +65,7 @@ Le langage Jazz a été conçu par [Jean Vuillemin](https://www.di.ens.fr/~jv/).
 Le compilateur MiniJazz a été développé par Cédric Pasteur (certaines 
 parties ont été supprimées de cette version accessible au public).
 
-N'hésitez pas à faire des « Pull Requests » pour corriger des bogues ou 
+N'hésitez pas à faire des « Pull Requests » pour corriger des bogues ou 
 proposer des améliorations. Merci de ne pas partager les solutions aux 
 exercices.
 

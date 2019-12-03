@@ -98,6 +98,9 @@ let compile_impl filename =
     let p = pass "Simplify" true Simplify.program p pp in
 
     let p = Mj2net.program p in
+
+    let p = Netlist_simplify.simplify p in
+
     Netlist_printer.print_program net p;
 
     close_all_files ()
