@@ -1,0 +1,10 @@
+INPUT a
+OUTPUT o1, o2, o3, o4
+VAR
+  a, o1, o2, o3, o4
+IN
+o4 = 1
+o3 = REG a
+o2 = 1
+o1 = a
+

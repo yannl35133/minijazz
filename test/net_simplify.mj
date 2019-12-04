@@ -1,0 +1,9 @@
+main (a) = (o1, o2, o3, o4)
+where 
+	b = a;
+	c = 1;
+	o1 = b;
+	o2 = c;
+	o3 = reg(b);
+	o4 = reg(c);
+end where
