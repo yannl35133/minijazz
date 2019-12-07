@@ -99,7 +99,9 @@ let compile_impl filename =
 
     let p = Mj2net.program p in
 
-    let p = Netlist_simplify.simplify p in
+    let p = if !netlist_simplify 
+            then Netlist_simplify.simplify p
+            else p in
 
     Netlist_printer.print_program net p;
 

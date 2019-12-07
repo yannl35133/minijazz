@@ -53,9 +53,13 @@ Voir [n_ops](./test/n_ops.mj).
 
 Quelques changement ont été apportés au comportement de MiniJazz:
 
-- interprétation des marqueurs de lignes tels que produits par le préprocesseur `cpp`
+- interprétation des marqueurs de lignes tels que produits par le 
+préprocesseur `cpp`
 
-- optimisation des net-lists produites: les chaînes de `Earg` sont court-circuitées. 
+- optimisation des net-lists produites avec l'option `-S`:
+les chaînes de `Earg` sont court-circuitées,
+on supprime les `Eslice` qui ne sont utilisés que dans des `Eslice` ou `Eselect`
+
 
 Crédits
 =======
