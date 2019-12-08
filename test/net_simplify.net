@@ -1,15 +1,16 @@
 INPUT a
 OUTPUT o1, o2, o3, o4, o5, o6
 VAR
-  _l_15 : 2, _l_16 : 3, a, e : 4, o1, o2, o3, o4, o5, o6
+  _l_15 : 2, _l_16 : 3, a, c : 1, e : 4, o1, o2, o3, o4, o5, o6
 IN
 o6 = SELECT 2 e
 o5 = 1
 e = CONCAT _l_16 0
-o4 = 1
+o4 = REG c
 o3 = REG a
 o2 = 1
 o1 = a
+c = 1
 _l_15 = CONCAT a 1
 _l_16 = CONCAT _l_15 a
 
