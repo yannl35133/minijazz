@@ -138,7 +138,7 @@ rule token = parse
   | "."             { DOT }
   | ".."            { DOTDOT }
   | (['A'-'Z']('_' ? ['A'-'Z' 'a'-'z' ''' '0'-'9']) * as id)
-      {NAME id}
+      { NAME id }
   | (['A'-'Z' 'a'-'z']('_' ? ['A'-'Z' 'a'-'z' ''' '0'-'9']) * as id)
       { let s = Lexing.lexeme lexbuf in
         try Hashtbl.find keyword_table s
@@ -161,39 +161,40 @@ rule token = parse
       { let comment_start = lexbuf.lex_curr_p in
         comment_depth := 1;
         begin try
-          comment lexbuf
+          m_comment lexbuf
         with Lexical_error(Unterminated_comment, (Loc (_, comment_end))) ->
           raise(Lexical_error(Unterminated_comment,
                               Loc (comment_start, comment_end)))
         end;
         token lexbuf }
   | "#" " "* (['0'-'9']+ as line) " "*
-    '"' ((['\032' - '\126']#['\\' '"'])* as file) '"' 
+    '"' ((['\032' - '\126']#['\\' '"'])* as file) '"'
      [' ' '0'-'9']* newline
-        {
-            let l = int_of_string line in
-            lexbuf.lex_curr_p <- {
-                lexbuf.lex_curr_p with
+        { let l = int_of_string line in
+          lexbuf.lex_curr_p <-
+            { lexbuf.lex_curr_p with
                 pos_fname = file;
                 pos_lnum  = l;
                 pos_bol = lexbuf.lex_curr_p.pos_cnum
             };
-            token lexbuf
-        }
+          token lexbuf }
   | "#"
-      { preprocess lexbuf;
-        token lexbuf }
-  | eof            {EOF}
-  | _              {raise (Lexical_error (Illegal_character,
+      { preprocess lexbuf }
+  | "//"
+      { l_comment lexbuf }
+  | eof
+      { EOF }
+  | _
+      { raise (Lexical_error (Illegal_character,
                       Loc (Lexing.lexeme_start_p lexbuf,
-                      Lexing.lexeme_end_p lexbuf)))}
+                      Lexing.lexeme_end_p lexbuf))) }
 
-and comment = parse
+and m_comment = parse
     "(*"
-      { comment_depth := succ !comment_depth; comment lexbuf }
+      { comment_depth := succ !comment_depth; m_comment lexbuf }
   | "*)"
       { comment_depth := pred !comment_depth;
-        if !comment_depth > 0 then comment lexbuf }
+        if !comment_depth > 0 then m_comment lexbuf }
    | "\""
       { reset_string_buffer();
         let string_start = lexbuf.lex_curr_p in
@@ -203,21 +204,30 @@ and comment = parse
           raise(Lexical_error
             (Unterminated_string, Loc (string_start, string_end)))
         end;
-        comment lexbuf }
+        m_comment lexbuf }
   | "''"
-      { comment lexbuf }
+      { m_comment lexbuf }
   | "'" [^ '\\' '\''] "'"
-      { comment lexbuf }
+      { m_comment lexbuf }
   | "'" '\\' ['\\' '\'' 'n' 't' 'b' 'r'] "'"
-      { comment lexbuf }
+      { m_comment lexbuf }
   | "'" '\\' ['0'-'9'] ['0'-'9'] ['0'-'9'] "'"
-      { comment lexbuf }
+      { m_comment lexbuf }
   | eof
       { raise(Lexical_error(Unterminated_comment, Loc(dummy_pos,
                             Lexing.lexeme_start_p lexbuf))) }
-  | newline {new_line lexbuf; comment lexbuf}
+  | newline
+      { new_line lexbuf; m_comment lexbuf }
   | _
-      { comment lexbuf }
+      { m_comment lexbuf }
+
+and l_comment = parse
+    newline
+    { new_line lexbuf; token lexbuf }
+  | eof
+      { EOF }
+  | _
+      { l_comment lexbuf }
 
 and string = parse
     '"'
@@ -238,8 +248,12 @@ and string = parse
         string lexbuf }
 
 and preprocess = parse
+    '\\' newline
+      {new_line lexbuf; preprocess lexbuf }
   | newline
-      { new_line lexbuf }
+      { new_line lexbuf; token lexbuf }
+  | eof
+      { EOF }
   | _
       { preprocess lexbuf }
 
