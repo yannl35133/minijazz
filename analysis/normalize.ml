@@ -43,9 +43,12 @@ let exp funs (eqs, vds) e = match e.e_desc with
 let equation funs (eqs, vds) (pat, e) =
   match e.e_desc with
     | Econst _ | Evar _ -> (pat, e), (eqs, vds)
-    | _ ->
-        let _, ((_, e)::eqs, _::vds) = Mapfold.exp_it funs (eqs, vds) e in
-        (pat, e), (eqs, vds)
+    | _ -> (
+      match Mapfold.exp_it funs (eqs, vds) e with
+      | _, ((_, e)::eqs, _::vds) -> (pat, e), (eqs, vds)
+      | _ -> failwith "Mapfold.exp_it error"
+    )
+        
 
 let block funs acc b = match b with
   | BEqs(eqs, vds) ->

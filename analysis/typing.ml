@@ -244,7 +244,7 @@ let rec type_static_exp se = match se.se_desc with
       expect_static_exp se2 STInt;
       STBool
     | SIf (c, se1, se2) ->
-        expect_static_exp se1 STBool;
+        expect_static_exp c STBool;
         let ty1 = type_static_exp se1 in
         expect_static_exp se2 ty1;
         ty1
@@ -264,11 +264,11 @@ let rec simplify_constr cl = match cl with
         | _ -> c::(simplify_constr cl)
 
 let rec find_simplification_one c = match c.se_desc with
-  | SBinOp(SEqual, { se_desc = SVar s }, se)
-  | SBinOp(SEqual, se, { se_desc = SVar s }) ->
+  | SBinOp(SEqual, { se_desc = SVar s; _ }, se)
+  | SBinOp(SEqual, se, { se_desc = SVar s; _ }) ->
       Some (s, se)
-  | SIf(_, se1, { se_desc = SBool true })
-  | SIf(_, { se_desc = SBool true }, se1) ->
+  | SIf(_, se1, { se_desc = SBool true; _ })
+  | SIf(_, { se_desc = SBool true; _ }, se1) ->
       find_simplification_one se1
   | _ -> None
 
@@ -387,7 +387,7 @@ let rec type_block env b = match b with
       BIf(se, trueb, falseb)
 
 let ty_repr_block env b =
-  let static_exp funs acc se = simplify env se, acc in
+  let static_exp _funs acc se = simplify env se, acc in
   let ty funs acc ty =
     let ty = ty_repr ty in
     (* go through types to substitute static exps *)

@@ -26,14 +26,12 @@
 (* Printing a location in the source program *)
 (* inspired from the source of the Caml Light 0.73 compiler *)
 
-open Lexing
-open Parsing
 open Format
 
 (* two important global variables: [input_name] and [input_chan] *)
 type location =
-    Loc of (position  (* Position of the first character *)
-          * position) (* Position of the next character following the last one *)
+    Loc of (Lexing.position  (* Position of the first character *)
+          * Lexing.position) (* Position of the next character following the last one *)
 
 
 let input_name = ref ""                 (* Input file name. *)
@@ -45,18 +43,18 @@ let initialize iname ic =
   input_chan := ic
 
 
-let no_location =  Loc (dummy_pos, dummy_pos)
+let no_location =  Lexing.(Loc (dummy_pos, dummy_pos))
 
 let error_prompt = ">"
 
 
 (** Prints [n] times char [c] on [oc]. *)
-let prints_n_chars ff n c = for i = 1 to n do pp_print_char ff c done
+let prints_n_chars ff n c = for _ = 1 to n do pp_print_char ff c done
 
 let seek_line ic ln =
     seek_in ic 0;
-    for i=0 to ln-2 do
-       let _ = input_line ic in ()
+    for _ = 0 to ln - 2 do
+       ignore (input_line ic)
     done
 
 (** Prints out to [oc] a line designed to be printed under [line] from file [ic]
@@ -65,7 +63,7 @@ let seek_line ic ln =
 let underline_line ic ff ch ln first last =
   let c = ref ' '
   and f = ref first
-  and l = ref (last-first) in
+  and l = ref (last - first) in
   ( try
     seek_line ic ln;
     pp_print_string ff error_prompt;
@@ -85,7 +83,7 @@ let underline_line ic ff ch ln first last =
 
 
 let copy_lines nl ic ff prompt =
-  for i = 1 to nl do
+  for _ = 1 to nl do
     pp_print_string ff prompt;
     (try pp_print_string ff (input_line ic)
      with End_of_file -> pp_print_string ff "<EOF>");
@@ -93,14 +91,14 @@ let copy_lines nl ic ff prompt =
   done
 
 let copy_chunk p1 p2 ic ff =
-  try for i = p1 to p2 - 1 do pp_print_char ff (input_char ic) done
+  try for _ = p1 to p2 - 1 do pp_print_char ff (input_char ic) done
   with End_of_file -> pp_print_string ff "<EOF>"
 
 
 
 let skip_lines n ic =
-  try for i = 1 to n do
-    let _ = input_line ic in ()
+  try for _ = 1 to n do
+    ignore (input_line ic)
     done
   with End_of_file -> ()
 

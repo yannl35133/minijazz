@@ -26,7 +26,7 @@
 open Netlist_ast
 open Format
 
-let rec print_env print lp sep rp ff env =
+let print_env print lp sep rp ff env =
   let first = ref true in
   fprintf ff "%s" lp;
   Env.iter
@@ -37,7 +37,7 @@ let rec print_env print lp sep rp ff env =
         fprintf ff "%s%a" sep print (x, ty)) env;
   fprintf ff "%s" rp
 
-let rec print_list print lp sep rp ff = function
+let print_list print lp sep rp ff = function
   | [] -> ()
   | x :: l ->
       fprintf ff "%s%a" lp print x;

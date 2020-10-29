@@ -31,14 +31,14 @@ open Misc
 
 let print_name ff n = fprintf ff "%s" n
 
-let rec print_list_r print lp sep rp ff = function
+let print_list_r print lp sep rp ff = function
   | [] -> ()
   | x :: l ->
       fprintf ff "%s%a" lp print x;
       List.iter (fprintf ff "%s %a" sep print) l;
       fprintf ff "%s" rp
 
-let rec print_list_nlr print lp sep rp ff = function
+let print_list_nlr print lp sep rp ff = function
   | [] -> ()
   | x :: l ->
       fprintf ff "%s%a" lp print x;
@@ -51,7 +51,7 @@ let print_bool ff b =
   else
     fprintf ff "0"
 
-let rec print_const ff v = match v with
+let print_const ff v = match v with
   | VBit b -> print_bool ff b
   | VBitArray a when Array.length a = 0 -> fprintf ff "[]"
   | VBitArray l -> Array.iter (print_bool ff) l
@@ -72,7 +72,7 @@ let rec print_static_exp ff se = match se.se_desc with
       fprintf ff "(%a ? %a : %a)"
         print_static_exp c  print_static_exp se1  print_static_exp se2
 
-let rec print_static_type ff sty = match sty with
+let print_static_type ff sty = match sty with
   | STInt -> fprintf ff "int"
   | STBool -> fprintf ff "bool"
 
@@ -119,7 +119,7 @@ and print_edesc ff ed = match ed with
 and print_args ff args =
   print_list_r print_exp "(" "," ")" ff args
 
-let rec print_pat ff pat = match pat with
+let print_pat ff pat = match pat with
   | Evarpat id -> print_ident ff id
   | Etuplepat l -> print_list_r print_ident "(" "," ")" ff l
 

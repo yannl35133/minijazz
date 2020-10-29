@@ -61,7 +61,7 @@ let vars_of_pat env pat =
     with
       | Not_found -> Format.eprintf "Not in env: %a@." Ident.print_ident id; assert false
   in
-  let rec _vars_of_pat acc pat = match pat with
+  let _vars_of_pat acc pat = match pat with
     | Evarpat id -> (exp_of_ident id)::acc
     | Etuplepat l -> List.fold_left (fun acc id -> (exp_of_ident id)::acc) acc l
   in
@@ -79,7 +79,7 @@ let build_params m names values =
   List.fold_left2 (fun m { p_name = n } v -> NameEnv.add n v m) m names values
 
 let build_exp m vds values =
-  List.fold_left2 (fun m { v_ident = n } e -> IdentEnv.add n e m) m vds values
+  List.fold_left2 (fun m { v_ident = n; _ } e -> IdentEnv.add n e m) m vds values
 
 let build_env env vds =
   List.fold_left (fun env vd -> IdentEnv.add vd.v_ident vd.v_ty env) env vds
@@ -96,7 +96,7 @@ let do_subst_block m subst b  =
     with
       | Not_found -> id
   in
-  let static_exp funs (subst, m) se =
+  let static_exp _funs (subst, m) se =
     simplify m se, (subst, m)
   in
   let exp funs (subst, m) e =
@@ -107,7 +107,7 @@ let do_subst_block m subst b  =
         e, (subst, m)
     | _ -> Mapfold.exp funs (subst, m) e
   in
-  let pat funs (subst, m) pat = match pat with
+  let pat _funs (subst, m) pat = match pat with
     | Evarpat id -> Evarpat (translate_ident subst id), (subst, m)
     | Etuplepat ids -> Etuplepat (List.map (translate_ident subst) ids), (subst, m)
   in

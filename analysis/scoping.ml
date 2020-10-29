@@ -32,12 +32,12 @@ open Errors
 
 (** Simplifies static expression in the program. *)
 let simplify_program p =
-  let const_dec funs cenv cd =
+  let const_dec _funs cenv cd =
     let v = subst cenv cd.c_value in
     let cenv = NameEnv.add cd.c_name v cenv in
     { cd with c_value = v }, cenv
   in
-  let static_exp funs cenv se =
+  let static_exp _funs cenv se =
     let se = subst cenv se in
     (match se.se_desc with
       | SVar id ->
@@ -70,7 +70,7 @@ let simplify_program p =
 (** Checks the name used in the program are defined.
     Adds var_decs for all variables defined in a block. *)
 let check_names p =
-  let rec pat_vars s pat = match pat with
+  let pat_vars s pat = match pat with
     | Evarpat id -> IdentSet.add id s
     | Etuplepat ids -> List.fold_left (fun s id -> IdentSet.add id s) s ids
   in
@@ -118,7 +118,7 @@ let check_names p =
   in
   { p with p_nodes = List.map node p.p_nodes }
 
-let warn_duplicate_node_names { p_nodes } =
+let warn_duplicate_node_names { p_nodes; _ } =
   let check defd n =
     if NameSet.mem n.n_name defd then
       Format.eprintf "%aDuplicate node name: %s@."

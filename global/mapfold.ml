@@ -118,7 +118,7 @@ and link funs acc l = match l with
 and pat_it funs acc p =
   try funs.pat funs acc p
   with Fallback -> pat funs acc p
-and pat funs acc p = p, acc
+and pat _funs acc p = p, acc
 
 and equation_it funs acc eq = funs.equation funs acc eq
 and equation funs acc (pat, e) =

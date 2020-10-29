@@ -54,7 +54,7 @@ let tr_var_dec { v_ident = n; v_ty = ty } =
 
 let tr_pat pat = match pat with
   | Evarpat id -> string_of_ident id
-  | Etuplepat ids ->
+  | Etuplepat _ids ->
       Format.eprintf "Unexpected pattern: %a@." Printer.print_pat pat;
       assert false
 
@@ -63,7 +63,7 @@ let expect_arg e = match e.e_desc with
   | Econst v -> Netlist_ast.Aconst (tr_value v)
   | _ -> Format.eprintf "Unexpected arg : %a@." Printer.print_exp e; assert false
 
-let rec tr_exp e = match e.e_desc with
+let tr_exp e = match e.e_desc with
   | Evar id -> Netlist_ast.Earg (Netlist_ast.Avar (string_of_ident id))
   | Econst v ->  Netlist_ast.Earg (Netlist_ast.Aconst (tr_value v))
   | Ereg e -> Netlist_ast.Ereg (expect_ident e)
