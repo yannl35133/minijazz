@@ -60,23 +60,23 @@ let fresh_param () =
 %%
 
 /** Tools **/
-%inline slist(S, x)        : l=separated_list(S, x)                    {l}
-%inline snlist(S, x)       : l=separated_nonempty_list(S, x)           {l}
-%inline tuple(x)           : LPAREN h=x COMMA t=snlist(COMMA,x) RPAREN { h::t }
-%inline tag_option(P,x):
-  |/* empty */    { None }
-  | P v=x         { Some(v) }
+%inline slist(S, x)     : l = separated_list(S, x)                       { l }
+%inline snlist(S, x)    : l = separated_nonempty_list(S, x)              { l }
+%inline tuple(x)        : LPAREN h = x COMMA t = snlist(COMMA, x) RPAREN { h :: t }
+%inline tag_option(P, x):
+  | /* empty */   { None }
+  | P v = x       { Some v }
 
-localize(x): y=x { y, (Loc($startpos(y),$endpos(y))) }
+localize (x): y = x     { y, Loc $sloc }
 
 program:
-  | c=const_decs n=node_decs EOF
+  | c = const_decs n = node_decs EOF
       { mk_program c n }
 
-const_decs: c=list(const_dec) {c}
+const_decs: c = list(const_dec)   {c}
 const_dec:
   | CONST n=name EQUAL se=static_exp option(SEMICOL)
-      { mk_const_dec ~loc:(Loc($startpos,$endpos)) n se }
+      { mk_const_dec ~loc:(Loc $sloc) n se }
 
 name: n=NAME { n }
 
@@ -92,7 +92,7 @@ node_decs: ns=list(node_dec) { ns }
 node_dec:
   inlined=inlined_status n=node_name p=params LPAREN args=args RPAREN
   EQUAL out=node_out WHERE b=block probes=probe_decls END WHERE option(SEMICOL)
-      { mk_node n (Loc ($startpos,$endpos)) inlined args out p b probes }
+      { mk_node n (Loc $sloc) inlined args out p b probes }
 
 node_out:
   | a=arg { [a] }
@@ -130,7 +130,7 @@ pat:
   | n=ident                              { Evarpat n }
   | LPAREN p=snlist(COMMA, ident) RPAREN { Etuplepat p }
 
-static_exp: se=_static_exp { mk_static_exp ~loc:(Loc ($startpos,$endpos)) se }
+static_exp: se=_static_exp { mk_static_exp ~loc:(Loc $sloc) se }
 _static_exp :
   | i=INT { SInt (snd i) }
   | n=NAME { SVar n }
@@ -147,7 +147,7 @@ _static_exp :
 
 exps: LPAREN e=slist(COMMA, exp) RPAREN {e}
 
-exp: e=_exp { mk_exp ~loc:(Loc ($startpos,$endpos)) e }
+exp: e=_exp { mk_exp ~loc:(Loc $sloc) e }
 _exp:
   | e=_simple_exp  { e }
   | c=const { Econst c }
@@ -179,7 +179,7 @@ _exp:
     COMMA word_size=static_exp input_file=tag_option(COMMA, STRING) GREATER a=exps
     { Emem(ro, addr_size, word_size, input_file, a) }
 
-simple_exp: e=_simple_exp { mk_exp ~loc:(Loc ($startpos,$endpos)) e }
+simple_exp: e=_simple_exp { mk_exp ~loc:(Loc $sloc) e }
 _simple_exp:
   | n=ident                   { Evar n }
   | LPAREN e=_exp RPAREN      { e }

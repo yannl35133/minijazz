@@ -32,8 +32,8 @@ open Format
 
 (* two important global variables: [input_name] and [input_chan] *)
 type location =
-    Loc of position  (* Position of the first character *)
-         * position  (* Position of the next character following the last one *)
+    Loc of (position  (* Position of the first character *)
+          * position) (* Position of the next character following the last one *)
 
 
 let input_name = ref ""                 (* Input file name. *)
