@@ -1,0 +1,15 @@
+(env
+ (dev
+  (flags
+   (:standard -warn-error -A))))
+
+(library
+ (name parser)
+ (wrapped false)
+ (libraries global))
+
+(menhir
+ (modules parser))
+
+(ocamllex
+ (modules lexer))

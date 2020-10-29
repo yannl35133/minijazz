@@ -1,0 +1,14 @@
+(env
+ (dev
+  (flags
+   (:standard -warn-error -A))))
+
+(library
+ (name netlist)
+ (wrapped false))
+
+(menhir
+ (modules netlist_parser))
+
+(ocamllex
+ (modules netlist_lexer))

@@ -1,0 +1,9 @@
+(env
+ (dev
+  (flags
+   (:standard -w -A -warn-error -A))))
+
+(executable
+ (name mjc)
+ (libraries global parser analysis netlist)
+ (modes byte))
