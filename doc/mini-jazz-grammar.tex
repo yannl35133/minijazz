@@ -1,0 +1,58 @@
+\documentclass[a4paper]{article}
+
+\usepackage{amsmath}
+\usepackage{mathtools}
+
+\DeclarePairedDelimiter{\scal}{\langle}{\rangle}
+\newcommand{\nt}[1]{\ \scal*{\text{#1}}}
+\newcommand{\te}[1]{\ \text{\texttt{#1}}}
+\newcommand{\ite}[1]{\ \text{\texttt{#1}}\ }
+\newcommand{\ste}[1]{\text{\large \texttt{#1}}}
+
+\begin{document}
+\noindent
+La grammaire de mini-jazz
+\begin{align*}
+    \nt{program} ::= & \nt{const-decl}^* \nt{node-decl}^* \te{EOF} \\
+    \nt{const-decl} ::= & \te{const} \nt{identifiant} \te{=} \nt{static-exp} \te{;}? \\
+    \nt{node-decl} ::= & \te{inline}? \nt{identifiant} \nt{params} \te{(} \nt{arg}^*_\ste{,} \te{)} \te{=} \nt{node-out} \\
+    & \qquad \te{where} \nt{block} \ (\!\!\te{probing} \nt{ident}^+_\ste{,})? \te{end} \te{where} \te{;}? \\
+%
+    \nt{params} ::= & \ \varepsilon \\
+    | & \te{<} \nt{identifiant}^+_\ste{,} \te{>} \\
+    \nt{node-out} ::= & \nt{arg} \\
+    | & \te{(} \nt{arg}^*_\ste{,} \te{)} \\
+    \nt{arg} ::= & \nt{identifiant} \te{:} \nt{type-ident} \\
+    | & \nt{identifiant} \\
+    \nt{type-ident} ::= & \te{[} \nt{static-exp} \te{]} \\
+%
+    \nt{block} ::= & \nt{equation}^*_\ste{;} \\
+    | & \te{if} \nt{static-exp} \te{then} \nt{block} \te{else} \nt{block} \te{end} \te{if} \\
+    \nt{equation} ::= & \nt{left-value} \te{=} \nt{exp} \\
+    \nt{left-value} ::= & \nt{ident} \\
+    | & \te{(} \nt{ident}^+_\ste{,} \te{)} \\
+%
+    \nt{static-exp} ::= & \nt{int} \\
+    | & \nt{identifiant} \\
+    | & \te{(} \nt{static-exp} \te{)} \\
+    | & \nt{static-exp} \nt{operator} \nt{static-exp} \\
+    \nt{operator} ::= & \ite{\textasciicircum} | \ite{+} | \ite{-} | \ite{*} | \ite{/} | \ite{=} | \ite{<=} \\
+%
+    \nt{exp} ::= & \nt{const} \\
+    | & \nt{simple-exp} \\
+    | & \te{reg} \nt{exp} \\
+    | & \nt{identifiant}\ (\!\!\te{<} \nt{static-exp}^+_\ste{,} \te{>})? \te{(} \nt{exp}^*_\ste{,} \te{)} \\
+    | & \nt{exp} \nt{netlist-bin-operator} \nt{exp} \\
+    | & \te{not} \nt{exp} \\
+    | & \nt{exp} \te{.} \nt{exp} \\
+    | & \nt{simple-exp} \te{[} \nt{static-exp} \te{]} \\
+    | & \nt{simple-exp} \te{[} \nt{static-exp}? \te{..} \nt{static-exp}? \te{]} \\
+    | & \ (\ite{rom} | \ite{ram}) \te{<} \nt{static-exp} \te{,} \nt{static-exp} \ (\!\!\te{,} \nt{string}\ )? \te{>} \te{(} \nt{exp}^*_\ste{,} \te{)} \\
+%
+    \nt{simple-exp} ::= & \nt{identifiant}\\
+    | & \te{(} \nt{exp} \te{)} \\
+    \nt{netlist-bin-operator} ::= & \ite{+} | \ite{or} | \ite{\&} | \ite{and} | \ite{\^} | \ite{xor} | \ite{nand} \\
+%
+    \nt{const} ::= & \ite{true} | \ite{false} | \nt{int}\ | \te{[} \te{]} \\
+\end{align*}
+\end{document}

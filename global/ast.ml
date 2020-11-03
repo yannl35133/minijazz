@@ -83,7 +83,7 @@ type block =
     | BEqs of equation list * var_dec list
     | BIf of static_exp * block * block
 
-type inlined_status = Inlined | NotInlined
+type inlined_status = Inline | NotInline
 
 type node_dec = {
   n_name : name;

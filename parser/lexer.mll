@@ -40,8 +40,8 @@ List.iter (fun (str,tok) -> Hashtbl.add keyword_table str tok) [
  "rom", ROM;
  "where", WHERE;
  "end", END;
- "true", BOOL(true);
- "false", BOOL(false);
+ "true", BOOL true;
+ "false", BOOL false;
  "reg", REG;
  "not", NOT;
  "const", CONST;
@@ -52,7 +52,7 @@ List.iter (fun (str,tok) -> Hashtbl.add keyword_table str tok) [
  "if", IF;
  "then", THEN;
  "else", ELSE;
- "inlined", INLINED;
+ "inline", INLINE;
  "probing", PROBING
 ]
 
@@ -118,8 +118,8 @@ rule token = parse
   | "+"             { PLUS }
   | "&"             { AND }
   | "/"             { SLASH }
-  | "<"             { LESS }
-  | ">"             { GREATER }
+  | "<"             { LANGLE }
+  | ">"             { RANGLE }
   | "["             { LBRACKET }
   | "]"             { RBRACKET }
   | ":"             { COLON }
@@ -127,13 +127,13 @@ rule token = parse
   | "="             { EQUAL }
   | ","             { COMMA }
   | "-"             { MINUS }
-  | "^"             { POWER }
+  | "^"             { CIRCUMFLEX }
   | "<="            { LEQ }
   | "."             { DOT }
   | ".."            { DOTDOT }
   | ident as id
                     { try Hashtbl.find keyword_table id
-                      with Not_found -> NAME id }
+                      with Not_found -> IDENTIFIER id }
   | '0' (['b' 'B'] as base)  (['0'-'1']+ as lit) as num
   |('0' (['u' 'U'] as base)?)(['0'-'9']+ as lit) as num
   | '0' (['o' 'O'] as base)  (['0'-'7']+ as lit) as num
@@ -148,8 +148,7 @@ rule token = parse
                       INT (String.length lit * b,
                             int_of_string num) }
   | "\""
-      { reset_string_buffer ();
-        string lexbuf.lex_start_p lexbuf }
+      { string lexbuf.lex_start_p (Buffer.create 16) lexbuf }
   | "(*"
       { multi_comment lexbuf.lex_curr_p lexbuf; token lexbuf }
   | "#" " "* (['0'-'9']+ as line) " "*
@@ -183,11 +182,10 @@ and multi_comment comment_start = parse
       { raise (Lexical_error (Unterminated_comment,
                     Loc(comment_start, Lexing.lexeme_start_p lexbuf))) }
   | "\""
-      { reset_string_buffer ();
-        ignore (string lexbuf.lex_curr_p lexbuf);
+      { ignore (string lexbuf.lex_curr_p (Buffer.create 16) lexbuf);
         multi_comment comment_start lexbuf }
   | newline
-      {new_line lexbuf; multi_comment comment_start lexbuf}
+      { new_line lexbuf; multi_comment comment_start lexbuf}
   | _
       { multi_comment comment_start lexbuf }
 
@@ -199,24 +197,27 @@ and single_comment = parse
   | _
       { single_comment lexbuf }
 
-and string string_start = parse
+and string string_start buf = parse
     '"'
       { lexbuf.lex_start_p <- string_start;
-        STRING (get_stored_string ()) }
+        STRING (Buffer.contents buf) }
   | '\\' newline space* (* Backslash-escaped line return *)
-      { new_line lexbuf; string string_start lexbuf }
+      { new_line lexbuf; string string_start buf lexbuf }
   | '\\' (['\\' '"'  'n' 't' 'b' 'r'] as c)
-      { store_string_char (char_for_backslash c);
-        string string_start lexbuf }
+      { Buffer.add_char buf (char_for_backslash c);
+        string string_start buf lexbuf }
   | '\\' (['0'-'9'] ['0'-'9'] ['0'-'9'] as code)
-      { store_string_char (char_for_decimal_code code);
-         string string_start lexbuf }
-  | eof
+      { Buffer.add_char buf (char_for_decimal_code code);
+         string string_start buf lexbuf }
+  | '\\'
+      { raise (Lexical_error (Illegal_character, 
+                    Loc (string_start, Lexing.lexeme_start_p lexbuf))) }
+  | '\n' | eof
       { raise (Lexical_error (Unterminated_string,
                     Loc (string_start, Lexing.lexeme_start_p lexbuf))) }
   | _ as c
-      { store_string_char c;
-        string string_start lexbuf }
+      { Buffer.add_char buf c;
+        string string_start buf lexbuf }
 
 and preprocess = parse
     '\\' newline

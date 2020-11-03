@@ -35,7 +35,7 @@ type lexical_error =
 
 let lexical_error err loc =
   Format.eprintf (match err with
-    | Illegal_character -> Stdlib.format_of_string "%aIllegal character.@."
+    | Illegal_character -> "%aIllegal character.@."
     | Unterminated_comment -> "%aUnterminated comment.@."
     | Bad_char_constant -> "%aBad char constant.@."
     | Unterminated_string -> "%aUnterminated string.@."

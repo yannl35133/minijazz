@@ -4,3 +4,5 @@ _build/
 *.native
 .vscode/**
 **/.merlin
+**.pdf
+.gitignore

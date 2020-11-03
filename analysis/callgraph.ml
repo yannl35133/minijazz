@@ -162,7 +162,7 @@ and translate_eq env m subst call_stack (eqs, vds) ((pat, e) as eq) =
             let n = find_node f in
             if not !Cli_options.no_inline_all
               || not (Misc.is_empty params)
-              || n.n_inlined = Inlined then
+              || n.n_inlined = Inline then
               let params = List.map (simplify m) params in
               let b, call_stack = inline_node e.e_loc env m call_stack f params args pat in
               let new_eqs, new_vds = translate_block env m subst call_stack b in

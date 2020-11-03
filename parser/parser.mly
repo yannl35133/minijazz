@@ -36,14 +36,18 @@ let fresh_param () =
 
 %}
 
-%token INLINED ROM RAM WHERE END CONST PROBING
-%token LPAREN RPAREN COLON COMMA EQUAL REG OR XOR NAND AND POWER SLASH
-%token EOF RBRACKET LBRACKET GREATER LESS NOT SEMICOL PLUS MINUS STAR
-%token IF THEN ELSE LEQ DOT DOTDOT
-%token <string> NAME
+%token CONST INLINE WHERE END PROBING
+%token ROM RAM REG
+%token IF THEN ELSE
+%token LANGLE "<" RANGLE ">" LBRACKET "[" RBRACKET "]" LPAREN "(" RPAREN ")"
+%token SEMICOL ";" COLON ":" COMMA "," EQUAL "=" DOT "." DOTDOT ".."
+%token OR AND XOR NAND NOT
+%token PLUS MINUS STAR SLASH CIRCUMFLEX
+%token LEQ
+%token EOF
+%token <string> IDENTIFIER
 %token <string> STRING
 %token <int * int> INT
-%token <string> BOOL_INT
 %token <bool> BOOL
 
 %left LEQ EQUAL
@@ -52,7 +56,7 @@ let fresh_param () =
 %left NAND XOR AND
 %left STAR SLASH
 %right NOT REG
-%right POWER
+%right CIRCUMFLEX
 
 %start program
 %type <Ast.program> program
@@ -60,9 +64,9 @@ let fresh_param () =
 %%
 
 /** Tools **/
-%inline slist(S, x)     : l = separated_list(S, x)                       { l }
-%inline snlist(S, x)    : l = separated_nonempty_list(S, x)              { l }
-%inline tuple(x)        : LPAREN h = x COMMA t = snlist(COMMA, x) RPAREN { h :: t }
+%inline slist(x, S):      l = separated_list(S, x)             { l }
+%inline snlist(x, S):     l = separated_nonempty_list(S, x)    { l }
+%inline tuple(x):         "(" h = x "," t = snlist(x, ",") ")" { h :: t }
 %inline tag_option(P, x):
   | /* empty */   { None }
   | P v = x       { Some v }
@@ -70,50 +74,46 @@ let fresh_param () =
 localize (x): y = x     { y, Loc $sloc }
 
 program:
-  | c = const_decs n = node_decs EOF
+  | c = list(const_dec) n = list(node_dec) EOF
       { mk_program c n }
 
-const_decs: c = list(const_dec)   {c}
 const_dec:
-  | CONST n=name EQUAL se=static_exp option(SEMICOL)
-      { mk_const_dec ~loc:(Loc $sloc) n se }
+  | CONST id=IDENTIFIER "=" se=static_exp option(SEMICOL)
+      { mk_const_dec ~loc:(Loc $sloc) id se }
 
-name: n=NAME { n }
+node_dec:
+  inline = inline  n = node_name
+      p=params "(" args=slist(arg, ",") ")" "=" out=node_out
+  WHERE b=block probes=probe_decls END WHERE option(";")
+      { mk_node n (Loc $sloc) inline args out p b probes }
 
-ident:
-  | n=name { ident_of_string n }
-
-type_ident: LBRACKET se=static_exp RBRACKET { TBitArray se }
+inline:
+  |         { NotInline }
+  | INLINE  { Inline }
 
 node_name:
-  | n=name { reset_symbol_table (); n }
-
-node_decs: ns=list(node_dec) { ns }
-node_dec:
-  inlined=inlined_status n=node_name p=params LPAREN args=args RPAREN
-  EQUAL out=node_out WHERE b=block probes=probe_decls END WHERE option(SEMICOL)
-      { mk_node n (Loc $sloc) inlined args out p b probes }
+  | id=IDENTIFIER { reset_symbol_table (); id }
 
 node_out:
-  | a=arg { [a] }
-  | LPAREN out=args RPAREN { out }
-
-inlined_status:
-  | INLINED { Inlined }
-  | /*empty*/ { NotInlined }
-
-params:
-  | /*empty*/ { [] }
-  | LESS pl=snlist(COMMA,param) GREATER { pl }
-
-param:
-  n=NAME { mk_param n }
-
-args: vl=slist(COMMA, arg) { vl }
+  | a = arg                     { [a] }
+  | "(" out=slist(arg, ",") ")" { out }
 
 arg:
-  | n=ident COLON t=type_ident { mk_var_dec n t }
-  | n=ident { mk_var_dec n TBit }
+  | n=ident ":" t=type_ident { mk_var_dec n t }
+  | n=ident                  { mk_var_dec n TBit }
+
+ident:
+  | id=IDENTIFIER { ident_of_string id }
+
+type_ident: "[" se=static_exp "]" { TBitArray se }
+
+params:
+  | /*empty*/                     { [] }
+  | "<" pl=snlist(param, ",") ">" { pl }
+
+param:
+  id=IDENTIFIER { mk_param id }
+
 
 block:
   | eqs=equs { BEqs (eqs, []) }
@@ -127,16 +127,16 @@ equ_tail:
 equ: p=pat EQUAL e=exp { mk_equation p e }
 
 pat:
-  | n=ident                              { Evarpat n }
-  | LPAREN p=snlist(COMMA, ident) RPAREN { Etuplepat p }
+  | n=ident                      { Evarpat n }
+  | "(" p=snlist(ident, ",") ")" { Etuplepat p }
 
 static_exp: se=_static_exp { mk_static_exp ~loc:(Loc $sloc) se }
 _static_exp :
   | i=INT { SInt (snd i) }
-  | n=NAME { SVar n }
-  | LPAREN se=_static_exp RPAREN { se }
+  | id=IDENTIFIER { SVar id }
+  | "(" se=_static_exp ")" { se }
   /*integer ops*/
-  | se1=static_exp POWER se2=static_exp { SBinOp(SPower, se1, se2) }
+  | se1=static_exp CIRCUMFLEX se2=static_exp { SBinOp(SPower, se1, se2) }
   | se1=static_exp PLUS se2=static_exp { SBinOp(SAdd, se1, se2) }
   | se1=static_exp MINUS se2=static_exp { SBinOp(SMinus, se1, se2) }
   | se1=static_exp STAR se2=static_exp { SBinOp(SMult, se1, se2) }
@@ -145,18 +145,18 @@ _static_exp :
   | se1=static_exp EQUAL se2=static_exp { SBinOp(SEqual, se1, se2) }
   | se1=static_exp LEQ se2=static_exp { SBinOp(SLeq, se1, se2) }
 
-exps: LPAREN e=slist(COMMA, exp) RPAREN {e}
+exps: "(" e=slist(exp, ",") ")" {e}
 
 exp: e=_exp { mk_exp ~loc:(Loc $sloc) e }
 _exp:
   | e=_simple_exp  { e }
   | c=const { Econst c }
   | REG e=exp { Ereg e }
-  | n=NAME p=call_params a=exps { Ecall (n, p, a) }
+  | id=IDENTIFIER p=call_params a=exps { Ecall (id, p, a) }
   | e1=exp PLUS e2=exp { Ecall ("or", [], [e1; e2]) }
   | e1=exp OR e2=exp { Ecall ("or", [], [e1; e2]) }
   | e1=exp AND e2=exp { Ecall ("and", [], [e1; e2]) }
-  | e1=exp POWER e2=exp { Ecall("xor", [], [e1; e2]) }
+  | e1=exp CIRCUMFLEX e2=exp { Ecall("xor", [], [e1; e2]) }
   | e1=exp XOR e2=exp { Ecall ("xor", [], [e1; e2]) }
   | e1=exp NAND e2=exp { Ecall ("nand", [], [e1; e2]) }
   | NOT a=exp     { Ecall ("not", [], [a])}
@@ -175,18 +175,17 @@ _exp:
       let params = [mk_static_exp (SInt 0); high; fresh_param ()] in
       Ecall("slice", params, [e1])
     }
-  | ro=rom_or_ram LESS addr_size=static_exp
-    COMMA word_size=static_exp input_file=tag_option(COMMA, STRING) GREATER a=exps
+  | ro=rom_or_ram "<" addr_size=static_exp
+    COMMA word_size=static_exp input_file=tag_option(COMMA, STRING) ">" a=exps
     { Emem(ro, addr_size, word_size, input_file, a) }
 
 simple_exp: e=_simple_exp { mk_exp ~loc:(Loc $sloc) e }
 _simple_exp:
   | n=ident                   { Evar n }
-  | LPAREN e=_exp RPAREN      { e }
+  | "(" e=_exp ")"      { e }
 
 const:
   | b=BOOL { VBit b }
-  | b=BOOL_INT { VBitArray (bool_array_of_string b) }
   | i=INT
     { let (s, v) = i in VBitArray (bool_array_of_int s v) }
   | LBRACKET RBRACKET { VBitArray (Array.make 0 false) }
@@ -197,9 +196,9 @@ rom_or_ram :
 
 call_params:
   | /*empty*/ { [] }
-  | LESS pl=snlist(COMMA,static_exp) GREATER { pl }
+  | "<" pl=snlist(static_exp, ",") ">" { pl }
 
 probe_decls:
   | /*empty*/ { [] }
-  | PROBING l=separated_nonempty_list(COMMA, ident) { l }
+  | PROBING l=snlist(ident, ",") { l }
 %%
