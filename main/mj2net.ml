@@ -36,7 +36,7 @@ let expect_int se =
         Format.eprintf "Unexpected static exp: %a@." Printer.print_static_exp se;
         assert false
 
-let expect_ident e = match e.e_desc with
+let expect_ident e = match !!e with
   | Evar id -> string_of_ident id
   | _ -> assert false
 
@@ -58,12 +58,12 @@ let tr_pat pat = match pat with
       Format.eprintf "Unexpected pattern: %a@." Printer.print_pat pat;
       assert false
 
-let expect_arg e = match e.e_desc with
+let expect_arg e = match !!e with
   | Evar id -> Netlist_ast.Avar (string_of_ident id)
   | Econst v -> Netlist_ast.Aconst (tr_value v)
   | _ -> Format.eprintf "Unexpected arg : %a@." Printer.print_exp e; assert false
 
-let tr_exp e = match e.e_desc with
+let tr_exp e = match !!e with
   | Evar id -> Netlist_ast.Earg (Netlist_ast.Avar (string_of_ident id))
   | Econst v ->  Netlist_ast.Earg (Netlist_ast.Aconst (tr_value v))
   | Ereg e -> Netlist_ast.Ereg (expect_ident e)

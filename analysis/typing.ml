@@ -37,7 +37,7 @@ type error_kind =
   | Args_arity_error of int * int
   | Params_arity_error of int * int
   | Result_arity_error of int * int
-  | Type_error of ty * ty
+  | Type_error of typ * typ
   | Static_type_error of static_ty * static_ty
   | Static_constraint_false of static_exp
 
@@ -67,8 +67,8 @@ let message loc err = match err with
 
 
 type signature =
-    { s_inputs : ty list;
-      s_outputs : ty list;
+    { s_inputs : typ list;
+      s_outputs : typ list;
       s_params : name list;
       s_constraints : static_exp list }
 
@@ -162,7 +162,7 @@ module Modules = struct
       s
     with Not_found ->
       Format.eprintf "Unbound node '%s'@." n;
-      raise Error
+      raise ErrorDetected
 end
 
 let constr_list = ref []
@@ -201,7 +201,7 @@ let rec ty_repr ty = match ty with
 let rec occur_check index ty =
   let ty = ty_repr ty in
   match ty with
-    | TUnit | TBit | TBitArray _  -> ()
+    | TUntyped | TBit | TBitArray _  -> ()
     | TVar { contents = TIndex n } when index <> n -> ()
     | TProd ty_list -> List.iter (occur_check index) ty_list
     | _ -> raise Unify
@@ -308,9 +308,9 @@ let solve_constr params cl =
 (* Typing of expressions *)
 let rec type_exp env e =
   try
-    let desc, ty = match e.e_desc with
-      | Econst (VBit _) -> e.e_desc, TBit
-      | Econst (VBitArray a) -> e.e_desc, TBitArray (mk_static_int (Array.length a))
+    let desc, ty = match !!e with
+      | Econst (VBit _) -> !!e, TBit
+      | Econst (VBitArray a) -> !!e, TBitArray (mk_static_int (Array.length a))
       | Evar id -> Evar id, IdentEnv.find id env
       | Ereg e ->
           let e, e_ty = type_exp env e in
@@ -343,7 +343,7 @@ let rec type_exp env e =
     in
     { e with e_desc = desc; e_ty = ty }, ty
   with
-    | Typing_error k -> message e.e_loc k; raise Error
+    | Typing_error k -> message e.e_loc k; raise ErrorDetected
 
 and expect_exp env e ty =
   let e, found_ty = type_exp env e in
@@ -409,7 +409,7 @@ let node n =
     Modules.add_node n constr;
     { n with n_body = body; n_constraints = constr }
   with
-      Typing_error k -> message n.n_loc k; raise Error
+      Typing_error k -> message n.n_loc k; raise ErrorDetected
 
 let program p =
   let p_nodes = List.map node p.p_nodes in

@@ -32,7 +32,7 @@ open Errors
 
 (** Simplifies static expression in the program. *)
 let simplify_program p =
-  let const_dec _funs cenv cd =
+  let const_desc _funs cenv cd =
     let v = subst cenv cd.c_value in
     let cenv = NameEnv.add cd.c_name v cenv in
     { cd with c_value = v }, cenv
@@ -45,24 +45,24 @@ let simplify_program p =
           if not (NameEnv.mem id cenv) && not (se.se_loc == no_location) then (
             Format.eprintf "%aThe constant name '%s' is unbound@."
               print_location se.se_loc id;
-            raise Error
+            raise ErrorDetected
           )
       | _ -> ()
     );
     se, cenv
   in
-  let node_dec funs cenv nd =
+  let node_desc funs cenv nd =
     let cenv' =
       List.fold_left
         (fun cenv p -> NameEnv.add p.p_name (mk_static_var p.p_name) cenv)
         cenv nd.n_params
     in
-    let nd, _ = Mapfold.node_dec funs cenv' nd in
+    let nd, _ = Mapfold.node_desc funs cenv' nd in
     nd, cenv
   in
   let funs =
-    { Mapfold.defaults with const_dec = const_dec;
-      static_exp = static_exp; node_dec = node_dec }
+    { Mapfold.defaults with const_desc = const_desc;
+      static_exp = static_exp; node_desc = node_desc }
   in
   let p, _ = Mapfold.program_it funs NameEnv.empty p in
   p
@@ -91,12 +91,12 @@ let check_names p =
         let defnames = IdentSet.inter def_true def_false in
         BIf(se, trueb, falseb), (s, defnames)
   in
-  let exp funs (s, defnames) e = match e.e_desc with
+  let exp funs (s, defnames) e = match !!e with
     | Evar id ->
         if not (IdentSet.mem id s) then (
           Format.eprintf "%aThe identifier '%a' is unbound@."
             print_location e.e_loc Ident.print_ident id;
-          raise Error
+          raise ErrorDetected
         );
         e, (s, defnames)
     | _ -> Mapfold.exp funs (s, defnames) e
@@ -112,7 +112,7 @@ let check_names p =
     if undefined_outputs <> [] then (
       Format.eprintf "%aThe following outputs are not defined: %a@."
         print_location n.n_loc  Printer.print_var_decs undefined_outputs;
-      raise Error
+      raise ErrorDetected
     );
     { n with n_body = n_body }
   in

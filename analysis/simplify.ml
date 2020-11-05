@@ -30,7 +30,7 @@ let is_not_zero ty = match ty with
   | TBitArray { se_desc = SInt 0; _ } -> false
   | _ -> true
 
-let rec simplify_exp e = match e.e_desc with
+let rec simplify_exp e = match !!e with
   (* replace x[i..j] with [] if j < i *)
   | Ecall("slice",
          [{ se_desc = SInt min; _ };

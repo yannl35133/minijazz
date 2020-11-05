@@ -36,13 +36,13 @@ let expect_bool env se =
   let se = simplify env se in
   match se.se_desc with
     | SBool v -> v
-    | _ -> Format.eprintf "Expected a boolean@."; raise Error
+    | _ -> Format.eprintf "Expected a boolean@."; raise ErrorDetected
 
 let expect_int env se =
   let se = simplify env se in
   match se.se_desc with
     | SInt v -> v
-    | _ -> Format.eprintf "Expected an integer@."; raise Error
+    | _ -> Format.eprintf "Expected an integer@."; raise ErrorDetected
 
 let simplify_ty env ty = match ty with
   | TBitArray se -> TBitArray (simplify env se)
@@ -67,7 +67,7 @@ let vars_of_pat env pat =
   in
     _vars_of_pat [] pat
 
-let ident_of_exp e = match e.e_desc with
+let ident_of_exp e = match !!e with
   | Evar x -> x
   | _ -> assert false
 
@@ -101,7 +101,7 @@ let do_subst_block m subst b  =
   in
   let exp funs (subst, m) e =
     let e, _ = Mapfold.exp funs (subst, m) e in
-    match e.e_desc with
+    match !!e with
     | Evar x ->
         let e = if IdentEnv.mem x subst then IdentEnv.find x subst else e in
         e, (subst, m)
@@ -131,13 +131,13 @@ let check_params loc m param_names params cl =
   with Unsatisfiable(c) ->
     Format.eprintf "%aThe following constraint is not satisfied: %a@."
       print_location loc  Printer.print_static_exp c;
-    raise Error
+    raise ErrorDetected
 
 let rec inline_node loc env m call_stack f params args pat =
   (* Check that the definition is sound *)
   if List.mem (f, params) call_stack then (
     Format.eprintf "The definition of %s is circular.@." f;
-    raise Error
+    raise ErrorDetected
   );
   let call_stack = (f, params)::call_stack in
 
@@ -154,7 +154,7 @@ let rec inline_node loc env m call_stack f params args pat =
   b, call_stack
 
 and translate_eq env m subst call_stack (eqs, vds) ((pat, e) as eq) =
-  match e.e_desc with
+  match !!e with
     (* Inline all nodes  or only those with params or declared inline
        if no_inline_all = true *)
     | Ecall(f, params, args) ->
@@ -214,10 +214,10 @@ let program p =
       let n = List.find (fun n -> n.n_name = !Cli_options.main_node) p.p_nodes in
       if n.n_params <> [] then (
         Format.eprintf "The main node '%s' cannot have static parameters@." n.n_name;
-        raise Error
+        raise ErrorDetected
       );
       { p with p_nodes = [node m n] }
     with Not_found ->
       Format.eprintf "Cannot find the main node '%s'@." !Cli_options.main_node;
-      raise Error
+      raise ErrorDetected
   )

@@ -33,7 +33,7 @@ let mk_eq e =
   Evar id, vd, eq
 
 (* Put all the arguments in separate equations *)
-let exp funs (eqs, vds) e = match e.e_desc with
+let exp funs (eqs, vds) e = match !!e with
   | Econst _ | Evar _ -> e, (eqs, vds)
   | _ ->
       let e, (eqs, vds) = Mapfold.exp funs (eqs, vds) e in
@@ -41,7 +41,7 @@ let exp funs (eqs, vds) e = match e.e_desc with
       { e with e_desc = desc }, (eq::eqs, vd::vds)
 
 let equation funs (eqs, vds) (pat, e) =
-  match e.e_desc with
+  match !!e with
     | Econst _ | Evar _ -> (pat, e), (eqs, vds)
     | _ -> (
       match Mapfold.exp_it funs (eqs, vds) e with

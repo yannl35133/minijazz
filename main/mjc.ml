@@ -39,7 +39,7 @@ let main () =
       compile_impl
       errmsg;
   with
-    | Errors.Error -> exit 2;;
+    | Errors.ErrorDetected -> exit 2;;
 
 main ()
 

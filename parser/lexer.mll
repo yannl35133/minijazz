@@ -29,59 +29,31 @@ open Lexing
 open Parser
 open Errors
 
-exception Lexical_error of lexical_error * location;;
+let keyword_table = ((Hashtbl.create 149) : (string, token) Hashtbl.t)
 
-let comment_depth = ref 0
-
-let keyword_table = ((Hashtbl.create 149) : (string, token) Hashtbl.t);;
-
-List.iter (fun (str,tok) -> Hashtbl.add keyword_table str tok) [
- "ram", RAM;
- "rom", ROM;
- "where", WHERE;
- "end", END;
- "true", BOOL true;
- "false", BOOL false;
- "reg", REG;
- "not", NOT;
- "const", CONST;
- "and", AND;
- "nand", NAND;
- "or", OR;
- "xor", XOR;
- "if", IF;
- "then", THEN;
- "else", ELSE;
- "inline", INLINE;
- "probing", PROBING
+let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
+  "_", WILDCARD;
+  "ram", RAM;
+  "rom", ROM;
+  "where", WHERE;
+  "end", END;
+  "true", BOOL true;
+  "false", BOOL false;
+  "reg", REG;
+  "not", NOT;
+  "const", CONST;
+  "and", AND;
+  "nand", NAND;
+  "or", OR;
+  "nor", NOR;
+  "xor", XOR;
+  "if", IF;
+  "then", THEN;
+  "else", ELSE;
+  "inline", INLINE;
+  "probing", PROBING
 ]
 
-
-(* To buffer string literals *)
-
-let initial_string_buffer = Bytes.create 256
-let string_buff = ref initial_string_buffer
-let string_index = ref 0
-
-let reset_string_buffer () =
-  string_buff := initial_string_buffer;
-  string_index := 0;
-  ()
-
-let store_string_char c =
-  if !string_index >= Bytes.length (!string_buff) then begin
-    let new_buff = Bytes.create (Bytes.length (!string_buff) * 2) in
-      Bytes.blit (!string_buff) 0 new_buff 0 (Bytes.length (!string_buff));
-      string_buff := new_buff
-  end;
-  Bytes.set (!string_buff) (!string_index) c;
-  incr string_index
-
-
-let get_stored_string () =
-  let s = Bytes.sub_string (!string_buff) 0 (!string_index) in
-  string_buff := initial_string_buffer;
-  s
 
 let char_for_backslash = function
     'n' -> '\n'
@@ -104,7 +76,7 @@ let size_of_base c =
 let newline = '\n' | '\r' '\n'
 let space = [' ' '\t']
 let alphanum = ['A'-'Z' 'a'-'z' '_' '0'-'9']
-let alpha = ['A'-'Z' 'a'-'z']
+let alpha = ['A'-'Z' 'a'-'z' '_']
 let ascii = [' ' - '~'] # ['\\' '"']
 
 let ident = alpha alphanum*
@@ -116,24 +88,27 @@ rule token = parse
   | ")"             { RPAREN }
   | "*"             { STAR }
   | "+"             { PLUS }
+  | "||"            { OR }
+  | "&&"            { AND }
   | "&"             { AND }
   | "/"             { SLASH }
   | "<"             { LANGLE }
   | ">"             { RANGLE }
   | "["             { LBRACKET }
   | "]"             { RBRACKET }
-  | ":"             { COLON }
   | ";"             { SEMICOL }
   | "="             { EQUAL }
+  | "<>"            { NEQ }
   | ","             { COMMA }
   | "-"             { MINUS }
   | "^"             { CIRCUMFLEX }
   | "<="            { LEQ }
+  | ">="            { GEQ }
   | "."             { DOT }
   | ".."            { DOTDOT }
   | ident as id
                     { try Hashtbl.find keyword_table id
-                      with Not_found -> IDENTIFIER id }
+                      with Not_found -> IDENT id }
   | '0' (['b' 'B'] as base)  (['0'-'1']+ as lit) as num
   |('0' (['u' 'U'] as base)?)(['0'-'9']+ as lit) as num
   | '0' (['o' 'O'] as base)  (['0'-'7']+ as lit) as num
@@ -142,7 +117,7 @@ rule token = parse
                       | Some 'b' | Some 'B'        -> 1
                       | Some 'o' | Some 'O'        -> 3
                       | Some 'x' | Some 'X'        -> 4
-                      | Some 'u' | Some 'U' | None -> 4
+                      | Some 'u' | Some 'U' | None -> 0
                       | _ -> invalid_arg "Not a valid base"
                       in
                       INT (String.length lit * b,

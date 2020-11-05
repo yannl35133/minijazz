@@ -77,11 +77,11 @@ let print_static_type ff sty = match sty with
   | STBool -> fprintf ff "bool"
 
 let rec print_type ff ty = match ty with
-  | TUnit -> fprintf ff "()"
+  | TUntyped -> fprintf ff "()"
   | TBit -> fprintf ff "bit"
   | TBitArray se -> fprintf ff "bit[%a]" print_static_exp se
   | TProd l ->  print_list_r print_type "" "*" "" ff l
-  | TVar _ -> fprintf ff "<var>"
+  (* | TVar _ -> fprintf ff "<var>" *)
 
 let print_call_params ff params = match params with
   | [] -> ()
@@ -89,9 +89,9 @@ let print_call_params ff params = match params with
 
 let rec print_exp ff e =
   if !Cli_options.print_types then
-    fprintf ff "(%a : %a)" print_edesc e.e_desc print_type e.e_ty
+    fprintf ff "(%a : %a)" print_edesc !!e print_type e.e_ty
   else
-    fprintf ff "%a" print_edesc e.e_desc
+    fprintf ff "%a" print_edesc !!e
 
 and print_edesc ff ed = match ed with
   | Econst v -> print_const ff v
@@ -130,7 +130,7 @@ let print_eqs ff eqs =
   print_list_nlr print_eq """;""" ff eqs
 
 let print_var_dec ff vd = match vd.v_ty with
-  | TUnit -> fprintf ff "@[%a : .@]" print_ident vd.v_ident
+  | TUntyped -> fprintf ff "@[%a : .@]" print_ident vd.v_ident
   | TBit -> fprintf ff "@[%a@]" print_ident vd.v_ident
   | TBitArray se ->
     fprintf ff "@[%a : [%a]@]" print_ident vd.v_ident  print_static_exp se

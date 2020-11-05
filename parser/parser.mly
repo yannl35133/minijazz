@@ -25,14 +25,17 @@
 
 %{
 
-open Ident
-open Static
-open Ast
+open Ast_v2
 open Location
-open Misc
 
-let fresh_param () =
-  mk_static_exp (SVar ("_n"^(Misc.gen_symbol ())))
+let localize loc x = {
+  desc = x;
+  loc = Loc loc
+}
+let no_localize x = {
+  desc = x;
+  loc = no_location
+}
 
 %}
 
@@ -40,165 +43,167 @@ let fresh_param () =
 %token ROM RAM REG
 %token IF THEN ELSE
 %token LANGLE "<" RANGLE ">" LBRACKET "[" RBRACKET "]" LPAREN "(" RPAREN ")"
-%token SEMICOL ";" COLON ":" COMMA "," EQUAL "=" DOT "." DOTDOT ".."
-%token OR AND XOR NAND NOT
-%token PLUS MINUS STAR SLASH CIRCUMFLEX
-%token LEQ
-%token EOF
-%token <string> IDENTIFIER
+%token SEMICOL ";" COMMA "," EQUAL "=" DOT "." DOTDOT ".."
+%token OR AND XOR NOR NAND NOT
+%token PLUS "+" MINUS "-" STAR "*" SLASH "/" CIRCUMFLEX "^"
+%token LEQ "<=" GEQ ">=" NEQ "<>"
+%token WILDCARD "_" EOF
+%token <string> IDENT
 %token <string> STRING
 %token <int * int> INT
 %token <bool> BOOL
 
-%left LEQ EQUAL
+%left LEQ GEQ EQUAL NEQ LANGLE RANGLE
 %left DOT
-%left OR PLUS MINUS
+%left OR NOR PLUS MINUS
 %left NAND XOR AND
 %left STAR SLASH
 %right NOT REG
 %right CIRCUMFLEX
 
-%start program
-%type <Ast.program> program
+%start <Ast_v2.program> program
 
 %%
 
 /** Tools **/
-%inline slist(x, S):      l = separated_list(S, x)             { l }
-%inline snlist(x, S):     l = separated_nonempty_list(S, x)    { l }
-%inline tuple(x):         "(" h = x "," t = snlist(x, ",") ")" { h :: t }
-%inline tag_option(P, x):
-  | /* empty */   { None }
-  | P v = x       { Some v }
+let slist  (x, sep)  == separated_list (sep, x)
+let snlist (x, sep)  == separated_nonempty_list (sep, x)
+let stuple (x, o, c) == o; ~=slist (x, ","); c; <>
+let tuple (x) == stuple(x, "(", ")")
 
-localize (x): y = x     { y, Loc $sloc }
+let localize (x) == ~=x; { localize $sloc x }
 
-program:
-  | c = list(const_dec) n = list(node_dec) EOF
-      { mk_program c n }
+let program :=
+  | p_consts = list(const_decl); p_nodes = list(node_decl); EOF;
+      { { p_consts; p_nodes } }
 
-const_dec:
-  | CONST id=IDENTIFIER "=" se=static_exp option(SEMICOL)
-      { mk_const_dec ~loc:(Loc $sloc) id se }
+let const_decl == localize(const_decl_desc)
+let const_decl_desc :=
+  | CONST; const_left=IDENT; "="; const_right=static_exp; ";"?;
+      { { const_left; const_right } }
 
-node_dec:
-  inline = inline  n = node_name
-      p=params "(" args=slist(arg, ",") ")" "=" out=node_out
-  WHERE b=block probes=probe_decls END WHERE option(";")
-      { mk_node n (Loc $sloc) inline args out p b probes }
+let node_decl == localize(node_decl_desc)
+let node_decl_desc :=
+  ~=node_inline; node_name=IDENT; ~=node_params;
+    "("; node_inputs=slist(typed_ident, ","); ")"; "="; ~=node_outputs;
+  WHERE; node_body=block; node_probes=probe_decls; END; WHERE; ";"?;
+      { { node_inline; node_name; node_params; node_inputs; node_outputs; node_body; node_probes } }
 
-inline:
+let node_inline :=
   |         { NotInline }
-  | INLINE  { Inline }
+  | INLINE; { Inline }
 
-node_name:
-  | id=IDENTIFIER { reset_symbol_table (); id }
+let node_outputs :=
+  | ~=typed_ident;      { [typed_ident] }
+  | tuple(typed_ident)
 
-node_out:
-  | a = arg                     { [a] }
-  | "(" out=slist(arg, ",") ")" { out }
+let typed_ident == localize(typed_ident_desc)
+let typed_ident_desc :=
+  | name=IDENT; type_ident=type_ident?;
+      { { name; typed = Option.value ~default:TBit type_ident } }
 
-arg:
-  | n=ident ":" t=type_ident { mk_var_dec n t }
-  | n=ident                  { mk_var_dec n TBit }
+let type_ident ==
+  | "["; ~=opt_static_exp; "]"; < TBitArray >
 
-ident:
-  | id=IDENTIFIER { ident_of_string id }
+let opt_static_exp == localize(optional_static_exp_desc)
+let optional_static_exp_desc :=
+  | WILDCARD;             { None }
+  | ~=simple_static_exp_desc;  < Some >
 
-type_ident: "[" se=static_exp "]" { TBitArray se }
-
-params:
-  | /*empty*/                     { [] }
-  | "<" pl=snlist(param, ",") ">" { pl }
-
-param:
-  id=IDENTIFIER { mk_param id }
+let node_params :=
+  | (* empty *)     { [] }
+  | stuple(IDENT, "<", ">")
 
 
-block:
-  | eqs=equs { BEqs (eqs, []) }
-  | IF se=static_exp THEN thenb=block ELSE elseb=block END IF { BIf(se, thenb, elseb) }
+let block == localize(block_desc)
+let block_desc :=
+  | ~=slist(equation, ";");                                    < BEqs >
+  | IF; ~=static_exp; THEN; b1=block; ELSE; b2=block; END; IF; < BIf >
 
-equs: eq=equ tl=equ_tail { eq::tl }
-equ_tail:
-  | /*empty*/ { [] }
-  | SEMICOL { [] }
-  | SEMICOL eq=equ tl=equ_tail { eq::tl }
-equ: p=pat EQUAL e=exp { mk_equation p e }
+let equation == localize(equation_desc)
+let equation_desc :=
+  | eq_left=lvalue; "="; eq_right=exp; { { eq_left; eq_right } }
 
-pat:
-  | n=ident                      { Evarpat n }
-  | "(" p=snlist(ident, ",") ")" { Etuplepat p }
+let lvalue == localize(lvalue_desc)
+let lvalue_desc :=
+  | WILDCARD;         { LValDrop }
+  | ~=IDENT;          < LValId >
+  | ~=tuple(lvalue);  < LValTuple >
 
-static_exp: se=_static_exp { mk_static_exp ~loc:(Loc $sloc) se }
-_static_exp :
-  | i=INT { SInt (snd i) }
-  | id=IDENTIFIER { SVar id }
-  | "(" se=_static_exp ")" { se }
-  /*integer ops*/
-  | se1=static_exp CIRCUMFLEX se2=static_exp { SBinOp(SPower, se1, se2) }
-  | se1=static_exp PLUS se2=static_exp { SBinOp(SAdd, se1, se2) }
-  | se1=static_exp MINUS se2=static_exp { SBinOp(SMinus, se1, se2) }
-  | se1=static_exp STAR se2=static_exp { SBinOp(SMult, se1, se2) }
-  | se1=static_exp SLASH se2=static_exp { SBinOp(SDiv, se1, se2) }
-  /*bool ops*/
-  | se1=static_exp EQUAL se2=static_exp { SBinOp(SEqual, se1, se2) }
-  | se1=static_exp LEQ se2=static_exp { SBinOp(SLeq, se1, se2) }
+let simple_static_exp == localize(simple_static_exp_desc)
+let simple_static_exp_desc :=
+  | i=INT;                                                      { SInt (snd i) }
+  | ~=IDENT;                                                    < SConst >
+  | "("; ~=static_exp; ")";                                     < SPar >
+  | se1=simple_static_exp; op=int_op; se2=simple_static_exp;    { SBinOp (op, se1, se2) }
 
-exps: "(" e=slist(exp, ",") ")" {e}
+let static_exp == localize(static_exp_desc)
+let static_exp_desc :=
+  | static_value
+  | ~=IDENT;                                      < SConst >
+  | "("; ~=static_exp; ")";                       < SPar >
+  | se1=static_exp; op=int_op;  se2=static_exp;   { SBinOp (op, se1, se2) }
+  | se1=static_exp; op=bool_op; se2=static_exp;   { SBinOp (op, se1, se2) }
 
-exp: e=_exp { mk_exp ~loc:(Loc $sloc) e }
-_exp:
-  | e=_simple_exp  { e }
-  | c=const { Econst c }
-  | REG e=exp { Ereg e }
-  | id=IDENTIFIER p=call_params a=exps { Ecall (id, p, a) }
-  | e1=exp PLUS e2=exp { Ecall ("or", [], [e1; e2]) }
-  | e1=exp OR e2=exp { Ecall ("or", [], [e1; e2]) }
-  | e1=exp AND e2=exp { Ecall ("and", [], [e1; e2]) }
-  | e1=exp CIRCUMFLEX e2=exp { Ecall("xor", [], [e1; e2]) }
-  | e1=exp XOR e2=exp { Ecall ("xor", [], [e1; e2]) }
-  | e1=exp NAND e2=exp { Ecall ("nand", [], [e1; e2]) }
-  | NOT a=exp     { Ecall ("not", [], [a])}
-  | e1=exp DOT e2=exp
-    { Ecall("concat", [fresh_param(); fresh_param(); fresh_param ()], [e1; e2]) }
-  | e1=simple_exp LBRACKET idx=static_exp RBRACKET
-    { Ecall ("select", [idx; fresh_param()], [e1]) }
-  | e1=simple_exp LBRACKET low=static_exp DOTDOT high=static_exp RBRACKET
-    { Ecall("slice", [low; high; fresh_param()], [e1]) }
-  | e1=simple_exp LBRACKET low=static_exp DOTDOT RBRACKET
-    { let n = fresh_param () in
-      let high = mk_static_exp (SBinOp(SMinus, n, mk_static_exp (SInt 1))) in
-      Ecall("slice", [low; high; n], [e1]) }
-  | e1=simple_exp LBRACKET DOTDOT high=static_exp RBRACKET
-    {
-      let params = [mk_static_exp (SInt 0); high; fresh_param ()] in
-      Ecall("slice", params, [e1])
-    }
-  | ro=rom_or_ram "<" addr_size=static_exp
-    COMMA word_size=static_exp input_file=tag_option(COMMA, STRING) ">" a=exps
-    { Emem(ro, addr_size, word_size, input_file, a) }
+let static_value ==
+  | ~=BOOL;     < SBool >
+  | i=INT;      { SInt (snd i) }
 
-simple_exp: e=_simple_exp { mk_exp ~loc:(Loc $sloc) e }
-_simple_exp:
-  | n=ident                   { Evar n }
-  | "(" e=_exp ")"      { e }
+let int_op ==
+  | "+";  { SAdd }      | "-";  { SMinus }
+  | "*";  { SMult }     | "/";  { SDiv }
+  | "^";  { SPower }
+let bool_op ==
+  | "=";  { SEq }       | "<>"; { SNeq }
+  | "<";  { SLt }       | "<="; { SLeq }
+  | ">";  { SGt }       | ">="; { SGeq }
+  | OR;   { SOr }       | AND;  { SAnd }
 
-const:
-  | b=BOOL { VBit b }
-  | i=INT
-    { let (s, v) = i in VBitArray (bool_array_of_int s v) }
-  | LBRACKET RBRACKET { VBitArray (Array.make 0 false) }
 
-rom_or_ram :
-  | ROM { MRom }
-  | RAM { MRam }
+let simple_exp == localize(simple_exp_desc)
+let exp        == localize(exp_desc)
+let simple_exp_desc :=
+  | ~=IDENT;                                                                  < EVar >
+  | "("; ~=exp; ")";                                                          < EPar >
+let exp_desc :=
+  | simple_exp_desc
+  | ~=const;                                                                  < EConst >
+  | REG; ~=exp;                                                               < EReg >
+  | ~=IDENT; ~=call_params; ~=tuple(exp);                                     < ECall >
+  | e1=exp; ~=op; e2=exp;                                                     { ECall (op, [], [e1; e2]) }
+  | NOT; e=exp;                                                               { ECall ("not", [], [e])}
+  | e1=exp; "."; e2=exp;                                                      { ECall ("concat", [no_localize None; no_localize None], [e1; e2]) }
+  | e1=simple_exp; "["; idx=opt_static_exp; "]";                              { ECall ("select", [no_localize None; idx], [e1]) }
+  | e1=simple_exp; "["; low=opt_static_exp; ".."; high=opt_static_exp; "]";   { ECall ("slice",  [no_localize None; low; high], [e1]) }
+  | e1=simple_exp; "["; low=opt_static_exp; ".."; "]";                        { ECall ("slice_from", [no_localize None; low], [e1]) }
+  | e1=simple_exp; "["; ".."; high=opt_static_exp; "]";                       { ECall ("slice_to", [no_localize None; high], [e1]) }
+  | ro=rom_or_ram; "<"; addr_size=simple_static_exp; ",";
+      word_size=simple_static_exp; input_file=input_file?; ">"; a=tuple(exp);
+                                                                              { EMem  (ro, addr_size, word_size, input_file, a) }
 
-call_params:
-  | /*empty*/ { [] }
-  | "<" pl=snlist(static_exp, ",") ">" { pl }
+let op ==
+  | "+";  { "or" }    | OR;   { "or" }
+  | "*";  { "and" }   | AND;  { "and" }
+  | "^";  { "xor" }   | XOR;  { "xor" }
+  | NAND; { "nand" }  | NOR;  { "nor" }
+
+let const :=
+  | ~=BOOL;     < VBit >
+  | i=INT;      { if fst i > 0 then VBitArray (Misc.bool_array_of_int i) else raise (Errors.Lexical_error (Nonbinary_base, Loc $sloc)) }
+  | "["; "]";   { VBitArray (Array.make 0 false) }
+
+let rom_or_ram :=
+  | ROM;        { MRom }
+  | RAM;        { MRam }
+
+let input_file :=
+  | ","; STRING
+
+let call_params :=
+  | (* empty *)   { [] }
+  | stuple(opt_static_exp, "<", ">")
 
 probe_decls:
   | /*empty*/ { [] }
-  | PROBING l=snlist(ident, ",") { l }
+  | PROBING l=snlist(IDENT, ",") { l }
 %%

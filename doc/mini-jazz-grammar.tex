@@ -22,7 +22,7 @@ La grammaire de mini-jazz
     | & \te{<} \nt{identifiant}^+_\ste{,} \te{>} \\
     \nt{node-out} ::= & \nt{arg} \\
     | & \te{(} \nt{arg}^*_\ste{,} \te{)} \\
-    \nt{arg} ::= & \nt{identifiant} \te{:} \nt{type-ident} \\
+    \nt{arg} ::= & \nt{identifiant} \nt{type-ident} \\
     | & \nt{identifiant} \\
     \nt{type-ident} ::= & \te{[} \nt{static-exp} \te{]} \\
 %

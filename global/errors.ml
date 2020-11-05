@@ -25,23 +25,27 @@
 
 open Location
 
-exception Error
+exception ErrorDetected
 
 type lexical_error =
   | Illegal_character
   | Unterminated_comment
-  | Bad_char_constant
   | Unterminated_string
+  | Nonbinary_base
+
+exception Lexical_error of lexical_error * location
 
 let lexical_error err loc =
-  Format.eprintf (match err with
-    | Illegal_character -> "%aIllegal character.@."
-    | Unterminated_comment -> "%aUnterminated comment.@."
-    | Bad_char_constant -> "%aBad char constant.@."
-    | Unterminated_string -> "%aUnterminated string.@."
-     ) print_location loc;
-  raise Error
+  Format.eprintf "%aSyntax error: %s"
+    print_location loc
+    (match err with
+    | Illegal_character     -> "illegal character@."
+    | Unterminated_comment  -> "unterminated comment@."
+    | Unterminated_string   -> "unterminated string@."
+    | Nonbinary_base -> "base unadapted to binary@."
+    );
+  raise ErrorDetected
 
 let syntax_error loc =
-  Format.eprintf "%aSyntax error.@." print_location loc;
-  raise Error
+  Format.eprintf "%aSyntax error@." print_location loc;
+  raise ErrorDetected

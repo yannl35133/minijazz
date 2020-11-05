@@ -56,12 +56,12 @@ let parse lexbuf =
   try
     Parser.program Lexer.token lexbuf
   with
-    | Lexer.Lexical_error(err, l) ->
+    | Lexical_error (err, l) ->
         lexical_error err l
     | Parser.Error ->
         let pos1 = Lexing.lexeme_start_p lexbuf
         and pos2 = Lexing.lexeme_end_p lexbuf in
-        let l = Loc(pos1,pos2) in
+        let l = Loc (pos1,pos2) in
         syntax_error l
 
 let lexbuf_from_file file_name =
