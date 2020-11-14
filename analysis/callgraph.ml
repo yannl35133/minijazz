@@ -1,4 +1,4 @@
-(***********************************************************************)
+(* (***********************************************************************)
 (*                                                                     *)
 (*                             MiniJazz                                *)
 (*                                                                     *)
@@ -221,3 +221,4 @@ let program p =
       Format.eprintf "Cannot find the main node '%s'@." !Cli_options.main_node;
       raise ErrorDetected
   )
+ *)

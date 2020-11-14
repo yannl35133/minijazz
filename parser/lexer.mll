@@ -88,6 +88,7 @@ rule token = parse
   | ")"             { RPAREN }
   | "*"             { STAR }
   | "+"             { PLUS }
+  | "!"             { NOT }
   | "||"            { OR }
   | "&&"            { AND }
   | "&"             { AND }
@@ -96,6 +97,7 @@ rule token = parse
   | ">"             { RANGLE }
   | "["             { LBRACKET }
   | "]"             { RBRACKET }
+  | ":"             { COLON }
   | ";"             { SEMICOL }
   | "="             { EQUAL }
   | "<>"            { NEQ }

@@ -1,4 +1,4 @@
-(***********************************************************************)
+(* (***********************************************************************)
 (*                                                                     *)
 (*                             MiniJazz                                *)
 (*                                                                     *)
@@ -66,3 +66,4 @@ let block b =
   let funs = { Mapfold.defaults with exp = exp; equation = equation; block = block } in
   let b, _ = Mapfold.block_it funs ([], []) b in
   b
+ *)
