@@ -92,15 +92,15 @@ let node_outputs :=
 let typed_ident == localize(typed_ident_desc)
 let typed_ident_desc :=
   | name=ident; type_ident=type_ident?;
-      { { name; typed = localize $loc(type_ident) (Option.value ~default:TBit type_ident) } }
+      { { name; typed = localize $loc(type_ident) (Option.value ~default:(tbit 1 $loc(type_ident)) type_ident) } }
 
 let type_ident ==
   | "["; ~=opt_static_exp; "]"; < TBitArray >
 
 let opt_static_exp == localize(optional_static_exp_desc)
 let optional_static_exp_desc :=
-  | WILDCARD;             { None }
-  | ~=simple_static_exp_desc;  < Some >
+  | WILDCARD;                 { None }
+  | ~=simple_static_exp_desc; < Some >
 
 let node_params :=
   | (* empty *)           { [] }
@@ -180,15 +180,15 @@ let exp_desc :=
   | REG; ~=exp;                                                               < EReg >
   | ~=ident; ~=call_params; ~=tuple(exp);                                     < ECall >
   | e1=exp; ~=op; e2=exp;                                                     { ECall (op, [], [e1; e2]) }
-  | NOT; e=exp;                                                               { ECall (no_localize "not", [], [e])}
-  | e1=exp; "."; e2=exp;                                                      { ECall (no_localize "concat", [no_localize None; no_localize None], [e1; e2]) }
+  | _n=NOT; e=exp;                                                            { ECall (localize $loc(_n) "not", [], [e])}
+  | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
   | e1=simple_exp; "["; idx=opt_static_exp; "]";                              { ECall (no_localize "select", [no_localize None; idx], [e1]) }
   | e1=simple_exp; "["; low=opt_static_exp; ".."; high=opt_static_exp; "]";   { ECall (no_localize "slice",  [no_localize None; low; high], [e1]) }
   | e1=simple_exp; "["; low=opt_static_exp; ".."; "]";                        { ECall (no_localize "slice_from", [no_localize None; low], [e1]) }
   | e1=simple_exp; "["; ".."; high=opt_static_exp; "]";                       { ECall (no_localize "slice_to", [no_localize None; high], [e1]) }
   | ro=rom_or_ram; "<"; addr_size=simple_static_exp; ",";
       word_size=simple_static_exp; input_file=input_file?; ">"; a=tuple(exp);
-                                                                              { EMem  (ro, addr_size, word_size, input_file, a) }
+                                                                              { EMem  (ro, (addr_size, word_size, input_file), a) }
 
 let op == localize(_op)
 let _op ==
@@ -198,7 +198,7 @@ let _op ==
   | NAND; { "nand" }  | NOR;  { "nor" }
 
 let const :=
-  | ~=BOOL;     < VBit >
+  | b=BOOL;     { VBitArray (Array.make 1 b) }
   | i=INT;      { if fst i > 0 then VBitArray (Misc.bool_array_of_int i) else raise (Errors.Lexical_error (Nonbinary_base, Loc $sloc)) }
   | "["; "]";   { VBitArray (Array.make 0 false) }
 

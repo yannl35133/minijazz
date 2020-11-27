@@ -44,6 +44,10 @@ let localize loc x = {
   desc = x;
   loc = Loc loc
 }
+let relocalize loc x = {
+  desc = x;
+  loc
+}
 let no_localize x = {
   desc = x;
   loc = Location.no_location
@@ -82,23 +86,23 @@ and optional_static_exp = optional_static_exp_desc localized
 
 type static_typed_ident_desc = {
   st_name:      ident;
-  st_type_name: ident;
+  st_type_name: ident; (* ideally, "int" or "bool" *)
 }
 and static_typed_ident = static_typed_ident_desc localized
 
 (* Netlist expressions *)
 
 type netlist_type =
-  | TBit
   | TBitArray of optional_static_exp
   | TProd of netlist_type list
 
+let tbit n loc =
+  TBitArray (localize loc (Some (SInt n)))
 
 type mem_kind_desc = MRom | MRam
 and mem_kind = mem_kind_desc localized
 
 type value =
-  | VBit      of bool
   | VBitArray of bool array
 
 type exp_desc =
@@ -108,7 +112,7 @@ type exp_desc =
   | EReg   of exp
   | ECall  of ident * optional_static_exp list * exp list
       (* function * params * args *)
-  | EMem   of mem_kind * static_exp * static_exp * string option * exp list
+  | EMem   of mem_kind * (static_exp * static_exp * string option) * exp list
       (* ro * address size * word size * input file * args *)
 
 and exp = exp_desc localized
@@ -259,7 +263,7 @@ type netlist_exp_desc =
   | EReg   of netlist_exp
   | ECall  of ident_desc * static_exp list * netlist_exp list
       (* function * params * args *)
-  | EMem   of mem_kind * static_exp * static_exp * string option * netlist_exp list
+  | EMem   of mem_kind * (static_exp * static_exp * string option) * netlist_exp list
       (* ro * address size * word size * input file * args *)
 
 and netlist_exp = netlist_exp_desc netlist_typed
