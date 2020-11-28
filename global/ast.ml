@@ -26,7 +26,7 @@
 
 type ident_desc = string
 module Env = Map.Make (struct type t = ident_desc let compare = compare end)
-(* module IdentSet = Set.Make (struct type t = ident let compare = compare end) *)
+module IdentSet = Set.Make (struct type t = ident_desc let compare = compare end)
 
 
 (* Localize an element *)
@@ -48,6 +48,8 @@ let relocalize loc x = {
   desc = x;
   loc
 }
+let relocalize_fun f obj =
+  relocalize !@obj (f !!obj)
 let no_localize x = {
   desc = x;
   loc = Location.no_location
@@ -73,7 +75,7 @@ type sunop = SNeg | SNot
 type static_exp_desc =
   | SInt   of int
   | SBool  of bool
-  | SConst of ident
+  | SIdent of ident
   | SPar   of static_exp                            (* Created purely to have good locations *)
   | SUnOp  of      sunop * static_exp
   | SBinOp of        sop * static_exp * static_exp
@@ -218,7 +220,7 @@ type sunop = IntUnop of int_unop | BoolUnop of bool_unop
 type static_exp_desc =
   | SInt   of int
   | SBool  of bool
-  | SConst of ident
+  | SIdent of ident
   | SUnOp  of      sunop * static_exp
   | SBinOp of        sop * static_exp * static_exp
   | SIf    of static_exp * static_exp * static_exp  (* se1 ? se2 : se3 *)

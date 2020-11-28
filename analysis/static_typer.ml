@@ -1,77 +1,212 @@
 open Ast
-open Ast.TypedAST
+module StaticConstrainingAST = Static_constrain.StaticConstrainingAST
+exception Scoping_error of string * Location.location
 
-module TypingAST = struct
+module StaticTypedAST = struct
+  type sunop = ParsingAST.sunop
+  type sop = ParsingAST.sop
+
+  type static_exp_desc =
+    | SInt   of int
+    | SBool  of bool
+    | SParam of int
+    | SConst of ident
+    | SUnOp  of      sunop * static_exp
+    | SBinOp of        sop * static_exp * static_exp
+    | SIf    of static_exp * static_exp * static_exp  (* se1 ? se2 : se3 *)
+
+  and static_exp = static_exp_desc static_typed
+
+  and static_type =
+    | TInt
+    | TBool
   
-  type fun_env_desc = {
-    fun_params: static_type list;
-    fun_ins:  netlist_type list;
-    fun_outs: netlist_type list
+  and 'a static_typed =
+    {
+      st_desc: 'a;
+      st_loc: Location.location;
+      st_type: static_type;
+    }
+
+  let (!$!) = fun obj -> obj.st_desc
+  let (!$$) = fun obj -> obj.st_type
+  let (!$@) = fun obj -> obj.st_loc
+
+  let static_type desc loc typ = {
+    st_desc = desc;
+    st_type = typ;
+    st_loc = loc
+  }
+  
+  let static_type_same { desc; loc } typ = static_type desc loc typ
+
+
+  type optional_static_exp_desc = static_exp_desc option
+  and optional_static_exp = optional_static_exp_desc static_typed
+
+  (* Netlist expressions *)
+
+  type netlist_type =
+    | TBitArray of optional_static_exp
+    | TProd of netlist_type list
+
+
+  type exp_desc =
+    | EConst of ParsingAST.value
+    | EVar   of ident
+    | EReg   of exp
+    | ECall  of ident * optional_static_exp list * exp list
+        (* function * params * args *)
+    | EMem   of ParsingAST.mem_kind * (static_exp * static_exp * string option) * exp list
+        (* ro * (address size * word size * input file) * args *)
+
+  and exp = exp_desc localized
+
+  type equation_desc = {
+    eq_left:  ParsingAST.lvalue;
+    eq_right: exp
+  }
+  and equation = equation_desc localized
+
+
+  type typed_ident_desc = {
+    name:  ident;
+    typed: netlist_type localized;
+  }
+  and typed_ident = typed_ident_desc localized
+
+
+  type block_desc =
+    | BEqs of equation list
+    | BIf  of static_exp * block * block
+
+  and block = block_desc localized
+
+  type param = {
+    st_type: static_type;
+    st_name: ident_desc;
+    st_loc:  Location.location;
   }
 
-  let static_type desc loc t = {
-    st_desc = desc;
-    st_type = t;
-    st_loc = loc
-    }
-  
-  let static_type_same { desc; loc } t = static_type desc loc t
+  type node = {
+    node_name_loc:  Location.location;
+    node_loc:       Location.location;
+    node_params:    param list;
+    node_inline:    ParsingAST.inline_status;
+    node_inputs:    typed_ident list;
+    node_outputs:   typed_ident list;
+    node_body:      block;
+    node_probes:    ident list;
+  }
+
+  type const = {
+    const_decl:   static_exp;
+    const_idents: Location.location;
+    const_totals: Location.location;
+  }
+
+  type program = {
+    p_consts: const Env.t;
+    p_nodes:  node  Env.t;
+  }
+
+  (* TODO: Revoir variables environment *)
+  type varenv = static_exp_desc static_typed list Env.t
 end
-open TypingAST
-(* Utility functions *)
+open StaticTypedAST
 
-let (>::) = fun e (a, b) -> (a, e :: b)
-let rec map_fold f env = function
-  | [] ->
-      env, []
-  | hd :: tl ->
-      let (env, fhd) = f env hd in
-      fhd >:: map_fold f env tl
+let fulfill_constraints (consts, params) = function
+  | [] -> None
+  | StaticConstrainingAST.CParam nb :: tl -> Some (List.nth n params).st_type
+  | StaticConstrainingAST.CConstant id :: tl -> Some !$$(Env.find !!id consts)
+  | StaticConstrainingAST.CUnoparg of  sunop
+  | StaticConstrainingAST.CUnopres of  sunop
+  | StaticConstrainingAST.CBinoparg of sop
+  | StaticConstrainingAST.CBinopres of sop
+  | StaticConstrainingAST.CCondition
+  | StaticConstrainingAST.CThenElse of static_exp
 
+let rec constrain_static_exp ?constraints:(acc=([] : static_type_constraints list)) (st_exp: PreTypingAST.static_exp):
+  static_exp_desc static_typed =
 
-let rec type_static_expr env (st_exp: ParsingAST.static_exp) : static_exp =
   match !!st_exp with
     | SInt n ->
-        static_type (SInt n) !@st_exp TInt
-    | SBool _ ->
-        static_type_same st_exp TBool
-    | SConst id ->
-        static_type_same st_exp (Env.find !!id env)
-    | SPar e ->
-        let te = type_static_expr env e in
-        static_type (SPar te) !@st_exp !$$te
-    | SUnOp (SNeg, e) ->        assert_type env e TInt; TInt
-    | SUnOp (SNot, e) ->        assert_type env e TBool; TBool
-    | SBinOp ((
-        SAdd | SMinus | SMult | SDiv | SPower
-                ), e1, e2) ->   assert_type env e1 TInt; assert_type env e2 TInt; TInt
-    | SBinOp ((
-        SEq|SNeq|SLt|SLeq|SGt|SGeq
-                ), e1, e2) ->   assert_type env e1 TInt; assert_type env e2 TInt; TBool
-    | SBinOp ((
-        SOr|SAnd
-                ), e1, e2) ->   assert_type env e1 TBool; assert_type env e2 TBool; TBool
-    | SIf (eb, e1, e2) ->       assert_type env eb TBool; let st_type = type_static_expr env e1 in assert_type env e2 st_type; st_type
+        static_constrain (SInt n) !@st_exp acc
+    | SBool b ->
+        static_constrain (SBool b) !@st_exp acc
+    | SIdent id ->
+        static_constrain (SIdent id) !@st_exp (CConstant id :: acc)
+    | SUnOp (unop, e) ->
+        let constrained = constrain_static_exp e ~constraints:[CUnoparg unop] in
+        static_constrain (SUnOp (unop, constrained)) !@st_exp (CUnopres unop :: acc)
+    | SBinOp (op, e1, e2) ->
+        let constrained1 = constrain_static_exp e1 ~constraints:[CBinoparg op] in
+        let constrained2 = constrain_static_exp e2 ~constraints:[CBinoparg op] in
+        static_constrain (SBinOp (op, constrained1, constrained2)) !@st_exp (CBinopres op :: acc)
+    | SIf (eb, e1, e2) ->
+        let constrainedb = constrain_static_exp eb ~constraints:[CCondition] in
+        let constrained1 = constrain_static_exp e1 ~constraints:[] in
+        let constrained2 = constrain_static_exp e2 ~constraints:[CThenElse constrained1] in
+        static_constrain (SIf (constrainedb, constrained1, constrained2)) !@st_exp (CThenElse constrained1 :: acc)
 
 
 
+let constrain_optional_static_exp e = match !!e with
+  | None -> static_constrain None !@e []
+  | Some ed ->
+      let res = constrain_static_exp (relocalize !@e ed) in
+      { res with st_desc = Some !$!res }
 
 
+let rec constrain_exp e = match !!e with
+  | PreTypingAST.EConst c ->  relocalize !@e (EConst c)
+  | PreTypingAST.EVar id ->   relocalize !@e (EVar id)
+  | PreTypingAST.EReg e ->    relocalize !@e (EReg (constrain_exp e))
+  | PreTypingAST.ECall (fname, params, args) ->
+                            relocalize !@e (ECall (fname, List.map constrain_optional_static_exp params, List.map constrain_exp args))
+  | PreTypingAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
+                            relocalize !@e (EMem (mem_kind, (constrain_static_exp addr_size, constrain_static_exp word_size, input_file),
+                                                  List.map constrain_exp args))
 
+let constrain_eq = relocalize_fun (fun PreTypingAST.{ eq_left; eq_right } ->
+  { eq_left; eq_right = constrain_exp eq_right }
+)
 
+let rec constrain_body e = relocalize_fun (function
+  | PreTypingAST.BIf (condition, block1, block2) -> BIf (constrain_static_exp condition, constrain_body block1, constrain_body block2)
+  | PreTypingAST.BEqs eq_l -> BEqs (List.map constrain_eq eq_l)
+  ) e
 
+let constrain_starput = relocalize_fun (fun PreTypingAST.{ name; typed } ->
+  let rec constrain_typed : PreTypingAST.netlist_type -> 'a = function
+    | TProd l -> TProd (List.map constrain_typed l)
+    | TBitArray e -> TBitArray (constrain_optional_static_exp e)
+  in
+  { name; typed = relocalize_fun constrain_typed typed }
+)
 
-let type_const { const_values; const_idents; const_decls } (const: ParsingAST.const) =
-  let ParsingAST.{ const_left; const_right } = !!const in
-  let typed_right = type_static_expr const_right in
+let constrain_node PreTypingAST.{ node_name_loc; node_loc; node_inline; node_inputs; node_outputs; node_params; node_body; node_probes } =
   {
-    const_values=Env.add !!const_left typed_right const_values;
-    const_idents=Env.add !!const_left !@const_left const_idents;
-    const_decls= Env.add !!const_left !@const const_decls
+    node_inputs =   List.map constrain_starput node_inputs;
+    node_outputs =  List.map constrain_starput node_outputs;
+    node_body =     constrain_body node_body;
+    node_name_loc; node_loc; node_inline; node_params; node_probes
+  }
+
+let constrain_const PreTypingAST.{ const_decl; const_idents; const_totals } =
+  {
+    const_decl = constrain_static_exp const_decl;
+    const_idents; const_totals
+  }
+
+let program PreTypingAST.{ p_consts; p_nodes } : program =
+  {
+    p_consts = Env.map constrain_const p_consts;
+    p_nodes = Env.map constrain_node p_nodes;
   }
 
 
-let type_consts = List.fold_left type_const
+
 
 
 

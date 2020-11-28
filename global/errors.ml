@@ -23,17 +23,21 @@
 (*                                                                     *)
 (***********************************************************************)
 
-open Location
-
-exception ErrorDetected
-
 type lexical_error =
   | Illegal_character
   | Unterminated_comment
   | Unterminated_string
   | Nonbinary_base
 
-exception Lexical_error of lexical_error * location
+exception Lexical_error of lexical_error * Location.location
+
+exception Scoping_error of string * Location.location
+
+
+
+open Location
+
+exception ErrorDetected
 
 let lexical_error err loc =
   Format.eprintf "%aSyntax error: %s"
