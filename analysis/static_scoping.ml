@@ -1,6 +1,6 @@
 open Ast
 
-module StaticScopingAST = struct
+module StaticScopedAST = struct
   type sunop = ParsingAST.sunop
   type sop = ParsingAST.sop
 
@@ -69,18 +69,19 @@ module StaticScopingAST = struct
 
   type const = {
     const_decl:   static_exp;
-    const_idents: Location.location;
-    const_totals: Location.location;
+    const_ident: Location.location;
+    const_total: Location.location;
   }
 
   type program = {
     p_consts: const Env.t;
+    p_consts_order: ident_desc list;
     p_nodes:  node  Env.t;
   }
 
 end
 open ParsingAST
-open StaticScopingAST
+open StaticScopedAST
 
 
 let static_exp consts_set ?(params_order=Env.empty) =
@@ -151,9 +152,9 @@ let node consts_set (node: ParsingAST.node) : node =
 let const consts_set const =
   let { const_left; const_right } = !!const in
   {
-    const_decl =   static_exp consts_set const_right;
-    const_idents = !@const_left;
-    const_totals = !@const
+    const_decl =  static_exp consts_set const_right;
+    const_ident = !@const_left;
+    const_total = !@const
   }
 
 let program ParsingAST.{ p_consts; p_nodes } : program =
@@ -162,6 +163,7 @@ let program ParsingAST.{ p_consts; p_nodes } : program =
     (fun env const_ ->
       Env.add !!(!!const_.const_left) (const consts_set const_) env
     ) Env.empty p_consts;
+    p_consts_order = List.map (fun el -> !!(!!el.const_left)) p_consts;
     p_nodes = List.fold_left
     (fun env node_ ->
       Env.add !!ParsingAST.(!!node_.node_name) (node consts_set node_) env

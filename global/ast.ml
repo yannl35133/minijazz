@@ -26,6 +26,7 @@
 
 type ident_desc = string
 module Env = Map.Make (struct type t = ident_desc let compare = compare end)
+module IntEnv = Map.Make (Int)
 module IdentSet = Set.Make (struct type t = ident_desc let compare = compare end)
 
 
