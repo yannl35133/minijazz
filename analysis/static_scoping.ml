@@ -88,14 +88,13 @@ let static_exp consts_set ?(params_order=Env.empty) =
   let rec f se = match !!se with
     | ParsingAST.SInt n ->                  relocalize !@se (SInt n)
     | ParsingAST.SBool b ->                 relocalize !@se (SBool b)
-    | ParsingAST.SIdent id ->               relocalize !@se (
+    | ParsingAST.SIdent id ->               relocalize !@se @@
                                               if Env.mem !!id params_order then
                                                 SParam (Env.find !!id params_order)
                                               else if IdentSet.mem !!id consts_set then
                                                 SConst id
                                               else
-                                                raise (Errors.Scoping_error (!!id, !@id))
-                                            )
+                                                raise (Errors.Scope_error (!!id, !@id))
     | ParsingAST.SPar e ->                  f e
     | ParsingAST.SUnOp (sunop, se1) ->      relocalize !@se (SUnOp (sunop, f se1))
     | ParsingAST.SBinOp (sop, se1, se2) ->  relocalize !@se (SBinOp (sop, f se1, f se2))
@@ -120,22 +119,22 @@ let rec exp env e = match !!e with
   | ParsingAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
                             relocalize !@e (EMem (mem_kind, (static_exp_full env addr_size, static_exp_full env word_size, input_file), List.map (exp env) args))
 
-let eq env = relocalize_fun (fun ParsingAST.{ eq_left; eq_right } ->
+let eq env = relocalize_fun @@ fun ParsingAST.{ eq_left; eq_right } ->
   { eq_left; eq_right = exp env eq_right }
-)
+
 
 let rec body env e = relocalize_fun (function
   | ParsingAST.BIf (condition, block1, block2) -> BIf (static_exp_full env condition, body env block1, body env block2)
   | ParsingAST.BEqs eq_l -> BEqs (List.map (eq env) eq_l)
   ) e
 
-let starput env = relocalize_fun (fun ParsingAST.{ name; typed } ->
+let starput env = relocalize_fun @@ fun ParsingAST.{ name; typed } ->
   let rec fun_typed : ParsingAST.netlist_type -> 'a = function
     | TProd l -> TProd (List.map fun_typed l)
     | TBitArray e -> TBitArray (optional_static_exp env e)
   in
   { name; typed = relocalize_fun fun_typed typed }
-)
+
 
 let node consts_set (node: ParsingAST.node) : node =
   let { node_name; node_inline; node_inputs; node_outputs; node_params; node_body; node_probes } = !!node in

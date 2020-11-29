@@ -23,6 +23,8 @@
 (*                                                                     *)
 (***********************************************************************)
 
+exception TmpError
+
 type lexical_error =
   | Illegal_character
   | Unterminated_comment
@@ -31,8 +33,20 @@ type lexical_error =
 
 exception Lexical_error of lexical_error * Location.location
 
-exception Scoping_error of string * Location.location
+(** name of undefined constant *)
+exception Scope_error of string * Location.location
 
+(** name of not-a-type *)
+exception NotAType of string * Location.location
+
+(** Observed type, expected type, expression location *)
+exception WrongType of (string * string * Location.location)
+
+exception NoTypes of Location.location
+exception TwoTypes of Location.location
+
+(** Function expected types (as a hint), observed type, expected type, expression location *)
+exception WrongTypeParam of (string list * string * string * Location.location)
 
 
 open Location
