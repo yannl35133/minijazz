@@ -1,6 +1,4 @@
 open CommonAST
-module StaticScopedAST = StaticScopedAST
-module StaticTypedAST = StaticTypedAST
 open StaticTypedAST
 
 let rec static_int_exp consts_env ?(params_env=IntEnv.empty) se =
