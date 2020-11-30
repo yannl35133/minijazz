@@ -25,8 +25,8 @@
 
 %{
 
-open Ast
-open Ast.ParsingAST
+open CommonAST
+open ParserAST
 
 %}
 
@@ -52,7 +52,7 @@ open Ast.ParsingAST
 %right NOT REG
 %right CIRCUMFLEX
 
-%start <Ast.ParsingAST.program> program
+%start <ParserAST.program> program
 
 %%
 
