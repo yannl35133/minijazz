@@ -110,9 +110,8 @@ rule token = parse
   | ".."            { DOTDOT }
   | ident as id     { try Hashtbl.find keyword_table id
                       with Not_found -> IDENT id }
-  | (['0'-'9']+ as lit) as num
   | '0' (['b' 'B'] as base)  (['0'-'1']+ as lit) as num
-  |('0' (['u' 'U'] as base)?)(['0'-'9']+ as lit) as num
+  |('0' (['u' 'U'] as base))?(['0'-'9']+ as lit) as num
   | '0' (['o' 'O'] as base)  (['0'-'7']+ as lit) as num
   | '0' (['x' 'X'] as base)  (['0'-'9' 'A'-'F' 'a'-'f']+ as lit) as num
                     { let b = match base with
