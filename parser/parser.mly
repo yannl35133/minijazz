@@ -192,7 +192,7 @@ let lvalue_desc :=
 let simple_static_exp == localize(simple_static_exp_desc)
 let simple_static_exp_desc :=
   | static_value
-  | ~=ident;                                                    < SConst >
+  | ~=ident;                                                    < SIdent >
   | "("; ~=static_exp; ")";                                     < SPar >
   | unop=int_unop; se=simple_static_exp;                        { SUnOp (unop, se) }
   | se1=simple_static_exp; op=int_op; se2=simple_static_exp;    { SBinOp (op, se1, se2) }
@@ -200,7 +200,7 @@ let simple_static_exp_desc :=
 let static_exp == localize(static_exp_desc)
 let static_exp_desc :=
   | static_value
-  | ~=ident;                                                    < SConst >
+  | ~=ident;                                                    < SIdent >
   | "("; ~=static_exp; ")";                                     < SPar >
   | op=int_unop; se=static_exp;                                 { SUnOp (op, se) }
   | op=bool_unop;  se=static_exp;                               { SUnOp (op, se) }

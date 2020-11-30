@@ -23,6 +23,10 @@
 (*                                                                     *)
 (***********************************************************************)
 
+let fold_lefti f acc li =
+  snd @@ List.fold_left (fun (i, acc) el -> (i + 1, f acc i el)) (0, acc) li
+
+
 (* Functions to decompose a list into a tuple *)
 exception Arity_error of int * int (*expected, found*)
 exception Arity_min_error of int * int (*expected, found*)
