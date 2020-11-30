@@ -4,6 +4,6 @@
    (:standard -warn-error -A))))
 
 (library
- (name analysis)
+ (name asts)
  (wrapped false)
- (libraries global asts))
+ (libraries global))

@@ -23,47 +23,9 @@
 (*                                                                     *)
 (***********************************************************************)
 
+open CommonAST
 
-type ident_desc = string
-module Env = Map.Make (struct type t = ident_desc let compare = compare end)
-module IntEnv = Map.Make (Int)
-module IdentSet = Set.Make (struct type t = ident_desc let compare = compare end)
-
-
-(* Localize an element *)
-
-type 'a localized =
-  {
-    desc: 'a;
-    loc: Location.location
-  }
-
-let (!!) = fun obj -> obj.desc
-let (!@) = fun obj -> obj.loc
-
-let localize loc x = {
-  desc = x;
-  loc = Loc loc
-}
-let relocalize loc x = {
-  desc = x;
-  loc
-}
-let relocalize_fun f obj =
-  relocalize !@obj (f !!obj)
-let no_localize x = {
-  desc = x;
-  loc = Location.no_location
-}
-
-type ident = ident_desc localized
-
-
-
-module ParsingAST = struct
-
-  (* Static expressions *)
-
+(* Static expressions *)
 
 type sop =
   | SAdd | SMinus | SMult | SDiv | SPower (* int -> int *)
@@ -93,6 +55,7 @@ type static_typed_ident_desc = {
 }
 and static_typed_ident = static_typed_ident_desc localized
 
+
 (* Netlist expressions *)
 
 type netlist_type =
@@ -101,9 +64,6 @@ type netlist_type =
 
 let tbit n loc =
   TBitArray (localize loc (Some (SInt n)))
-
-type mem_kind_desc = MRom | MRam
-and mem_kind = mem_kind_desc localized
 
 type value =
   | VBitArray of bool array
@@ -151,9 +111,6 @@ type block_desc =
 and block = block_desc localized
 
 
-type inline_status = Inline | NotInline
-
-
 type node_desc = {
   node_name:    ident;
   node_inline:  inline_status;
@@ -176,8 +133,8 @@ type program = {
   p_consts: const list;
   p_nodes : node list;
 }
-end
 
+(* 
 module TypedAST = struct
 
 (* Types and typed expressions *)
@@ -324,4 +281,4 @@ type program = {
   p_nodes : node list;
 }
 
-end
+end *)
