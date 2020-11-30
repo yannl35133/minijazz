@@ -1,14 +1,14 @@
 main (a) = (o1, o2, o3, o4, o5, o6)
-where 
-	b = a;
-	c = 1;
-	o1 = b;
-	o2 = c;
-	o3 = reg(b);
-	o4 = reg(c);
-	d = 1010;
-	e = a . 1 . a . 0;
-	o5 = d[2];
-	f = e[1..];
-	o6 = f[1]
+where
+    b = a;
+    c = 1;
+    o1 = b;
+    o2 = c;
+    o3 = reg(b);
+    o4 = reg(c);
+    d = 0b1010;
+    e = a . 1 . a . 0;
+    o5 = d[2];
+    f = e[1..];
+    o6 = f[1]
 end where

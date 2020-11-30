@@ -108,9 +108,9 @@ rule token = parse
   | ">="            { GEQ }
   | "."             { DOT }
   | ".."            { DOTDOT }
-  | ident as id
-                    { try Hashtbl.find keyword_table id
+  | ident as id     { try Hashtbl.find keyword_table id
                       with Not_found -> IDENT id }
+  | (['0'-'9']+ as lit) as num
   | '0' (['b' 'B'] as base)  (['0'-'1']+ as lit) as num
   |('0' (['u' 'U'] as base)?)(['0'-'9']+ as lit) as num
   | '0' (['o' 'O'] as base)  (['0'-'7']+ as lit) as num
@@ -119,17 +119,17 @@ rule token = parse
                       | Some 'b' | Some 'B'        -> 1
                       | Some 'o' | Some 'O'        -> 3
                       | Some 'x' | Some 'X'        -> 4
-                      | Some 'u' | Some 'U' | None -> 0
+                      | Some 'u' | Some 'U' | None -> 4
                       | _ -> invalid_arg "Not a valid base"
                       in
                       INT (String.length lit * b,
-                            int_of_string num) }
+                           int_of_string num) }
   | "\""
       { string lexbuf.lex_start_p (Buffer.create 16) lexbuf }
   | "(*"
       { multi_comment lexbuf.lex_curr_p lexbuf; token lexbuf }
   | "#" " "* (['0'-'9']+ as line) " "*
-    '"' (ascii* as file) '"' 
+    '"' (ascii* as file) '"'
      [' ' '0'-'9']* newline
         { let l = int_of_string line in
           lexbuf.lex_curr_p <-
@@ -187,7 +187,7 @@ and string string_start buf = parse
       { Buffer.add_char buf (char_for_decimal_code code);
          string string_start buf lexbuf }
   | '\\'
-      { raise (Lexical_error (Illegal_character, 
+      { raise (Lexical_error (Illegal_character,
                     Loc (string_start, Lexing.lexeme_start_p lexbuf))) }
   | '\n' | eof
       { raise (Lexical_error (Unterminated_string,
@@ -207,4 +207,3 @@ and preprocess = parse
       { preprocess lexbuf }
 
 (* eof *)
-

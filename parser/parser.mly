@@ -91,8 +91,9 @@ let node_outputs :=
 
 let typed_ident == localize(typed_ident_desc)
 let typed_ident_desc :=
-  | name=ident; type_ident=type_ident?;
-      { { name; typed = localize $loc(type_ident) (Option.value ~default:(tbit 1 $loc(type_ident)) type_ident) } }
+  | name=ident; { { name; typed = localize $sloc (tbit 1 $sloc) } }
+  | name=ident; ":"; type_ident=type_ident;
+    { { name; typed = localize $loc(type_ident) type_ident  } }
 
 let type_ident ==
   | "["; ~=opt_static_exp; "]"; < TBitArray >
@@ -199,7 +200,9 @@ let _op ==
 
 let const :=
   | b=BOOL;     { VBitArray (Array.make 1 b) }
-  | i=INT;      { if fst i > 0 then VBitArray (Misc.bool_array_of_int i) else raise (Errors.Lexical_error (Nonbinary_base, Loc $sloc)) }
+  | i=INT;
+    { if fst i > 0 then VBitArray (Misc.bool_array_of_int i)
+      else raise (Errors.Lexical_error (Nonbinary_base, Loc $sloc)) }
   | "["; "]";   { VBitArray (Array.make 0 false) }
 
 let rom_or_ram == localize(_rom_or_ram)
