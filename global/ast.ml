@@ -23,7 +23,7 @@
 (*                                                                     *)
 (***********************************************************************)
 
-
+type constructor = string
 type ident_desc = string
 module Env = Map.Make (struct type t = ident_desc let compare = compare end)
 (* module IdentSet = Set.Make (struct type t = ident let compare = compare end) *)
@@ -102,22 +102,16 @@ let tbit n loc =
 type mem_kind_desc = MRom | MRam
 and mem_kind = mem_kind_desc localized
 
+(* mem type *)
+type mtyp = {
+    mem_kind: mem_kind;
+    mem_addr: static_exp;
+    mem_word: static_exp;
+    mem_file: string option;
+  }
+
 type value =
   | VBitArray of bool array
-
-type exp_desc =
-  | EConst of value
-  | EVar   of ident
-  | EPar   of exp     (* Created purely to have good locations *)
-  | EReg   of exp
-  | ECall  of ident * optional_static_exp list * exp list
-      (* function * params * args *)
-  | EMem   of mem_kind * (static_exp * static_exp * string option) * exp list
-      (* ro * address size * word size * input file * args *)
-
-and exp = exp_desc localized
-
-
 
 type lvalue_desc =
   | LValDrop
@@ -126,12 +120,69 @@ type lvalue_desc =
 
 and lvalue = lvalue_desc localized
 
+type 'e state_expr_desc =
+  | Estate0 of ident
+  | Estaten of ident * 'e list
 
-type equation_desc = {
-  eq_left: lvalue;
-  eq_right: exp
-}
-and equation = equation_desc localized
+type 'e state_expr = 'e state_expr_desc localized
+
+type state_desc =
+  | Estate0pat of ident
+  | Estatenpat of ident * ident list
+
+type state = state_desc localized
+
+type ('e, 'b) match_hdl = {
+    m_constr: constructor;
+    m_body: 'b
+  }
+
+type ('e, 'b) escape = {
+    e_cond: 'e;
+    e_reset: bool;
+    e_body: 'b;
+    e_nx_state: 'e state_expr
+  }
+
+type ('e, 'b) automaton_hdl = {
+    s_state: state;
+    s_vars: ident list;
+    s_body: 'b;
+    s_until: ('e, 'b) escape list;
+    s_unless: ('e, 'b) escape list
+  }
+
+type exp_desc =
+  | EConst  of value
+  | EConstr of exp state_expr
+  | EVar    of ident
+  | EFby    of ident
+  | EPar    of exp     (* Created purely to have good locations *)
+  | EReg    of exp
+  | ECall   of ident * optional_static_exp list * exp list
+  (* function * params * args *)
+  | EMem    of mtyp * exp list
+  | ELet    of eq * exp
+  | EMerge  of exp * (exp, eq) match_hdl list
+
+and exp = exp_desc localized
+
+and eq_desc =
+  | EQempty
+  | EQeq        of lvalue * exp (* p = e *)
+  | EQand       of eq list (* eq1; ... ; eqn *)
+  | EQlet       of eq * eq (* let eq in eq *)
+  | EQreset     of eq * exp (* reset eq every e *)
+  | EQautomaton of (exp, eq) automaton_hdl list
+  | EQmatch     of exp * (exp, eq) match_hdl list
+
+and eq = eq_desc localized
+
+(* type equation_desc = {
+ *   eq_left: lvalue;
+ *   eq_right: exp
+ * }
+ * and equation = equation_desc localized *)
 
 
 type typed_ident_desc = {
@@ -142,7 +193,7 @@ and typed_ident = typed_ident_desc localized
 
 
 type block_desc =
-    | BEqs of equation list
+    | BEqs of eq list
     | BIf  of static_exp * block * block
 
 and block = block_desc localized

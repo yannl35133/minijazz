@@ -51,7 +51,18 @@ let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
   "then", THEN;
   "else", ELSE;
   "inline", INLINE;
-  "probing", PROBING
+  "probing", PROBING;
+  (* "match", MATCH; *)
+  "automaton", AUTOMATON;
+  "in", IN;
+  "reset", RESET;
+  "every", EVERY;
+  "let", LET;
+  "unless", UNLESS;
+  "until", UNLESS;
+  "continue", CONTINUE;
+  "do", DO;
+  "done", DONE
 ]
 
 
@@ -79,11 +90,13 @@ let alphanum = ['A'-'Z' 'a'-'z' '_' '0'-'9']
 let alpha = ['A'-'Z' 'a'-'z' '_']
 let ascii = [' ' - '~'] # ['\\' '"']
 
+let constructor = ['A'-'Z']alphanum*
 let ident = alpha alphanum*
 
 rule token = parse
   | newline         { new_line lexbuf; token lexbuf }
   | space+          { token lexbuf }
+  | "|"             { BAR }
   | "("             { LPAREN }
   | ")"             { RPAREN }
   | "*"             { STAR }
@@ -106,8 +119,10 @@ rule token = parse
   | "^"             { CIRCUMFLEX }
   | "<="            { LEQ }
   | ">="            { GEQ }
+  | "->"            { ARROW }
   | "."             { DOT }
   | ".."            { DOTDOT }
+  | constructor as id {CONSTRUCTOR id}
   | ident as id
                     { try Hashtbl.find keyword_table id
                       with Not_found -> IDENT id }
@@ -129,7 +144,7 @@ rule token = parse
   | "(*"
       { multi_comment lexbuf.lex_curr_p lexbuf; token lexbuf }
   | "#" " "* (['0'-'9']+ as line) " "*
-    '"' (ascii* as file) '"' 
+    '"' (ascii* as file) '"'
      [' ' '0'-'9']* newline
         { let l = int_of_string line in
           lexbuf.lex_curr_p <-
@@ -187,7 +202,7 @@ and string string_start buf = parse
       { Buffer.add_char buf (char_for_decimal_code code);
          string string_start buf lexbuf }
   | '\\'
-      { raise (Lexical_error (Illegal_character, 
+      { raise (Lexical_error (Illegal_character,
                     Loc (string_start, Lexing.lexeme_start_p lexbuf))) }
   | '\n' | eof
       { raise (Lexical_error (Unterminated_string,
@@ -207,4 +222,3 @@ and preprocess = parse
       { preprocess lexbuf }
 
 (* eof *)
-
