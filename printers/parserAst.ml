@@ -18,6 +18,7 @@ let dforce_linejump = dforce_newline @@ dforce_newline
 let rec dprint_list sep printer l = 
   match l with
   | []     -> nop
+  | [h]    -> printer h
   | h :: t -> (printer h) @@ sep @@ (dprint_list sep printer t)
 
 let dbox i printer ff = (open_hvbox (2 * i) ; printer ff ; close_box ())
