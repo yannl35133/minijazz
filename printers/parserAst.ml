@@ -231,5 +231,9 @@ let print_const const = print_const_desc const.desc
   
 let print_program prog =
   dprint_list dforce_newline print_const prog.p_consts @@
-  dforce_linejump @@
+  (
+    match prog.p_consts, prog.p_nodes with
+    | [], _ | _, [] -> nop
+    | _             -> dforce_linejump
+  ) @@
   dprint_list dforce_linejump print_node prog.p_nodes
