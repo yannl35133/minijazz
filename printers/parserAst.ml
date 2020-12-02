@@ -130,6 +130,10 @@ let infix_nodes = ["xor"; "and"; "or"]
 let is_infix ident_desc =
    List.mem ident_desc infix_nodes 
 
+let slice_nodes = ["slice"; "slice_from"; "slice_to"]
+let is_slice ident_desc =
+  List.mem ident_desc slice_nodes
+
 let rec print_exp_desc exp_desc =
   match exp_desc with
   | EConst v -> print_val v
@@ -139,7 +143,7 @@ let rec print_exp_desc exp_desc =
   | ECall(ident, idx::_, args) when ident.desc = "select" ->
       let e1 = Misc.assert_1 args in
       dprintf "%t[%t]" (print_exp e1) (print_opt_sexp idx)
-  | ECall(ident, low::high::_, args) when ident.desc = "slice" ->
+  | ECall(ident, low::high::_, args) when is_slice ident.desc ->
       let e1 = Misc.assert_1 args in
       dprintf "%t[%t..%t]"
         (print_exp e1)
