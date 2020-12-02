@@ -101,7 +101,7 @@ let print_opt_sexp_desc opt_se_desc =
 let print_opt_sexp opt_se = print_opt_sexp_desc opt_se.desc
 
 let print_stid_desc stid_desc =
-  dprintf "%t : %t" 
+  dprintf "%t:%t" 
     (print_ident stid_desc.st_name)
     (print_ident stid_desc.st_type_name)
 
