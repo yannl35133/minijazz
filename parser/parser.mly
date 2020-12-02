@@ -184,6 +184,8 @@ let exp_desc :=
   | _n=NOT; e=exp;                                                            { ECall (localize $loc(_n) "not", [], [e])}
   | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
   | e1=simple_exp; "["; idx=opt_static_exp; "]";                              { ECall (no_localize "select", [no_localize None; idx], [e1]) }
+(* FIXME : Is it normal to have None as the first element of the list in all
+ * three cases ? *)
   | e1=simple_exp; "["; low=opt_static_exp; ".."; high=opt_static_exp; "]";   { ECall (no_localize "slice",  [no_localize None; low; high], [e1]) }
   | e1=simple_exp; "["; low=opt_static_exp; ".."; "]";                        { ECall (no_localize "slice_from", [no_localize None; low], [e1]) }
   | e1=simple_exp; "["; ".."; high=opt_static_exp; "]";                       { ECall (no_localize "slice_to", [no_localize None; high], [e1]) }
