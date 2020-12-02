@@ -4,21 +4,43 @@ open CommonAST
 
 (* Helpers *)
 
-let star_sep ff () = fprintf ff " *@ "
-let comma_sep ff () = fprintf ff ",@ "
-let semicolon_sep ff () = fprintf ff ";@ "
+let dprint_string str ff = pp_print_string ff str
+let dprint_int i ff = pp_print_int ff i
+let dprint_bool b = dprint_string (if b then "1" else "0")
+let dprint_concat printer1 printer2 ff = (printer1 ff) ; (printer2 ff)
+let (@@) p1 p2 = (fun ff -> dprint_concat p1 p2 ff)
+let nop _ = ()
+let dprint_cut ff = pp_print_cut ff ()
+
+let dforce_newline ff = pp_force_newline ff ()
+let dforce_linejump = dforce_newline @@ dforce_newline
+
+let rec dprint_list sep printer l = 
+  match l with
+  | []     -> nop
+  | h :: t -> (printer h) @@ sep @@ (dprint_list sep printer t)
+
+let dbox i printer ff = (open_hvbox (2 * i) ; printer ff ; close_box ())
+
+let binop_sep str = dprintf " %s@ " str
+let star_sep = binop_sep "*"
+let comma_sep = dprintf ",@ "
+let semicolon_sep = dprintf ";@ "
+
+let delim prefix printer suffix =
+  dprintf "@[<hv 0>%t@;<0 2>%t@,%t@]" prefix printer suffix
+
+let par printer = delim (dprint_string "(") printer (dprint_string ")")
+let mark printer = delim (dprint_string "<") printer (dprint_string ">")
+let bracket printer = delim (dprint_string "[") printer (dprint_string "]")
 
 (* Commons *)
 
-let print_bool ff b =
-  fprintf ff (if b then "1" else "0")
-
-let print_ident ff id =
-  fprintf ff "%s" id.desc
+let print_ident id = dprint_string id.desc
 
 (* Static expression *)
 
-let print_sop ff sop =
+let print_sop sop =
   let op_str = 
     match sop with
     | SAdd -> "+" | SMinus -> "-" | SMult -> "*" | SDiv -> "/" | SPower -> "^" 
@@ -26,178 +48,177 @@ let print_sop ff sop =
     | SLt -> "<" | SLeq -> "<=" | SGt -> ">" | SGeq -> ">="
     | SOr -> "||" | SAnd -> "&&"
   in
-  pp_print_string ff op_str
+  binop_sep op_str
 
-let print_sunop ff unop =
+let print_sunop unop =
   let op_str =
     match unop with
     | SNeg -> "-"
     | SNot -> "!"
   in
-  pp_print_string ff op_str
+  dprint_string op_str
 
-let rec print_sexp_desc ff se_desc =
+let rec print_sexp_desc se_desc =
   match se_desc with
-  | SInt i    -> pp_print_int ff i
-  | SBool b   -> print_bool ff b
-  | SIdent id -> print_ident ff id 
-  | SPar se   -> fprintf ff "(%a)" print_sexp se
-  | SUnOp (sunop, se) -> 
-      fprintf ff "%a%a" print_sunop sunop print_sexp se
-  | SBinOp (sop, se1, se2) -> 
-      fprintf ff "%a %a %a" 
-        print_sexp se1 
-        print_sop sop 
-        print_sexp se2
+  | SInt i    -> dprint_int i
+  | SBool b   -> dprint_bool b
+  | SIdent id -> print_ident id
+  | SPar se   -> par (print_sexp se)
+  | SUnOp (sunop, se) -> print_sunop sunop @@ print_sexp se
+  | SBinOp (sop, se1, se2) -> print_sexp se1 @@ print_sop sop @@ print_sexp se2
   | SIf (c, se1, se2) ->
-      fprintf ff "%a @{<sif>?@} %a @{<sif>:@} %a"
-        print_sexp c 
-        print_sexp se1 
-        print_sexp se2
+      dbox 1 (
+        dprintf "%t ?@ %t@ : %t"
+          (print_sexp c)
+          (print_sexp se1)
+          (print_sexp se2)
+      )
 
-and print_sexp ff se =
-  print_sexp_desc ff se.desc
+and print_sexp se = print_sexp_desc se.desc
 
-let print_opt_sexp_desc ff opt_se_desc =
+let print_opt_sexp_desc opt_se_desc =
   match opt_se_desc with
-  | Some se_desc -> print_sexp_desc ff se_desc
-  | None         -> ()
+  | Some se_desc -> print_sexp_desc se_desc
+  | None         -> nop
 
-let print_opt_sexp ff opt_se =
-  print_opt_sexp_desc ff opt_se.desc
+let print_opt_sexp opt_se = print_opt_sexp_desc opt_se.desc
 
-let print_stid_desc ff stid_desc =
-  fprintf ff "%a : %a" 
-    print_ident stid_desc.st_name 
-    print_ident stid_desc.st_type_name
+let print_stid_desc stid_desc =
+  dprintf "%t : %t" 
+    (print_ident stid_desc.st_name)
+    (print_ident stid_desc.st_type_name)
 
-let print_stid ff stid =
-  print_stid_desc ff stid.desc
+let print_stid stid = print_stid_desc stid.desc
 
 (* Netlist expressions *)
 
-let rec print_type ff typ =
+let rec print_type typ =
   match typ with
-  | TBitArray opt_se -> fprintf ff "[%a]" print_opt_sexp opt_se 
-  | TProd l -> 
-      fprintf ff "(%a)" 
-        (pp_print_list ~pp_sep:star_sep print_type) 
-        l
+  | TBitArray opt_se -> bracket (print_opt_sexp opt_se )
+  | TProd l -> par (dprint_list star_sep print_type l)
 
-let print_val ff v =
+let print_val v =
   match v with
   | VBitArray arr ->
-      fprintf ff "[%a]"
-        (pp_print_list print_bool)
-        (Array.to_list arr)
+      dprintf "[%t]" (dprint_list nop dprint_bool (Array.to_list arr))
 
-let print_mem_kind ff mem_kind =
-  match mem_kind.desc with
-  | MRom -> fprintf ff "rom"
-  | MRam -> fprintf ff "ram"
+let print_mem_kind_desc mem_kind_desc =
+  match mem_kind_desc with
+  | MRom -> dprint_string "rom"
+  | MRam -> dprint_string "ram"
 
-let rec print_exp_desc ff e_desc =
-  match e_desc with
-  | EConst v -> print_val ff v
-  | EVar id  -> print_ident ff id
-  | EPar e   -> fprintf ff "(%a)" print_exp e
-  | EReg e   -> fprintf ff "reg@ %a" print_exp e 
+let print_mem_kind mem_kind = print_mem_kind_desc mem_kind.desc
+
+let rec print_exp_desc exp_desc =
+  match exp_desc with
+  | EConst v -> print_val v
+  | EVar id  -> print_ident id
+  | EPar e   -> par (print_exp e)
+  | EReg e   -> dprintf "reg@ %t" (print_exp e)
   | ECall(ident, idx::_, args) when ident.desc = "select" ->
       let e1 = Misc.assert_1 args in
-      fprintf ff "%a[%a]"
-        print_exp e1
-        print_opt_sexp idx
+      dprintf "%t[%t]" (print_exp e1) (print_opt_sexp idx)
   | ECall(ident, low::high::_, args) when ident.desc = "slice" ->
       let e1 = Misc.assert_1 args in
-      fprintf ff "%a[%a..%a]"
-        print_exp e1
-        print_opt_sexp low
-        print_opt_sexp high
+      dprintf "%t[%t..%t]"
+        (print_exp e1)
+        (print_opt_sexp low)
+        (print_opt_sexp high)
   | ECall(ident, _, args) when ident.desc = "concat" ->
       let e1, e2 = Misc.assert_2 args in
-      fprintf ff "%a . %a"
-        print_exp e1
-        print_exp e2
+      dprintf "%t . %t" (print_exp e1) (print_exp e2)
   | ECall(ident, params, args) ->
-      fprintf ff "%a@,<%a>@,(%a)" 
-        print_ident ident
-        (pp_print_list ~pp_sep:comma_sep print_opt_sexp) params
-        (pp_print_list ~pp_sep:comma_sep print_exp) args
+      dprintf "%t@;<0 4>%t@;<0 4>%t" 
+        (print_ident ident)
+        (mark ((dprint_list comma_sep print_opt_sexp) params))
+        (par ((dprint_list comma_sep print_exp) args))
   | EMem(memkind, (addr_size, word_size, _), args) ->
-      fprintf ff "%a<%a,%a>(%a)"
-        print_mem_kind memkind
-        print_sexp addr_size
-        print_sexp word_size
-        (pp_print_list ~pp_sep:comma_sep print_exp) args
+      dprintf "%t<%t,%t>(%t)"
+        (print_mem_kind memkind)
+        (print_sexp addr_size)
+        (print_sexp word_size)
+        ((dprint_list comma_sep print_exp) args)
 
-and print_exp ff e =
-  print_exp_desc ff e.desc
+and print_exp exp = print_exp_desc exp.desc
 
-let rec print_lval_desc ff lval_desc =
+let rec print_lval_desc lval_desc =
   match lval_desc with
-  | LValDrop    -> fprintf ff "_"
-  | LValId id   -> print_ident ff id
-  | LValTuple l -> pp_print_list ~pp_sep:comma_sep print_lval ff l
+  | LValDrop    -> dprint_string "_"
+  | LValId id   -> print_ident id
+  | LValTuple l -> dprint_list comma_sep print_lval l
 
-and print_lval ff lval =
-  print_lval_desc ff lval.desc
+and print_lval lval = print_lval_desc lval.desc
 
-let print_eq_desc ff eq_desc =
-  fprintf ff "%a =@ %a"
-    print_lval eq_desc.eq_left
+let print_eq_desc eq_desc =
+  dbox 1 (
+    print_lval eq_desc.eq_left @@
+    binop_sep "=" @@
     print_exp eq_desc.eq_right
+  )
 
-let print_eq ff eq =
-  print_eq_desc ff eq.desc
+let print_eq eq = print_eq_desc eq.desc
 
-let print_tid_desc ff tid_desc =
-  fprintf ff "%a : %a"
-    print_ident tid_desc.name
+let print_tid_desc tid_desc =
+  dbox 1 (
+    print_ident tid_desc.name @@
+    binop_sep ":" @@
     print_type tid_desc.typed.desc
+  )
 
-let print_tid ff tid =
-  print_tid_desc ff tid.desc
+let print_tid tid = print_tid_desc tid.desc
 
-let rec print_block_desc ff block_desc =
+let rec print_block_desc block_desc =
   match block_desc with
-  | BEqs l -> pp_print_list ~pp_sep:semicolon_sep print_eq ff l
+  | BEqs l -> dprint_list semicolon_sep print_eq l
   | BIf (se, b1, b2) -> 
-      fprintf ff "if %a@ then@ %a@ else@ %a"
-      print_sexp se
-      print_block b1
-      print_block b2
+      dbox 1 (
+        dprintf "if@ %t@ "
+        (print_sexp se)
+      ) @@ 
+      dbox 1 (
+        dprintf "then@ %t@ else@ %t"
+        (print_block b1)
+        (print_block b2)
+      )
 
-and print_block ff block =
-  print_block_desc ff block.desc
+and print_block block = print_block_desc block.desc
 
-let print_inline_status ff inline_status =
+let print_inline_status inline_status =
   match inline_status with
-  | Inline    -> fprintf ff "inline "
-  | NotInline -> ()
+  | Inline    -> dprint_string "inline "
+  | NotInline -> nop
 
-let print_node_desc ff node_desc =
-  fprintf ff "%a%a<%a>(%a) = (%a) where@ %a@ end where"
-    print_inline_status node_desc.node_inline
-    print_ident node_desc.node_name
-    (pp_print_list ~pp_sep:comma_sep print_stid) node_desc.node_params
-    (pp_print_list ~pp_sep:comma_sep print_tid) node_desc.node_inputs
-    (pp_print_list ~pp_sep:comma_sep print_tid) node_desc.node_outputs
-    print_block node_desc.node_body
-    (* print_constraints node_desc.n_constraints *)
-    (* (pp_print_list ~pp_sep:comma_sep print_ident) node_desc.probes *)
+let print_node_desc node_desc =
+  dbox 0 (
+    print_inline_status node_desc.node_inline @@
+    print_ident node_desc.node_name @@
+    mark (dprint_list comma_sep print_stid node_desc.node_params) @@
+    dprint_cut
+  ) @@
+  dbox 0 (
+    par (dprint_list comma_sep print_tid node_desc.node_inputs)
+  ) @@ binop_sep "=" @@
+  dbox 0 (
+    par (dprint_list comma_sep print_tid node_desc.node_outputs)
+  ) @@
+  dbox 0 (
+    dprintf "where@;<1 2>%t@;<1 0>end" (print_block node_desc.node_body)
+  ) @@
+  dprint_string " where"
 
-let print_node ff node =
-  print_node_desc ff node.desc
+let print_node node = print_node_desc node.desc
 
-let print_const_desc ff const_desc =
-  fprintf ff "const %a = %a"
-    print_ident const_desc.const_left
+let print_const_desc const_desc =
+  dbox 1 (
+    dprint_string "const " @@
+    print_ident const_desc.const_left @@
+    binop_sep "=" @@
     print_sexp const_desc.const_right
+  )
 
-let print_const ff const =
-  print_const_desc ff const.desc
+let print_const const = print_const_desc const.desc
   
-let print_program ff prog =
-  fprintf ff "%a@ %a"
-    (pp_print_list print_const) prog.p_consts
-    (pp_print_list print_node) prog.p_nodes
+let print_program prog =
+  dprint_list dforce_newline print_const prog.p_consts @@
+  dforce_linejump @@
+  dprint_list dforce_linejump print_node prog.p_nodes

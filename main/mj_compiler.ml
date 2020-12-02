@@ -94,7 +94,7 @@ let compile_impl filename =
     let _parsing_ast = parse lexbuf in
     let _ =
       if !print_parsing_ast then 
-        Printers.ParserAst.print_program Format.std_formatter _parsing_ast
+        Printers.ParserAst.print_program _parsing_ast Format.std_formatter
       else
         ()
     in
