@@ -29,6 +29,8 @@ let if_empty_list_dprint l printer =
   | [] -> nop
   | _  -> printer
 
+let dprint_if b printer = if b then printer else nop
+
 let dbox i printer ff = (open_hvbox (2 * i) ; printer ff ; close_box ())
 let dvbox i printer ff = (open_vbox (2 * i) ; printer ff ; close_box ())
 
@@ -124,6 +126,10 @@ let print_mem_kind_desc mem_kind_desc =
 
 let print_mem_kind mem_kind = print_mem_kind_desc mem_kind.desc
 
+let infix_nodes = ["xor"; "and"; "or"]
+let is_infix ident_desc =
+   List.mem ident_desc infix_nodes 
+
 let rec print_exp_desc exp_desc =
   match exp_desc with
   | EConst v -> print_val v
@@ -142,6 +148,15 @@ let rec print_exp_desc exp_desc =
   | ECall(ident, _, args) when ident.desc = "concat" ->
       let e1, e2 = Misc.assert_2 args in
       dprintf "%t . %t" (print_exp e1) (print_exp e2)
+  | ECall(ident, params, args) when is_infix ident.desc ->
+      let e1, e2 = Misc.assert_2 args in
+      dbox 2 (
+        print_exp e1 @@ dprint_string " " @@
+        print_ident ident @@ dprint_space @@
+        if_empty_list_dprint params 
+          (mark ((dprint_list comma_sep print_opt_sexp) params)) @@
+        print_exp e2
+      )
   | ECall(ident, params, args) ->
       dbox 2 (
         print_ident ident @@
@@ -175,11 +190,16 @@ let print_eq_desc eq_desc =
 
 let print_eq eq = print_eq_desc eq.desc
 
+let is_bit tid_desc =
+  match tid_desc.typed.desc with
+  | TProd _            -> false
+  | TBitArray opt_sexp -> Option.is_some opt_sexp.desc
+
 let print_tid_desc tid_desc =
   dbox 1 (
     print_ident tid_desc.name @@
-    binop_sep ":" @@
-    print_type tid_desc.typed.desc
+    dprint_if (not (is_bit tid_desc))
+      (binop_sep ":" @@ print_type tid_desc.typed.desc) 
   )
 
 let print_tid tid = print_tid_desc tid.desc
