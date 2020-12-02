@@ -197,13 +197,13 @@ let print_eq eq = print_eq_desc eq.desc
 let is_bit tid_desc =
   match tid_desc.typed.desc with
   | TProd _            -> false
-  | TBitArray opt_sexp -> Option.is_some opt_sexp.desc
+  | TBitArray opt_sexp -> Option.is_none opt_sexp.desc
 
 let print_tid_desc tid_desc =
   dbox 1 (
     print_ident tid_desc.name @@
     dprint_if (not (is_bit tid_desc))
-      (binop_sep ":" @@ print_type tid_desc.typed.desc) 
+    (dprintf ":@," @@ print_type tid_desc.typed.desc) 
   )
 
 let print_tid tid = print_tid_desc tid.desc
