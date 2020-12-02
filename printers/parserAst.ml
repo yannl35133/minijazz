@@ -24,6 +24,11 @@ let rec dprint_list sep printer l =
   | [h]    -> printer h
   | h :: t -> (printer h) @@ sep @@ (dprint_list sep printer t)
 
+let if_empty_list_dprint l printer =
+  match l with
+  | [] -> nop
+  | _  -> printer
+
 let dbox i printer ff = (open_hvbox (2 * i) ; printer ff ; close_box ())
 let dvbox i printer ff = (open_vbox (2 * i) ; printer ff ; close_box ())
 
@@ -138,10 +143,12 @@ let rec print_exp_desc exp_desc =
       let e1, e2 = Misc.assert_2 args in
       dprintf "%t . %t" (print_exp e1) (print_exp e2)
   | ECall(ident, params, args) ->
-      dprintf "%t@;<0 4>%t@;<0 4>%t" 
-        (print_ident ident)
-        (mark ((dprint_list comma_sep print_opt_sexp) params))
-        (par ((dprint_list comma_sep print_exp) args))
+      dbox 2 (
+        print_ident ident @@
+        if_empty_list_dprint params 
+          (mark ((dprint_list comma_sep print_opt_sexp) params)) @@
+        par ((dprint_list comma_sep print_exp) args)
+      )
   | EMem(memkind, (addr_size, word_size, _), args) ->
       dprintf "%t<%t,%t>(%t)"
         (print_mem_kind memkind)
@@ -203,7 +210,8 @@ let print_node_desc node_desc =
     dbox 0 (
       print_inline_status node_desc.node_inline @@
       print_ident node_desc.node_name @@
-      mark (dprint_list comma_sep print_stid node_desc.node_params) @@
+      if_empty_list_dprint node_desc.node_params
+        (mark (dprint_list comma_sep print_stid node_desc.node_params)) @@
       dprint_cut @@
       par (dprint_list comma_sep print_tid node_desc.node_inputs) @@
       binop_sep "=" @@
