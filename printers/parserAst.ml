@@ -10,7 +10,10 @@ let dprint_bool b = dprint_string (if b then "1" else "0")
 let dprint_concat printer1 printer2 ff = (printer1 ff) ; (printer2 ff)
 let (@@) p1 p2 = (fun ff -> dprint_concat p1 p2 ff)
 let nop _ = ()
+
+let dprint_break nspace ind ff = pp_print_break ff nspace ind
 let dprint_cut ff = pp_print_cut ff ()
+let dprint_space ff = pp_print_space ff ()
 
 let dforce_newline ff = pp_force_newline ff ()
 let dforce_linejump = dforce_newline @@ dforce_newline
@@ -22,6 +25,7 @@ let rec dprint_list sep printer l =
   | h :: t -> (printer h) @@ sep @@ (dprint_list sep printer t)
 
 let dbox i printer ff = (open_hvbox (2 * i) ; printer ff ; close_box ())
+let dvbox i printer ff = (open_vbox (2 * i) ; printer ff ; close_box ())
 
 let binop_sep str = dprintf " %s@ " str
 let star_sep = binop_sep "*"
@@ -29,7 +33,12 @@ let comma_sep = dprintf ",@ "
 let semicolon_sep = dprintf ";@ "
 
 let delim prefix printer suffix =
-  dprintf "@[<hv 0>%t@;<0 2>%t@,%t@]" prefix printer suffix
+  dbox 1 (
+    prefix @@
+    printer @@
+    dprint_break 0 (-2) @@
+    suffix
+  )
 
 let par printer = delim (dprint_string "(") printer (dprint_string ")")
 let mark printer = delim (dprint_string "<") printer (dprint_string ">")
@@ -190,22 +199,23 @@ let print_inline_status inline_status =
   | NotInline -> nop
 
 let print_node_desc node_desc =
-  dbox 0 (
-    print_inline_status node_desc.node_inline @@
-    print_ident node_desc.node_name @@
-    mark (dprint_list comma_sep print_stid node_desc.node_params) @@
-    dprint_cut
+  dvbox 1 (
+    dbox 0 (
+      print_inline_status node_desc.node_inline @@
+      print_ident node_desc.node_name @@
+      mark (dprint_list comma_sep print_stid node_desc.node_params) @@
+      dprint_cut @@
+      par (dprint_list comma_sep print_tid node_desc.node_inputs) @@
+      binop_sep "=" @@
+      par (dprint_list comma_sep print_tid node_desc.node_outputs) @@
+      dprint_space
+    ) @@
+    dprint_string "where" @@
+    dprint_space @@
+    print_block node_desc.node_body
   ) @@
-  dbox 0 (
-    par (dprint_list comma_sep print_tid node_desc.node_inputs)
-  ) @@ binop_sep "=" @@
-  dbox 0 (
-    par (dprint_list comma_sep print_tid node_desc.node_outputs)
-  ) @@
-  dbox 0 (
-    dprintf "where@;<1 2>%t@;<1 0>end" (print_block node_desc.node_body)
-  ) @@
-  dprint_string " where"
+  dprint_space @@
+  dprint_string "end where"
 
 let print_node node = print_node_desc node.desc
 
