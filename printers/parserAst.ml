@@ -208,14 +208,15 @@ let rec print_block_desc block_desc =
   match block_desc with
   | BEqs l -> dprint_list semicolon_sep print_eq l
   | BIf (se, b1, b2) -> 
-      dbox 1 (
-        dprintf "if@ %t@ "
-        (print_sexp se)
-      ) @@ 
-      dbox 1 (
-        dprintf "then@ %t@ else@ %t"
-        (print_block b1)
-        (print_block b2)
+      dbox 0 (
+        dbox 0 (
+          dprint_string "if" @@ dprint_space @@
+          print_sexp se @@ dprint_space @@
+          dprint_string "then"
+        ) @@ dprint_break 1 2 @@
+        dbox 0 (print_block b1) @@ dprint_space @@
+        dprint_string "else" @@ dprint_break 1 2 @@
+        dbox 0 (print_block b2)
       )
 
 and print_block block = print_block_desc block.desc
