@@ -1,15 +1,15 @@
 open Format
-open ParserAST
 open CommonAST
+open ParserAST
 
 (* Helpers *)
 
 let dprint_string str ff = pp_print_string ff str
 let dprint_int i ff = pp_print_int ff i
 let dprint_bool b = dprint_string (if b then "1" else "0")
-let dprint_concat printer1 printer2 ff = (printer1 ff) ; (printer2 ff)
+let dprint_concat printer1 printer2 (ff: formatter) = (printer1 ff) ; (printer2 ff)
 let (@@) p1 p2 = (fun ff -> dprint_concat p1 p2 ff)
-let nop _ = ()
+let nop (_: formatter) = ()
 
 let dprint_break nspace ind ff = pp_print_break ff nspace ind
 let dprint_cut ff = pp_print_cut ff ()
@@ -135,45 +135,42 @@ let slice_nodes = ["slice"; "slice_from"; "slice_to"]
 let is_slice ident_desc =
   List.mem ident_desc slice_nodes
 
+let print_slice_param = function
+  | SliceAll   ->     dprintf ".."
+  | SliceTo hi ->     dprintf "..%t" (print_opt_sexp hi)
+  | SliceFrom lo ->   dprintf "%t.." (print_opt_sexp lo)
+  | Slice (lo, hi) -> dprintf "%t..%t" (print_opt_sexp lo) (print_opt_sexp hi)
+
 let rec print_exp_desc exp_desc =
   match exp_desc with
   | EConst v -> print_val v
   | EVar id  -> print_ident id
   | EPar e   -> par (print_exp e)
   | EReg e   -> dprintf "reg@ %t" (print_exp e)
-  | ECall(ident, idx::_, args) when ident.desc = "select" ->
-      let e1 = Misc.assert_1 args in
-      dprintf "%t[%t]" (print_exp e1) (print_opt_sexp idx)
-  | ECall(ident, low::high::_, args) when is_slice ident.desc ->
-      let e1 = Misc.assert_1 args in
-      dprintf "%t[%t..%t]"
-        (print_exp e1)
-        (print_opt_sexp low)
-        (print_opt_sexp high)
-  | ECall(ident, _, args) when ident.desc = "concat" ->
+  | ESelect (idx, arg) ->
+      dprintf "%t[%t]" (print_exp arg) (dprint_list (dprintf ",") print_opt_sexp idx)
+  | ESlice (params, arg) ->
+      dprintf "%t[%t]" (print_exp arg) (dprint_list (dprintf ",") print_slice_param params)
+  | ESupOp (op, args) when !!op = "not" ->
+      dprintf "@[<2>%t%t@]" (print_ident op) (par ((dprint_list comma_sep print_exp) args))
+  | ESupOp (op, args) ->
+      let e1, e2 = Misc.assert_2 args in
+      dprintf "@[<2>%t %t@ %t@]" (print_exp e1) (print_ident op) (print_exp e2)
+  | ECall (ident, _, args) when ident.desc = "concat" ->
       let e1, e2 = Misc.assert_2 args in
       dprintf "%t . %t" (print_exp e1) (print_exp e2)
-  | ECall(ident, params, args) when is_infix ident.desc ->
-      let e1, e2 = Misc.assert_2 args in
-      dbox 2 (
-        print_exp e1 @@ dprint_string " " @@
-        print_ident ident @@ dprint_space @@
-        if_empty_list_dprint params 
-          (mark ((dprint_list comma_sep print_opt_sexp) params)) @@
-        print_exp e2
-      )
-  | ECall(ident, params, args) ->
+  | ECall (ident, params, args) ->
       dbox 2 (
         print_ident ident @@
         if_empty_list_dprint params 
           (mark ((dprint_list comma_sep print_opt_sexp) params)) @@
         par ((dprint_list comma_sep print_exp) args)
       )
-  | EMem(memkind, (addr_size, word_size, _), args) ->
+  | EMem (memkind, (addr_size, word_size, _), args) ->
       dprintf "%t<%t,%t>(%t)"
         (print_mem_kind memkind)
-        (print_sexp addr_size)
-        (print_sexp word_size)
+        (print_opt_sexp addr_size)
+        (print_opt_sexp word_size)
         ((dprint_list comma_sep print_exp) args)
 
 and print_exp exp = print_exp_desc exp.desc
