@@ -41,7 +41,7 @@ let semicolon_sep = dprintf ";@ "
 
 let delim prefix printer suffix =
   dbox 1 (
-    prefix @@
+    prefix @@ dprint_cut @@
     printer @@
     dprint_break 0 (-2) @@
     suffix
@@ -232,7 +232,7 @@ let print_inline_status inline_status =
 
 let print_node_desc node_desc =
   dvbox 1 (
-    dbox 0 (
+    dbox 1 (
       print_inline_status node_desc.node_inline @@
       print_ident node_desc.node_name @@
       if_empty_list_dprint node_desc.node_params
@@ -241,7 +241,7 @@ let print_node_desc node_desc =
       par (dprint_list comma_sep print_tid node_desc.node_inputs) @@
       binop_sep "=" @@
       par (dprint_list comma_sep print_tid node_desc.node_outputs) @@
-      dprint_space
+      dprint_break 1 (-2)
     ) @@
     dprint_string "where" @@
     dprint_space @@
