@@ -68,13 +68,19 @@ let tbit n loc =
 type value =
   | VBitArray of bool array
 
+type slice_param =
+  | SliceAll
+  | SliceFrom of optional_static_exp
+  | SliceTo of optional_static_exp
+  | Slice of (optional_static_exp * optional_static_exp)
+
 type exp_desc =
   | EConst of value
   | EVar   of ident
   | EPar   of exp     (* Created purely to have good locations *)
   | EReg   of exp
   | ESupOp of ident * exp list
-  | ESlice of (optional_static_exp option * optional_static_exp option) list * exp
+  | ESlice of slice_param list * exp
   | ESelect of optional_static_exp list * exp
   | ECall  of ident * optional_static_exp list * exp list
       (* function * params * args *)

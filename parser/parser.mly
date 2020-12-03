@@ -199,7 +199,10 @@ let exp_desc :=
                                                                               { EMem  (ro, (addr_size, word_size, input_file), a) }
 
 let slice_arg :=
-  | lo=opt_static_exp?; ".."; hi=opt_static_exp?;                             { (lo, hi) }
+  |                    "..";                                                  { SliceAll }
+  | lo=opt_static_exp; "..";                                                  { SliceFrom lo }
+  |                    ".."; hi=opt_static_exp;                               { SliceTo hi }
+  | lo=opt_static_exp; ".."; hi=opt_static_exp;                               { Slice (lo, hi) }
 
 let op == localize(_op)
 let _op ==
