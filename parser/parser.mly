@@ -91,6 +91,8 @@ let node_outputs :=
 
 let typed_ident == localize(typed_ident_desc)
 let typed_ident_desc :=
+  (* FIXME : when there is no type indication, shouldn't a 'None' type be
+   * associated ? If it is the case, either modify here or in parserAST.tbit *)
   | name=ident; { { name; typed = localize $sloc (tbit 1 $sloc) } }
   | name=ident; ":"; type_ident=type_ident;
     { { name; typed = localize $loc(type_ident) type_ident  } }
