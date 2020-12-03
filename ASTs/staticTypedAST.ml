@@ -7,14 +7,22 @@ type netlist_type =
   | TBitArray of optional_static_int_exp
   | TProd of netlist_type list
 
+  type slice_param =
+  | SliceAll
+  | SliceFrom of optional_static_int_exp
+  | SliceTo of optional_static_int_exp
+  | Slice of (optional_static_int_exp * optional_static_int_exp)
 
 type exp_desc =
   | EConst of ParserAST.value
   | EVar   of ident
   | EReg   of exp
+  | ESelect of optional_static_int_exp list * exp
+  | ESlice  of slice_param list * exp
+  | ESupOp  of ident * exp list 
   | ECall  of ident * static_unknown_exp list * exp list
       (* function * params * args *)
-  | EMem   of mem_kind * (static_int_exp * static_int_exp * string option) * exp list
+  | EMem   of mem_kind * (optional_static_int_exp * optional_static_int_exp * string option) * exp list
       (* ro * (address size * word size * input file) * args *)
 
 and exp = exp_desc localized
