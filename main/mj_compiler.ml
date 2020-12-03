@@ -27,6 +27,12 @@ open Errors
 open Cli_options
 open Location
 
+type stop_exec =
+  | Parsing
+  | StaticParsing
+  | Typing
+  | Compiling
+
 let separateur = "\n*********************************************\
     *********************************\n*** "
 
@@ -83,27 +89,31 @@ let compile_impl filename =
   try
     base_path := Filename.dirname filename;
 
-    let pp = Printer.print_program stdout in
+    (* let pp = Printer.print_program stdout in *)
     (* Parsing of the file *)
-    let p = do_pass "Parsing" parse lexbuf pp in
+    let parsing_ast = parse lexbuf in
+    let _ =
+      if !print_parsing_ast then
+        Printers.ParserAst.print_program parsing_ast Format.std_formatter;
+    in
 
-    let p = pass "Scoping" true Scoping.program p pp in
+    (* let p = pass "Scoping" true Scoping.program p pp in
+     *
+     * let p = pass "Typing" true Typing.program p pp in
+     *
+     * let p = pass "Normalize" true Normalize.program p pp in
+     *
+     * let p = pass "Callgraph" true Callgraph.program p pp in *)
 
-    let p = pass "Typing" true Typing.program p pp in
+    (* let p = pass "Simplify" true Simplify.program p pp in *)
 
-    let p = pass "Normalize" true Normalize.program p pp in
+    (* let p = Mj2net.program p in *)
 
-    let p = pass "Callgraph" true Callgraph.program p pp in
-
-    let p = pass "Simplify" true Simplify.program p pp in
-
-    let p = Mj2net.program p in
-
-    let p = if !netlist_simplify 
-            then Netlist_simplify.simplify p
-            else p in
-
-    Netlist_printer.print_program net p;
+    (* let p = if !netlist_simplify
+     *         then Netlist_simplify.simplify p
+     *         else p in
+     *
+     * Netlist_printer.print_program net p; *)
 
     close_all_files ()
   with

@@ -1,140 +1,21 @@
-open Ast
-module StaticScopedAST = Static_scoping.StaticScopedAST
-
-module StaticTypedAST = struct
-  type static_type =
-    | TInt
-    | TBool
-  
-  let static_type_to_string = function
-    | TInt -> "int"
-    | TBool -> "bool"
-  
-  let static_type_of_string id = relocalize !@id @@
-    match !!id with
-      | "int" -> TInt
-      | "bool" -> TBool
-      | _ -> raise @@ Errors.NotAType (!!id, !@id)
-
-  type int_op = SAdd | SMinus | SMult | SDiv | SPower
-  type int_bool_op = SEq | SNeq | SLt | SLeq | SGt | SGeq
-  type bool_op = SOr | SAnd
-
-  type int_unop = SNeg
-  type bool_unop = SNot
-
-  type static_int_exp_desc =
-    | SInt    of int
-    | SIParam of int
-    | SIConst of ident
-    | SIUnOp  of        int_unop * static_int_exp
-    | SIBinOp of          int_op * static_int_exp * static_int_exp
-    | SIIf    of static_bool_exp * static_int_exp * static_int_exp  (* se1 ? se2 : se3 *)
-
-  and static_bool_exp_desc =
-    | SBool   of bool
-    | SBParam of int
-    | SBConst of ident
-    | SBUnOp  of       bool_unop * static_bool_exp
-    | SBBinOp of         bool_op * static_bool_exp * static_bool_exp
-    | SBBinIntOp of  int_bool_op * static_int_exp  * static_int_exp
-    | SBIf    of static_bool_exp * static_bool_exp * static_bool_exp  (* se1 ? se2 : se3 *)
-
-  and static_int_exp  = static_int_exp_desc  localized
-  and static_bool_exp = static_bool_exp_desc localized
-
-  type static_unknown_exp_desc =
-    | SIntExp  of static_int_exp_desc  option
-    | SBoolExp of static_bool_exp_desc option
-  and static_unknown_exp = static_unknown_exp_desc localized
-
-  type optional_static_int_exp_desc = static_int_exp_desc option
-  and optional_static_int_exp = optional_static_int_exp_desc localized
-
-  (* Netlist expressions *)
-
-  type netlist_type =
-    | TBitArray of optional_static_int_exp
-    | TProd of netlist_type list
-
-
-  type exp_desc =
-    | EConst of ParsingAST.value
-    | EVar   of ident
-    | EReg   of exp
-    | ECall  of ident * static_unknown_exp list * exp list
-        (* function * params * args *)
-    | EMem   of ParsingAST.mem_kind * (static_int_exp * static_int_exp * string option) * exp list
-        (* ro * (address size * word size * input file) * args *)
-
-  and exp = exp_desc localized
-
-  type equation_desc = {
-    eq_left:  ParsingAST.lvalue;
-    eq_right: exp
-  }
-  and equation = equation_desc localized
-
-
-  type typed_ident_desc = {
-    name:  ident;
-    typed: netlist_type localized;
-  }
-  and typed_ident = typed_ident_desc localized
-
-
-  type block_desc =
-    | BEqs of equation list
-    | BIf  of static_bool_exp * block * block
-
-  and block = block_desc localized
-
-  type static_typed_ident_desc = {
-    st_name: ident;
-    st_type: static_type localized;
-  }
-  and static_typed_ident = static_typed_ident_desc localized
-
-  type fun_env = static_type list Env.t
-
-  type node = {
-    node_name_loc:  Location.location;
-    node_loc:       Location.location;
-    node_params:    static_typed_ident list;
-    node_inline:    ParsingAST.inline_status;
-    node_inputs:    typed_ident list;
-    node_outputs:   typed_ident list;
-    node_body:      block;
-    node_probes:    ident list;
-  }
-
-  type const = {
-    const_decl:  static_unknown_exp;
-    const_ident: Location.location;
-    const_total: Location.location;
-  }
-
-  type program = {
-    p_consts: const Env.t;
-    p_consts_order: ident_desc list;
-    p_nodes:  node  Env.t;
-  }
-end
+open CommonAST
+module StaticScopedAST = StaticScopedAST
+module StaticTypedAST = StaticTypedAST
 open StaticTypedAST
 
 let rec static_int_exp consts_env ?(params_env=IntEnv.empty) se =
   let fi = static_int_exp  consts_env ~params_env in
   let fb = static_bool_exp consts_env ~params_env in
   let static_int_unop sunop se1 = match sunop with
-    | ParsingAST.SNeg -> SIUnOp (SNeg, fi se1)
-    | ParsingAST.SNot -> raise Errors.TmpError
+    | ParserAST.SNeg -> SIUnOp (SNeg, fi se1)
+    | ParserAST.SNot -> raise Errors.TmpError
   in
   let static_int_binop sbinop se1 se2 = match sbinop with
-    | ParsingAST.SAdd ->    SIBinOp (SAdd,   fi se1, fi se2)
-    | ParsingAST.SMinus ->  SIBinOp (SMinus, fi se1, fi se2)
-    | ParsingAST.SMult ->   SIBinOp (SMult,  fi se1, fi se2)
-    | ParsingAST.SDiv ->    SIBinOp (SDiv,   fi se1, fi se2)
-    | ParsingAST.SPower ->  SIBinOp (SPower, fi se1, fi se2)
+    | ParserAST.SAdd ->   SIBinOp (SAdd,   fi se1, fi se2)
+    | ParserAST.SMinus -> SIBinOp (SMinus, fi se1, fi se2)
+    | ParserAST.SMult ->  SIBinOp (SMult,  fi se1, fi se2)
+    | ParserAST.SDiv ->   SIBinOp (SDiv,   fi se1, fi se2)
+    | ParserAST.SPower -> SIBinOp (SPower, fi se1, fi se2)
     | SEq | SNeq | SLt | SLeq | SGt | SGeq | SOr | SAnd -> raise Errors.TmpError
   in
 
@@ -166,18 +47,18 @@ and static_bool_exp consts_env ?(params_env=IntEnv.empty) se =
   let fi = static_int_exp  consts_env ~params_env in
   let fb = static_bool_exp consts_env ~params_env in
   let static_bool_unop sunop se1 = match sunop with
-    | ParsingAST.SNot -> SBUnOp (SNot, fb se1)
-    | ParsingAST.SNeg -> raise Errors.TmpError
+    | ParserAST.SNot -> SBUnOp (SNot, fb se1)
+    | ParserAST.SNeg -> raise Errors.TmpError
   in
   let static_bool_binop sbinop se1 se2 = match sbinop with
-    | ParsingAST.SEq ->     SBBinIntOp (SEq,  fi se1, fi se2)
-    | ParsingAST.SNeq ->    SBBinIntOp (SNeq, fi se1, fi se2)
-    | ParsingAST.SLt ->     SBBinIntOp (SLt,  fi se1, fi se2)
-    | ParsingAST.SLeq ->    SBBinIntOp (SLeq, fi se1, fi se2)
-    | ParsingAST.SGt ->     SBBinIntOp (SGt,  fi se1, fi se2)
-    | ParsingAST.SGeq ->    SBBinIntOp (SGeq, fi se1, fi se2)
-    | ParsingAST.SOr ->     SBBinOp    (SOr,  fb se1, fb se2)
-    | ParsingAST.SAnd ->    SBBinOp    (SAnd, fb se1, fb se2)
+    | ParserAST.SEq ->  SBBinIntOp (SEq,  fi se1, fi se2)
+    | ParserAST.SNeq -> SBBinIntOp (SNeq, fi se1, fi se2)
+    | ParserAST.SLt ->  SBBinIntOp (SLt,  fi se1, fi se2)
+    | ParserAST.SLeq -> SBBinIntOp (SLeq, fi se1, fi se2)
+    | ParserAST.SGt ->  SBBinIntOp (SGt,  fi se1, fi se2)
+    | ParserAST.SGeq -> SBBinIntOp (SGeq, fi se1, fi se2)
+    | ParserAST.SOr ->  SBBinOp    (SOr,  fb se1, fb se2)
+    | ParserAST.SAnd -> SBBinOp    (SAnd, fb se1, fb se2)
     | SAdd | SMinus | SMult | SDiv | SPower -> raise Errors.TmpError
   in
 
@@ -281,14 +162,14 @@ let starput env = relocalize_fun @@ fun StaticScopedAST.{ name; typed } ->
 
 let params param_list : static_typed_ident list * static_type IntEnv.t =
   let new_params = List.map
-    (fun (param: ParsingAST.static_typed_ident) ->
+    (fun (param: ParserAST.static_typed_ident) ->
       relocalize !@param { st_name = !!param.st_name; st_type = static_type_of_string !!param.st_type_name }
     ) param_list in
   let param_env = Misc.fold_lefti (fun env i el -> IntEnv.add i !! (!!el.st_type) env) IntEnv.empty new_params in
   new_params, param_env
 
 let fun_env StaticScopedAST.{ node_params; _ } =
-  List.map (fun (param: ParsingAST.static_typed_ident) -> (!!) @@ static_type_of_string !!param.st_type_name) node_params
+  List.map (fun (param: ParserAST.static_typed_ident) -> (!!) @@ static_type_of_string !!param.st_type_name) node_params
 
 let node fun_env consts_env StaticScopedAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
   let new_params, params_env = params node_params in

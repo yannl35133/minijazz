@@ -1,10 +1,10 @@
 main(a:[4], b:[4], c) = (o_or:[4], o_and:[4], o_xor:[4], o_nand:[4],
-					 o_not:[4], o_reg:[4], o_mux:[4]) where
-	o_or = n_or<4>(a,b);
-	o_and = n_and<4>(a,b);
-	o_xor = n_xor<4>(a,b);
-	o_nand = n_nand<4>(a,b);
-	o_not = n_not<4>(a);
-	o_reg = reg(n_not<4>(a));
-	o_mux = n_mux<4>(c, a, n_zero<4>())
+                     o_not:[4], o_reg:[4], o_mux:[4]) where
+    o_or = n_or<4>(a,b);
+    o_and = n_and<4>(a,b);
+    o_xor = n_xor<4>(a,b);
+    o_nand = n_nand<4>(a,b);
+    o_not = n_not<4>(a);
+    o_reg = reg(n_not<4>(a));
+    o_mux = n_mux<4>(c, a, n_zero<4>())
 end where

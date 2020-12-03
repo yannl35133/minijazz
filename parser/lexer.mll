@@ -122,10 +122,10 @@ rule token = parse
   | "->"            { ARROW }
   | "."             { DOT }
   | ".."            { DOTDOT }
-  | constructor as id {CONSTRUCTOR id}
-  | ident as id
-                    { try Hashtbl.find keyword_table id
+  | constructor as id {CONSTRUCTOR id }
+  | ident as id     { try Hashtbl.find keyword_table id
                       with Not_found -> IDENT id }
+  | (['0'-'9']+ as lit) as num
   | '0' (['b' 'B'] as base)  (['0'-'1']+ as lit) as num
   |('0' (['u' 'U'] as base)?)(['0'-'9']+ as lit) as num
   | '0' (['o' 'O'] as base)  (['0'-'7']+ as lit) as num
@@ -134,11 +134,11 @@ rule token = parse
                       | Some 'b' | Some 'B'        -> 1
                       | Some 'o' | Some 'O'        -> 3
                       | Some 'x' | Some 'X'        -> 4
-                      | Some 'u' | Some 'U' | None -> 0
+                      | Some 'u' | Some 'U' | None -> 4
                       | _ -> invalid_arg "Not a valid base"
                       in
                       INT (String.length lit * b,
-                            int_of_string num) }
+                           int_of_string num) }
   | "\""
       { string lexbuf.lex_start_p (Buffer.create 16) lexbuf }
   | "(*"

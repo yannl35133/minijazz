@@ -25,8 +25,8 @@
 
 %{
 
-open Ast
-open Ast.ParsingAST
+open CommonAST
+open ParserAST
 
 %}
 
@@ -55,7 +55,7 @@ open Ast.ParsingAST
 %right NOT REG
 %right CIRCUMFLEX
 
-%start <Ast.ParsingAST.program> program
+%start <ParserAST.program> program
 
 %%
 
@@ -95,8 +95,11 @@ let node_outputs :=
 
 let typed_ident == localize(typed_ident_desc)
 let typed_ident_desc :=
-  | name=ident; type_ident=type_ident?;
-      { { name; typed = localize $loc(type_ident) (Option.value ~default:(tbit 1 $loc(type_ident)) type_ident) } }
+  (* FIXME : when there is no type indication, shouldn't a 'None' type be
+   * associated ? If it is the case, either modify here or in parserAST.tbit *)
+  | name=ident; { { name; typed = localize $sloc (tbit 1 $sloc) } }
+  | name=ident; ":"; type_ident=type_ident;
+    { { name; typed = localize $loc(type_ident) type_ident  } }
 
 let type_ident ==
   | "["; ~=opt_static_exp; "]"; < TBitArray >
@@ -123,10 +126,8 @@ let block_desc :=
   | ~=slist(equation, ";");                                    < BEqs >
   | IF; ~=static_exp; THEN; b1=block; ELSE; b2=block; END; IF; < BIf >
 
-let state == localize(state_desc)
-let state_desc :=
+let state :=
   | c = constructor; { Estate0 c }
-  | c = constructor; LPAREN; e = exp; RPAREN; { Estaten (c, [e]) }
   | c = constructor; LPAREN; es = snlist(exp, COMMA); RPAREN; { Estaten (c, es) }
 
 let state_pat == localize(state_pat_desc)
@@ -179,7 +180,7 @@ let equation == localize(equation_desc)
 let equation_desc :=
   | lv=lvalue; "="; e=exp; { EQeq (lv, e) }
 (* | lst=snlist(equation, ";"); { EQand lst } *)
-  | e=equation; IN; e2=equation; { EQlet (e, e2) }
+  | LET; e=equation; IN; e2=equation; { EQlet (e, e2) }
   | RESET; eq=equation; EVERY; e=exp; { EQreset (eq, e) }
   | AUTOMATON; lst=snlist(automaton_hdl, BAR); END; { EQautomaton lst }
 
@@ -243,12 +244,14 @@ let exp_desc :=
   | _n=NOT; e=exp;                                                            { ECall (localize $loc(_n) "not", [], [e])}
   | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
   | e1=simple_exp; "["; idx=opt_static_exp; "]";                              { ECall (no_localize "select", [no_localize None; idx], [e1]) }
+(* FIXME : Is it normal to have None as the first element of the list in all
+ * three cases ? *)
   | e1=simple_exp; "["; low=opt_static_exp; ".."; high=opt_static_exp; "]";   { ECall (no_localize "slice",  [no_localize None; low; high], [e1]) }
   | e1=simple_exp; "["; low=opt_static_exp; ".."; "]";                        { ECall (no_localize "slice_from", [no_localize None; low], [e1]) }
   | e1=simple_exp; "["; ".."; high=opt_static_exp; "]";                       { ECall (no_localize "slice_to", [no_localize None; high], [e1]) }
   | ro=rom_or_ram; "<"; addr_size=simple_static_exp; ",";
       word_size=simple_static_exp; input_file=input_file?; ">"; a=tuple(exp);
-    { EMem  ({mem_kind=ro; mem_addr=addr_size; mem_word=word_size; mem_file=input_file}, a) }
+    { EMem  (ro, (addr_size, word_size, input_file), a) }
 
 let op == localize(_op)
 let _op ==
@@ -259,7 +262,9 @@ let _op ==
 
 let const :=
   | b=BOOL;     { VBitArray (Array.make 1 b) }
-  | i=INT;      { if fst i > 0 then VBitArray (Misc.bool_array_of_int i) else raise (Errors.Lexical_error (Nonbinary_base, Loc $sloc)) }
+  | i=INT;
+    { if fst i > 0 then VBitArray (Misc.bool_array_of_int i)
+      else raise (Errors.Lexical_error (Nonbinary_base, Loc $sloc)) }
   | "["; "]";   { VBitArray (Array.make 0 false) }
 
 let rom_or_ram == localize(_rom_or_ram)

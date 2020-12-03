@@ -6,10 +6,11 @@
 (library
  (name parser)
  (wrapped false)
- (libraries global))
+ (libraries global asts))
 
 (menhir
- (modules parser))
+ (modules parser)
+ (flags --explain))
 
 (ocamllex
  (modules lexer))

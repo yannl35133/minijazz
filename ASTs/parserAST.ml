@@ -23,47 +23,9 @@
 (*                                                                     *)
 (***********************************************************************)
 
-type constructor = string
-type ident_desc = string
-module Env = Map.Make (struct type t = ident_desc let compare = compare end)
-module IntEnv = Map.Make (Int)
-module IdentSet = Set.Make (struct type t = ident_desc let compare = compare end)
+open CommonAST
 
-
-(* Localize an element *)
-
-type 'a localized =
-  {
-    desc: 'a;
-    loc: Location.location
-  }
-
-let (!!) = fun obj -> obj.desc
-let (!@) = fun obj -> obj.loc
-
-let localize loc x = {
-  desc = x;
-  loc = Loc loc
-}
-let relocalize loc x = {
-  desc = x;
-  loc
-}
-let relocalize_fun f obj =
-  relocalize !@obj (f !!obj)
-let no_localize x = {
-  desc = x;
-  loc = Location.no_location
-}
-
-type ident = ident_desc localized
-
-
-
-module ParsingAST = struct
-
-  (* Static expressions *)
-
+(* Static expressions *)
 
 type sop =
   | SAdd | SMinus | SMult | SDiv | SPower (* int -> int *)
@@ -93,6 +55,7 @@ type static_typed_ident_desc = {
 }
 and static_typed_ident = static_typed_ident_desc localized
 
+
 (* Netlist expressions *)
 
 type netlist_type =
@@ -102,16 +65,6 @@ type netlist_type =
 let tbit n loc =
   TBitArray (localize loc (Some (SInt n)))
 
-type mem_kind_desc = MRom | MRam
-and mem_kind = mem_kind_desc localized
-
-(* mem type *)
-type mtyp = {
-    mem_kind: mem_kind;
-    mem_addr: static_exp;
-    mem_word: static_exp;
-    mem_file: string option;
-  }
 
 type value =
   | VBitArray of bool array
@@ -123,17 +76,19 @@ type lvalue_desc =
 
 and lvalue = lvalue_desc localized
 
-type 'e state_expr_desc =
+type 'e state_expr =
   | Estate0 of ident
   | Estaten of ident * 'e list
-
-type 'e state_expr = 'e state_expr_desc localized
 
 type state_desc =
   | Estate0pat of ident
   | Estatenpat of ident * ident list
 
 type state = state_desc localized
+
+let state_name st = match st.desc with
+  | Estate0pat id -> id
+  | Estatenpat (id, _) -> id
 
 type ('e, 'b) match_hdl = {
     m_constr: constructor;
@@ -159,12 +114,11 @@ type exp_desc =
   | EConst  of value
   | EConstr of exp state_expr
   | EVar    of ident
-  | EFby    of ident
   | EPar    of exp     (* Created purely to have good locations *)
   | EReg    of exp
   | ECall   of ident * optional_static_exp list * exp list
   (* function * params * args *)
-  | EMem    of mtyp * exp list
+  | EMem    of mem_kind * (static_exp * static_exp * string option) * exp list
   | ELet    of eq * exp
   | EMerge  of exp * (exp, eq) match_hdl list
 
@@ -202,9 +156,6 @@ type block_desc =
 and block = block_desc localized
 
 
-type inline_status = Inline | NotInline
-
-
 type node_desc = {
   node_name:    ident;
   node_inline:  inline_status;
@@ -227,8 +178,8 @@ type program = {
   p_consts: const list;
   p_nodes : node list;
 }
-end
 
+(*
 module TypedAST = struct
 
 (* Types and typed expressions *)
@@ -375,4 +326,4 @@ type program = {
   p_nodes : node list;
 }
 
-end
+end *)
