@@ -57,10 +57,15 @@ open ParserAST
 %%
 
 /** Tools **/
-let slist  (x, sep)  == separated_list (sep, x)
-let snlist (x, sep)  == separated_nonempty_list (sep, x)
-let stuple (x, o, c) == o; ~=slist (x, ","); c; <>
+let slist  (x, sep) == separated_list (sep, x)
+let snlist (x, sep) == separated_nonempty_list (sep, x)
+let stuple  (x, o, c) == o; ~=slist  (x, ","); c; <>
+let sntuple (x, o, c) == o; ~=snlist (x, ","); c; <>
 let tuple (x) == stuple(x, "(", ")")
+
+let snlist_optlast (x, sep) :=
+  | ~=x; sep?;                            { [x] }
+  | ~=x; sep; ~=snlist_optlast (x, sep);  < (::) >
 
 let localize (x) == ~=x; { localize $sloc x }
 let ident == localize(IDENT)
@@ -117,12 +122,12 @@ let node_param_desc :=
 
 let block == localize(block_desc)
 let block_desc :=
-  | ~=slist(equation, ";");                                    < BEqs >
-  | IF; ~=static_exp; THEN; b1=block; ELSE; b2=block; END; IF; < BIf >
+  | ~=snlist_optlast (equation, ";");                           < BEqs >
+  | IF; ~=static_exp; THEN; b1=block; ELSE; b2=block; END; IF;  < BIf >
 
 let equation == localize(equation_desc)
 let equation_desc :=
-  | eq_left=lvalue; "="; eq_right=exp; { { eq_left; eq_right } }
+  | eq_left=lvalue; "="; eq_right=exp;                          { { eq_left; eq_right } }
 
 let lvalue == localize(lvalue_desc)
 let lvalue_desc :=
@@ -180,16 +185,17 @@ let exp_desc :=
   | ~=const;                                                                  < EConst >
   | REG; ~=exp;                                                               < EReg >
   | ~=ident; ~=call_params; ~=tuple(exp);                                     < ECall >
-  | e1=exp; ~=op; e2=exp;                                                     { ECall (op, [], [e1; e2]) }
-  | _n=NOT; e=exp;                                                            { ECall (localize $loc(_n) "not", [], [e])}
+  | e1=exp; ~=op; e2=exp;                                                     { ESupOp (op, [e1; e2]) }
+  | _n=NOT; e=exp;                                                            { ESupOp (localize $loc(_n) "not", [e])}
+  | e1=simple_exp; slice=sntuple(slice_arg, "[", "]")+;                       { ESlice (List.flatten slice, e1) }
+  | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESelect ((List.flatten idx), e1) }
   | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
-  | e1=simple_exp; "["; idx=opt_static_exp; "]";                              { ECall (no_localize "select", [no_localize None; idx], [e1]) }
-  | e1=simple_exp; "["; low=opt_static_exp; ".."; high=opt_static_exp; "]";   { ECall (no_localize "slice",  [no_localize None; low; high], [e1]) }
-  | e1=simple_exp; "["; low=opt_static_exp; ".."; "]";                        { ECall (no_localize "slice_from", [no_localize None; low], [e1]) }
-  | e1=simple_exp; "["; ".."; high=opt_static_exp; "]";                       { ECall (no_localize "slice_to", [no_localize None; high], [e1]) }
-  | ro=rom_or_ram; "<"; addr_size=simple_static_exp; ",";
-      word_size=simple_static_exp; input_file=input_file?; ">"; a=tuple(exp);
+  | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
+      word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);
                                                                               { EMem  (ro, (addr_size, word_size, input_file), a) }
+
+let slice_arg :=
+  | lo=opt_static_exp?; ".."; hi=opt_static_exp?;                             { (lo, hi) }
 
 let op == localize(_op)
 let _op ==
