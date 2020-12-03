@@ -30,6 +30,7 @@ let if_empty_list_dprint l printer =
   | _  -> printer
 
 let dprint_if b printer = if b then printer else nop
+let dprint_newline ff = pp_print_newline ff ()
 
 let dbox i printer ff = (open_hvbox (2 * i) ; printer ff ; close_box ())
 let dvbox i printer ff = (open_vbox (2 * i) ; printer ff ; close_box ())
@@ -269,4 +270,5 @@ let print_program prog =
     | [], _ | _, [] -> nop
     | _             -> dforce_linejump
   ) @@
-  dprint_list dforce_linejump print_node prog.p_nodes
+  dprint_list dforce_linejump print_node prog.p_nodes @@
+  dprint_newline
