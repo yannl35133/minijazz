@@ -96,6 +96,8 @@ let node_outputs :=
 
 let typed_ident == localize(typed_ident_desc)
 let typed_ident_desc :=
+  (* FIXME : when there is no type indication, shouldn't a 'None' type be
+   * associated ? If it is the case, either modify here or in parserAST.tbit *)
   | name=ident; { { name; typed = localize $sloc (tbit 1 $sloc) } }
   | name=ident; ":"; type_ident=type_ident;
     { { name; typed = localize $loc(type_ident) type_ident  } }
@@ -189,6 +191,8 @@ let exp_desc :=
   | _n=NOT; e=exp;                                                            { ESupOp (localize $loc(_n) "not", [e])}
   | e1=simple_exp; slice=sntuple(slice_arg, "[", "]")+;                       { ESlice (List.flatten slice, e1) }
   | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESelect ((List.flatten idx), e1) }
+  (* FIXME : Is it normal to have None as the first element of the list in all
+   * three cases ? *)
   | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
   | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
       word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);

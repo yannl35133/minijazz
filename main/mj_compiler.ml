@@ -92,7 +92,12 @@ let compile_impl filename =
     (* let pp = Printer.print_program stdout in *)
     (* Parsing of the file *)
     let _parsing_ast = parse lexbuf in
-    (* if print_parsing_ast then *)
+    let _ =
+      if !print_parsing_ast then 
+        Printers.ParserAst.print_program _parsing_ast Format.std_formatter
+      else
+        ()
+    in
 
     (* let p = pass "Scoping" true Scoping.program p pp in
      *
