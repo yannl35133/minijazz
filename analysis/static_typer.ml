@@ -165,7 +165,7 @@ let rec body (fun_env, env) e = relocalize_fun (function
 let starput env = relocalize_fun @@ fun StaticScopedAST.{ name; typed } ->
   let rec fun_typed : StaticScopedAST.netlist_type -> 'a = function
     | TProd l -> TProd (List.map fun_typed l)
-    | TBitArray e -> TBitArray (optional_static_int_exp env e)
+    | TNDim l -> TNDim (List.map (optional_static_int_exp env) l)
   in
   { name; typed = relocalize_fun fun_typed typed }
 

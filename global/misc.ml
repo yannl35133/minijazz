@@ -116,8 +116,21 @@ let bool_array_of_string s =
   done;
   a
 
-let bool_array_of_int (nbits, v) =
-  Array.init nbits (fun n -> v land (1 lsl (nbits - 1 - n)) <> 0)
+let bool_list_of_int (nbits, v) =
+  List.init nbits (fun n -> v land (1 lsl (nbits - 1 - n)) <> 0)
+
+let exp a n =
+  let rec aux acc n =
+    if n = 1 then
+      acc
+    else if n land 1 <> 0 then
+      aux (acc * a) (n lsl 1)
+    else
+      aux acc (n lsl 1)
+  in aux 1 n
+
+let bool_list_of_dec_int (nbits, v) =
+  List.init (-nbits) (fun n -> v / (exp 10 n) mod (exp 10 (n + 1)) = 1)
 
 exception Int_too_big
 let convert_size s n =

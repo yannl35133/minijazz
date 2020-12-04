@@ -20,7 +20,7 @@ and optional_static_exp = optional_static_exp_desc localized
 (* Netlist expressions *)
 
 type netlist_type =
-  | TBitArray of optional_static_exp
+  | TNDim of optional_static_exp list
   | TProd of netlist_type list
 
 type slice_param =

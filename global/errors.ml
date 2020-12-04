@@ -29,7 +29,9 @@ type lexical_error =
   | Illegal_character
   | Unterminated_comment
   | Unterminated_string
-  | Nonbinary_base
+
+type lexical_warning =
+  | Nonbinary_base of Location.location
 
 exception Lexical_error of lexical_error * Location.location
 
@@ -55,15 +57,18 @@ exception ErrorDetected
 
 let lexical_error err loc =
   Format.eprintf "%aSyntax error: %s"
-    print_location loc
-    (match err with
-    | Illegal_character     -> "illegal character@."
-    | Unterminated_comment  -> "unterminated comment@."
-    | Unterminated_string   -> "unterminated string@."
-    | Nonbinary_base -> "base unadapted to binary@."
-    );
+  print_location loc
+  (match err with
+  | Illegal_character     -> "illegal character@."
+  | Unterminated_comment  -> "unterminated comment@."
+  | Unterminated_string   -> "unterminated string@."
+  );
   raise ErrorDetected
-
+  
 let syntax_error loc =
   Format.eprintf "%aSyntax error@." print_location loc;
   raise ErrorDetected
+
+let raise_warning = function
+  | Nonbinary_base loc-> ignore "base unadapted to binary@."; ()
+    

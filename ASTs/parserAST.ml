@@ -59,20 +59,19 @@ and static_typed_ident = static_typed_ident_desc localized
 (* Netlist expressions *)
 
 type netlist_type =
-  | TBitArray of optional_static_exp
+  | TNDim of optional_static_exp list
   | TProd of netlist_type list
 
-let tbit n loc =
-  TBitArray (localize loc (Some (SInt n)))
 
 type value =
-  | VBitArray of bool array
+  | VNDim of value list
+  | VBit of bool
 
 type slice_param =
   | SliceAll
   | SliceFrom of optional_static_exp
-  | SliceTo of optional_static_exp
-  | Slice of (optional_static_exp * optional_static_exp)
+  | SliceTo of   optional_static_exp
+  | Slice of    (optional_static_exp * optional_static_exp)
 
 type exp_desc =
   | EConst of value

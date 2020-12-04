@@ -57,7 +57,7 @@ let rec body env e = relocalize_fun (function
 let starput env = relocalize_fun @@ fun ParserAST.{ name; typed } ->
   let rec fun_typed : ParserAST.netlist_type -> 'a = function
     | TProd l -> TProd (List.map fun_typed l)
-    | TBitArray e -> TBitArray (optional_static_exp env e)
+    | TNDim l -> TNDim (List.map (optional_static_exp env) l)
   in
   { name; typed = relocalize_fun fun_typed typed }
 

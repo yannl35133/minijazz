@@ -112,13 +112,14 @@ let print_stid stid = print_stid_desc stid.desc
 
 let rec print_type typ =
   match typ with
-  | TBitArray opt_se -> bracket (print_opt_sexp opt_se )
+  | TNDim opt_se_l -> bracket (dprint_list comma_sep print_opt_sexp opt_se_l )
   | TProd l -> par (dprint_list star_sep print_type l)
 
-let print_val v =
+let rec print_val v =
   match v with
-  | VBitArray arr ->
-      dprintf "[%t]" (dprint_list nop dprint_bool (Array.to_list arr))
+  | VNDim l ->
+      dprintf "[%t]" (dprint_list nop print_val l)
+  | VBit b -> dprint_bool b
 
 let print_mem_kind_desc mem_kind_desc =
   match mem_kind_desc with
@@ -194,8 +195,9 @@ let print_eq eq = print_eq_desc eq.desc
 
 let is_bit tid_desc =
   match tid_desc.typed.desc with
-  | TProd _            -> false
-  | TBitArray opt_sexp -> Option.is_none opt_sexp.desc
+  | TProd _ -> false
+  | TNDim [] -> true
+  | TNDim _ -> false
 
 let print_tid_desc tid_desc =
   dbox 1 (

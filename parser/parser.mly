@@ -96,11 +96,9 @@ let node_outputs :=
 
 let typed_ident == localize(typed_ident_desc)
 let typed_ident_desc :=
-  (* FIXME : when there is no type indication, shouldn't a 'None' type be
-   * associated ? If it is the case, either modify here or in parserAST.tbit *)
-  | name=ident; { { name; typed = localize $sloc (tbit 1 $sloc) } }
-  | name=ident; ":"; type_ident=type_ident;
-    { { name; typed = localize $loc(type_ident) type_ident  } }
+  | name=ident; { { name; typed = localize $sloc (TNDim []) } }
+  | name=ident; ":"; type_ident=sntuple(opt_static_exp, "[", "]")+;
+    { { name; typed = localize $loc(type_ident) (TNDim (List.flatten type_ident)) } }
 
 let type_ident ==
   | "["; ~=opt_static_exp; "]"; < TBitArray >
@@ -212,11 +210,17 @@ let _op ==
   | NAND; { "nand" }  | NOR;  { "nor" }
 
 let const :=
-  | b=BOOL;     { VBitArray (Array.make 1 b) }
+  | b=BOOL;     { VBit b }
   | i=INT;
-    { if fst i > 0 then VBitArray (Misc.bool_array_of_int i)
-      else raise (Errors.Lexical_error (Nonbinary_base, Loc $sloc)) }
-  | "["; "]";   { VBitArray (Array.make 0 false) }
+    {
+      if fst i > 0 then
+        VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_int i)
+      else begin
+        Errors.raise_warning (Errors.Nonbinary_base (Loc $sloc));
+        VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_dec_int i)
+      end
+    }
+  | "["; "]";   { VNDim [] }
 
 let rom_or_ram == localize(_rom_or_ram)
 let _rom_or_ram :=

@@ -118,7 +118,7 @@ rule token = parse
                       | Some 'b' | Some 'B'        -> 1
                       | Some 'o' | Some 'O'        -> 3
                       | Some 'x' | Some 'X'        -> 4
-                      | Some 'u' | Some 'U' | None -> 4
+                      | Some 'u' | Some 'U' | None -> -1 (* Will be re-interpreted as binary if netlist, with a warning *)
                       | _ -> invalid_arg "Not a valid base"
                       in
                       INT (String.length lit * b,

@@ -48,3 +48,9 @@ and static_unknown_exp = static_unknown_exp_desc localized
 
 type optional_static_int_exp_desc = static_int_exp_desc option
 and optional_static_int_exp = optional_static_int_exp_desc localized
+
+type const = {
+  const_decl:  static_unknown_exp;
+  const_ident: Location.location;
+  const_total: Location.location;
+}
