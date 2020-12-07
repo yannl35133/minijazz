@@ -29,7 +29,9 @@ type lexical_error =
   | Illegal_character
   | Unterminated_comment
   | Unterminated_string
-  | Nonbinary_base
+
+type lexical_warning =
+  | Nonbinary_base of Location.location
 
 exception Lexical_error of lexical_error * Location.location
 
@@ -45,9 +47,35 @@ exception WrongType of (string * string * Location.location)
 exception NoTypes of Location.location
 exception TwoTypes of Location.location
 
-(** Function expected types (as a hint), observed type, expected type, expression location *)
-exception WrongTypeParam of (string list * string * string * Location.location)
+(** Observed type, expected type, expression location, function name, function expected types (as a hint) *)
+exception WrongTypeParam of (string * string * Location.location * string * string list)
 
+(** Constant value contains a 0-wide bus as a dimension *)
+exception ZeroWideBusMulti of (int * Location.location)
+
+(** Constant value does not have a unique dimension *)
+exception NonConstantDimension of Location.location
+
+(** Obtained a product type where it is unexpected: where it is unexpected, expression location *)
+exception UnexpectedProd of (string * Location.location)
+
+(** Observed dimension, expected dimension, expression location *)
+exception WrongDimension of (int * int * Location.location)
+
+(** Observed dimension, expected dimension, expression location, function name, function expected dimensions *)
+exception WrongDimensionArg of (int * int * Location.location * string * string list)  (* TO BE REDONE *)
+
+(** Observed dimension, expected dimension, expression location, operator name, dimensioned reference location *)
+exception WrongDimensionOp of (int * int * Location.location * string * Location.location)
+
+(** Observed number of arguments, function call location, expected number of arguments, name of function *)
+exception WrongNumberArguments of (int * Location.location * int * string)
+
+(** Dimension of argument, number of times sliced, location *)
+exception SliceTooMuch of (int * int * Location.location)
+
+type dimension_warning =
+  | InsufficientAnnotations of (string * Location.location * string) (** function name, case location, variable undimensionable *)
 
 open Location
 
@@ -55,15 +83,20 @@ exception ErrorDetected
 
 let lexical_error err loc =
   Format.eprintf "%aSyntax error: %s"
-    print_location loc
-    (match err with
-    | Illegal_character     -> "illegal character@."
-    | Unterminated_comment  -> "unterminated comment@."
-    | Unterminated_string   -> "unterminated string@."
-    | Nonbinary_base -> "base unadapted to binary@."
-    );
+  print_location loc
+  (match err with
+  | Illegal_character     -> "illegal character@."
+  | Unterminated_comment  -> "unterminated comment@."
+  | Unterminated_string   -> "unterminated string@."
+  );
   raise ErrorDetected
-
+  
 let syntax_error loc =
   Format.eprintf "%aSyntax error@." print_location loc;
   raise ErrorDetected
+
+let raise_warning_lexical = function
+  | Nonbinary_base loc-> ignore "base unadapted to binary@."; ()
+    
+let raise_warning_dimension = function
+  | InsufficientAnnotations (name, loc, var) -> ()

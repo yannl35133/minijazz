@@ -1,0 +1,80 @@
+(alias
+  (name makeparsetest)
+  (deps (source_tree %{workspace_root}/test/inputs))
+)
+
+(alias
+  (name checkparsetest)
+  (deps (alias makeparsetest))
+)
+
+(alias
+  (name runtest)
+  (deps (alias checkparsetest))
+)
+
+(rule
+  (alias makeparsetest)
+  (target nadder.parsed)
+  (action (
+    with-stdout-to nadder.parsed
+    (run ../../main/mjc.exe -print-parsing-ast ../inputs/nadder.mj)
+  ))
+)
+
+(rule
+  (alias makeparsetest)
+  (target net_simplify.parsed)
+  (action (
+    with-stdout-to net_simplify.parsed
+    (run ../../main/mjc.exe -print-parsing-ast ../inputs/net_simplify.mj)
+  ))
+)
+
+(rule
+  (alias makeparsetest)
+  (target n_ops.parsed)
+  (action (
+    with-stdout-to n_ops.parsed
+    (run ../../main/mjc.exe -print-parsing-ast ../inputs/n_ops.mj)
+  ))
+)
+
+(rule
+  (alias makeparsetest)
+  (target shifters.parsed)
+  (action (
+    with-stdout-to shifters.parsed
+    (run ../../main/mjc.exe -print-parsing-ast ../inputs/shifters.mj)
+  ))
+)
+
+(rule
+  (alias makeparsetest)
+  (target static.parsed)
+  (action (
+    with-stdout-to static.parsed
+    (run ../../main/mjc.exe -print-parsing-ast ../inputs/static.mj)
+  ))
+)
+
+(rule
+  (alias makeparsetest)
+  (target tests.parsed)
+  (action (
+    with-stdout-to tests.parsed
+    (run ../../main/mjc.exe -print-parsing-ast ../inputs/tests.mj)
+  ))
+)
+
+(rule
+  (alias checkparsetest)
+  (action (progn
+    (diff nadder.parsed ../inputs/nadder.mj)
+    (diff net_simplify.parsed ../inputs/net_simplify.mj)
+    (diff n_ops.parsed ../inputs/n_ops.mj)
+    (diff shifters.parsed ../inputs/shifters.mj)
+    (diff static.parsed ../inputs/static.mj)
+    (diff tests.parsed ../inputs/tests.mj)
+  ))
+)

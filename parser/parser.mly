@@ -60,10 +60,15 @@ open ParserAST
 %%
 
 /** Tools **/
-let slist  (x, sep)  == separated_list (sep, x)
-let snlist (x, sep)  == separated_nonempty_list (sep, x)
-let stuple (x, o, c) == o; ~=slist (x, ","); c; <>
+let slist  (x, sep) == separated_list (sep, x)
+let snlist (x, sep) == separated_nonempty_list (sep, x)
+let stuple  (x, o, c) == o; ~=slist  (x, ","); c; <>
+let sntuple (x, o, c) == o; ~=snlist (x, ","); c; <>
 let tuple (x) == stuple(x, "(", ")")
+
+let snlist_optlast (x, sep) :=
+  | ~=x; sep?;                            { [x] }
+  | ~=x; sep; ~=snlist_optlast (x, sep);  < (::) >
 
 let localize (x) == ~=x; { localize $sloc x }
 let ident == localize(IDENT)
@@ -95,14 +100,9 @@ let node_outputs :=
 
 let typed_ident == localize(typed_ident_desc)
 let typed_ident_desc :=
-  (* FIXME : when there is no type indication, shouldn't a 'None' type be
-   * associated ? If it is the case, either modify here or in parserAST.tbit *)
-  | name=ident; { { name; typed = localize $sloc (tbit 1 $sloc) } }
-  | name=ident; ":"; type_ident=type_ident;
-    { { name; typed = localize $loc(type_ident) type_ident  } }
-
-let type_ident ==
-  | "["; ~=opt_static_exp; "]"; < TBitArray >
+  | name=ident; { { name; typed = localize $sloc (TNDim []) } }
+  | name=ident; ":"; type_ident=sntuple(opt_static_exp, "[", "]")+;
+    { { name; typed = localize $loc(type_ident) (TNDim (List.flatten type_ident)) } }
 
 let opt_static_exp == localize(optional_static_exp_desc)
 let optional_static_exp_desc :=
@@ -123,8 +123,8 @@ let node_param_desc :=
 
 let block == localize(block_desc)
 let block_desc :=
-  | ~=slist(equation, ";");                                    < BEqs >
-  | IF; ~=static_exp; THEN; b1=block; ELSE; b2=block; END; IF; < BIf >
+  | ~=snlist_optlast (equation, ";");                           < BEqs >
+  | IF; ~=static_exp; THEN; b1=block; ELSE; b2=block; END; IF;  < BIf >
 
 let state :=
   | c = constructor; { Estate0 c }
@@ -158,14 +158,14 @@ let automaton_hdl :=
       { s_state; s_body; s_vars; s_until = []; s_unless = [] } }
   | sp = state_pat; ARROW; ds = decl; THEN; e = emission;
     { { s_state = sp; s_vars = fst ds; s_body = snd ds;
-        s_until = [{ e_cond = localize $sloc (EConst(VBitArray [|true|]));
+        s_until = [{ e_cond = localize $sloc (EConst(VBit true));
                      e_reset = true; e_body = fst e;
                      e_nx_state = snd e }];
         s_unless = [] } }
   | sp = state_pat; ARROW; ds = decl; CONTINUE; e = emission;
     { let e_eqs, e_st = e in
       { s_state = sp; s_vars = fst ds; s_body = snd ds;
-        s_until = [{ e_cond = localize $sloc (EConst(VBitArray [|true|]));
+        s_until = [{ e_cond = localize $sloc (EConst(VBit true));
                      e_reset = false; e_body = e_eqs;
                      e_nx_state = e_st }];
         s_unless = [] } }
@@ -240,18 +240,22 @@ let exp_desc :=
   | ~=const;                                                                  < EConst >
   | REG; ~=exp;                                                               < EReg >
   | ~=ident; ~=call_params; ~=tuple(exp);                                     < ECall >
-  | e1=exp; ~=op; e2=exp;                                                     { ECall (op, [], [e1; e2]) }
-  | _n=NOT; e=exp;                                                            { ECall (localize $loc(_n) "not", [], [e])}
+  | e1=exp; ~=op; e2=exp;                                                     { ESupOp (op, [e1; e2]) }
+  | _n=NOT; e=exp;                                                            { ESupOp (localize $loc(_n) "not", [e])}
+  | e1=simple_exp; slice=sntuple(slice_arg, "[", "]")+;                       { ESlice (List.flatten slice, e1) }
+  | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESlice (List.map (fun e -> SliceOne e) (List.flatten idx), e1) }
+  (* FIXME : Is it normal to have None as the first element of the list in all
+   * three cases ? *)
   | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
-  | e1=simple_exp; "["; idx=opt_static_exp; "]";                              { ECall (no_localize "select", [no_localize None; idx], [e1]) }
-(* FIXME : Is it normal to have None as the first element of the list in all
- * three cases ? *)
-  | e1=simple_exp; "["; low=opt_static_exp; ".."; high=opt_static_exp; "]";   { ECall (no_localize "slice",  [no_localize None; low; high], [e1]) }
-  | e1=simple_exp; "["; low=opt_static_exp; ".."; "]";                        { ECall (no_localize "slice_from", [no_localize None; low], [e1]) }
-  | e1=simple_exp; "["; ".."; high=opt_static_exp; "]";                       { ECall (no_localize "slice_to", [no_localize None; high], [e1]) }
-  | ro=rom_or_ram; "<"; addr_size=simple_static_exp; ",";
-      word_size=simple_static_exp; input_file=input_file?; ">"; a=tuple(exp);
-    { EMem  (ro, (addr_size, word_size, input_file), a) }
+  | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
+      word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);
+                                                                              { EMem  (ro, (addr_size, word_size, input_file), a) }
+
+let slice_arg :=
+  |                    "..";                                                  { SliceAll }
+  | lo=opt_static_exp; "..";                                                  { SliceFrom lo }
+  |                    ".."; hi=opt_static_exp;                               { SliceTo hi }
+  | lo=opt_static_exp; ".."; hi=opt_static_exp;                               { Slice (lo, hi) }
 
 let op == localize(_op)
 let _op ==
@@ -261,11 +265,17 @@ let _op ==
   | NAND; { "nand" }  | NOR;  { "nor" }
 
 let const :=
-  | b=BOOL;     { VBitArray (Array.make 1 b) }
+  | b=BOOL;     { VBit b }
   | i=INT;
-    { if fst i > 0 then VBitArray (Misc.bool_array_of_int i)
-      else raise (Errors.Lexical_error (Nonbinary_base, Loc $sloc)) }
-  | "["; "]";   { VBitArray (Array.make 0 false) }
+    {
+      if fst i > 0 then
+        VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_int i)
+      else begin
+        Errors.raise_warning_lexical (Errors.Nonbinary_base (Loc $sloc));
+        VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_dec_int i)
+      end
+    }
+  | "["; "]";   { VNDim [] }
 
 let rom_or_ram == localize(_rom_or_ram)
 let _rom_or_ram :=

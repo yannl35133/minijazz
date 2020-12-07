@@ -26,6 +26,20 @@
 let fold_lefti f acc li =
   snd @@ List.fold_left (fun (i, acc) el -> (i + 1, f acc i el)) (0, acc) li
 
+let fold_left_map2 f acc l1 l2 =
+  let rec fold_left_map2_f (acc, res_l) l1 l2 = match l1, l2 with
+    | [], [] -> acc, List.rev res_l
+    | hd1 :: tl1, hd2 :: tl2 ->
+        let acc', r = f acc hd1 hd2 in fold_left_map2_f (acc', r :: res_l) tl1 tl2
+    | _::_, [] | [], _::_ -> invalid_arg "fold_left_map2"
+  in
+  fold_left_map2_f (acc, []) l1 l2
+
+let option_get ?(error=Invalid_argument "option_get") opt =
+  match opt with
+    | None -> raise error
+    | Some thing -> thing
+
 
 (* Functions to decompose a list into a tuple *)
 exception Arity_error of int * int (*expected, found*)
@@ -116,8 +130,21 @@ let bool_array_of_string s =
   done;
   a
 
-let bool_array_of_int (nbits, v) =
-  Array.init nbits (fun n -> v land (1 lsl (nbits - 1 - n)) <> 0)
+let bool_list_of_int (nbits, v) =
+  List.init nbits (fun n -> v land (1 lsl (nbits - 1 - n)) <> 0)
+
+let exp a n =
+  let rec aux acc n =
+    if n = 1 then
+      acc
+    else if n land 1 <> 0 then
+      aux (acc * a) (n lsl 1)
+    else
+      aux acc (n lsl 1)
+  in aux 1 n
+
+let bool_list_of_dec_int (nbits, v) =
+  List.init (-nbits) (fun n -> v / (exp 10 n) mod (exp 10 (n + 1)) = 1)
 
 exception Int_too_big
 let convert_size s n =

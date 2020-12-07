@@ -38,8 +38,8 @@ let main () =
         "-print-parsing-ast", Arg.Set print_parsing_ast, doc_parsing_ast
       ]
       compile_impl
-      errmsg;
+      errmsg
   with
     | Errors.ErrorDetected -> exit 2;;
 
-main ()
+let () = main ()

@@ -20,17 +20,25 @@ and optional_static_exp = optional_static_exp_desc localized
 (* Netlist expressions *)
 
 type netlist_type =
-  | TBitArray of optional_static_exp
+  | TNDim of optional_static_exp list
   | TProd of netlist_type list
 
+  type slice_param =
+  | SliceAll
+  | SliceOne of  optional_static_exp
+  | SliceFrom of optional_static_exp
+  | SliceTo of   optional_static_exp
+  | Slice of    (optional_static_exp * optional_static_exp)
 
 type exp_desc = (* Removed EPar *)
-  | EConst of ParserAST.value
-  | EVar   of ident
-  | EReg   of exp
-  | ECall  of ident * optional_static_exp list * exp list
+  | EConst  of ParserAST.value
+  | EVar    of ident
+  | EReg    of exp
+  | ESlice  of slice_param list * exp
+  | ESupOp  of ident * exp list 
+  | ECall   of ident * optional_static_exp list * exp list
       (* function * params * args *)
-  | EMem   of mem_kind * (static_exp * static_exp * string option) * exp list
+  | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
       (* ro * (address size * word size * input file) * args *)
 
 and exp = exp_desc localized

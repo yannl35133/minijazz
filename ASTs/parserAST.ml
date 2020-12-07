@@ -59,15 +59,21 @@ and static_typed_ident = static_typed_ident_desc localized
 (* Netlist expressions *)
 
 type netlist_type =
-  | TBitArray of optional_static_exp
+  | TNDim of optional_static_exp list
   | TProd of netlist_type list
 
-let tbit n loc =
-  TBitArray (localize loc (Some (SInt n)))
 
 
 type value =
-  | VBitArray of bool array
+  | VNDim of value list
+  | VBit of bool
+
+type slice_param =
+  | SliceAll
+  | SliceOne of  optional_static_exp
+  | SliceFrom of optional_static_exp
+  | SliceTo of   optional_static_exp
+  | Slice of    (optional_static_exp * optional_static_exp)
 
 type lvalue_desc =
   | LValDrop
@@ -116,9 +122,11 @@ type exp_desc =
   | EVar    of ident
   | EPar    of exp     (* Created purely to have good locations *)
   | EReg    of exp
+  | ESupOp of ident * exp list
+  | ESlice of slice_param list * exp
   | ECall   of ident * optional_static_exp list * exp list
   (* function * params * args *)
-  | EMem    of mem_kind * (static_exp * static_exp * string option) * exp list
+  | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
   | ELet    of eq * exp
   | EMerge  of exp * (exp, eq) match_hdl list
 
@@ -134,13 +142,6 @@ and eq_desc =
   | EQmatch     of exp * (exp, eq) match_hdl list
 
 and eq = eq_desc localized
-
-(* type equation_desc = {
- *   eq_left: lvalue;
- *   eq_right: exp
- * }
- * and equation = equation_desc localized *)
-
 
 type typed_ident_desc = {
   name : ident;

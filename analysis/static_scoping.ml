@@ -1,6 +1,4 @@
 open CommonAST
-
-open ParserAST
 open StaticScopedAST
 
 
@@ -28,17 +26,27 @@ let optional_static_exp env e = match !!e with
       let res = static_exp_full env (relocalize !@e ed) in
       relocalize !@res (Some !!res)
 
+let slice_param env = function
+  | ParserAST.SliceAll ->       SliceAll
+  | ParserAST.SliceOne x ->     SliceOne  (optional_static_exp env x)
+  | ParserAST.SliceFrom lo ->   SliceFrom (optional_static_exp env lo)
+  | ParserAST.SliceTo hi ->     SliceTo   (optional_static_exp env hi)
+  | ParserAST.Slice (lo, hi) -> Slice     (optional_static_exp env lo, optional_static_exp env hi)
 
 let rec exp env e = match !!e with
-  | ParserAST.EConst c ->  relocalize !@e (EConst c)
-  | ParserAST.EVar id ->   relocalize !@e (EVar id)
-  | ParserAST.EPar e ->    exp env e
-  | ParserAST.EReg e ->    relocalize !@e (EReg (exp env e))
+  | ParserAST.EConst c ->             relocalize !@e (EConst c)
+  | ParserAST.EVar id ->              relocalize !@e (EVar id)
+  | ParserAST.EPar e ->               exp env e
+  | ParserAST.ESupOp (id, args) ->    relocalize !@e (ESupOp (id, List.map (exp env) args))
+  | ParserAST.ESlice (params, e) ->   relocalize !@e (ESlice (List.map (slice_param env) params, exp env e))
+  | ParserAST.EReg e ->               relocalize !@e (EReg (exp env e))
   | ParserAST.ECall (fname, params, args) ->
+
      relocalize !@e (ECall (fname, List.map (optional_static_exp env) params, List.map (exp env) args))
   | ParserAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
-     relocalize !@e (EMem (mem_kind, (static_exp_full env addr_size, static_exp_full env word_size, input_file), List.map (exp env) args))
-  | _ -> assert false (* TODO *)
+     relocalize !@e (EMem (mem_kind, (optional_static_exp env addr_size, optional_static_exp env word_size, input_file), List.map (exp env) args))
+
+  | _ -> assert false
 
 let eq _env = assert false
   (* relocalize_fun @@ fun ParserAST.{ eq_left; eq_right } ->
@@ -53,14 +61,14 @@ let rec body env e = relocalize_fun (function
 let starput env = relocalize_fun @@ fun ParserAST.{ name; typed } ->
   let rec fun_typed : ParserAST.netlist_type -> 'a = function
     | TProd l -> TProd (List.map fun_typed l)
-    | TBitArray e -> TBitArray (optional_static_exp env e)
+    | TNDim l -> TNDim (List.map (optional_static_exp env) l)
   in
   { name; typed = relocalize_fun fun_typed typed }
 
 
 let node consts_set (node: ParserAST.node) : node =
   let ParserAST.{ node_name; node_inline; node_inputs; node_outputs; node_params; node_body; node_probes } = !!node in
-  let params_order = Misc.fold_lefti (fun env i el -> Env.add !!(!!el.st_name) i env) Env.empty node_params in
+  let params_order = Misc.fold_lefti (fun env i el -> Env.add !!(!!el.ParserAST.st_name) i env) Env.empty node_params in
   {
     node_name_loc = !@node_name;
     node_loc =      !@node;
@@ -71,7 +79,7 @@ let node consts_set (node: ParserAST.node) : node =
   }
 
 let const consts_set const =
-  let { const_left; const_right } = !!const in
+  let ParserAST.{ const_left; const_right } = !!const in
   {
     const_decl =  static_exp consts_set const_right;
     const_ident = !@const_left;
@@ -79,12 +87,12 @@ let const consts_set const =
   }
 
 let program ParserAST.{ p_consts; p_nodes } : program =
-  let consts_set = List.fold_left (fun set el -> IdentSet.add !!(!!el.const_left) set) IdentSet.empty p_consts in
+  let consts_set = List.fold_left (fun set el -> IdentSet.add !!(!!el.ParserAST.const_left) set) IdentSet.empty p_consts in
   { p_consts = List.fold_left
     (fun env const_ ->
-      Env.add !!(!!const_.const_left) (const consts_set const_) env
+      Env.add !!(!!const_.ParserAST.const_left) (const consts_set const_) env
     ) Env.empty p_consts;
-    p_consts_order = List.map (fun el -> !!(!!el.const_left)) p_consts;
+    p_consts_order = List.map (fun el -> !!(!!el.ParserAST.const_left)) p_consts;
     p_nodes = List.fold_left
     (fun env node_ ->
       Env.add !!ParserAST.(!!node_.node_name) (node consts_set node_) env
