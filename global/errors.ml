@@ -90,13 +90,13 @@ let lexical_error err loc =
   | Unterminated_string   -> "unterminated string@."
   );
   raise ErrorDetected
-  
+
 let syntax_error loc =
   Format.eprintf "%aSyntax error@." print_location loc;
   raise ErrorDetected
 
 let raise_warning_lexical = function
-  | Nonbinary_base loc-> ignore "base unadapted to binary@."; ()
-    
+  | Nonbinary_base _loc -> ignore "base unadapted to binary@."
+
 let raise_warning_dimension = function
-  | InsufficientAnnotations (name, loc, var) -> ()
+  | InsufficientAnnotations (_name, _loc, _var) -> ()

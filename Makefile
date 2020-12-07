@@ -4,3 +4,4 @@ all:
 
 clean:
 	dune clean
+	@rm -f mjc.byte

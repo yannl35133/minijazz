@@ -18,7 +18,7 @@ let dprint_space ff = pp_print_space ff ()
 let dforce_newline ff = pp_force_newline ff ()
 let dforce_linejump = dforce_newline @@ dforce_newline
 
-let rec dprint_list sep printer l = 
+let rec dprint_list sep printer l =
   match l with
   | []     -> nop
   | [h]    -> printer h
@@ -59,10 +59,10 @@ let print_ident id = dprint_string id.desc
 (* Static expression *)
 
 let print_sop sop =
-  let op_str = 
+  let op_str =
     match sop with
-    | SAdd -> "+" | SMinus -> "-" | SMult -> "*" | SDiv -> "/" | SPower -> "^" 
-    | SEq -> "=" | SNeq -> "!=" 
+    | SAdd -> "+" | SMinus -> "-" | SMult -> "*" | SDiv -> "/" | SPower -> "^"
+    | SEq -> "=" | SNeq -> "!="
     | SLt -> "<" | SLeq -> "<=" | SGt -> ">" | SGeq -> ">="
     | SOr -> "||" | SAnd -> "&&"
   in
@@ -76,8 +76,7 @@ let print_sunop unop =
   in
   dprint_string op_str
 
-let rec print_sexp_desc se_desc =
-  match se_desc with
+let rec print_sexp_desc = function
   | SInt i    -> dprint_int i
   | SBool b   -> dprint_bool b
   | SIdent id -> print_ident id
@@ -102,7 +101,7 @@ let print_opt_sexp_desc opt_se_desc =
 let print_opt_sexp opt_se = print_opt_sexp_desc opt_se.desc
 
 let print_stid_desc stid_desc =
-  dprintf "%t:%t" 
+  dprintf "%t:%t"
     (print_ident stid_desc.st_name)
     (print_ident stid_desc.st_type_name)
 
@@ -110,13 +109,11 @@ let print_stid stid = print_stid_desc stid.desc
 
 (* Netlist expressions *)
 
-let rec print_type typ =
-  match typ with
+let rec print_type = function
   | TNDim opt_se_l -> bracket (dprint_list comma_sep print_opt_sexp opt_se_l )
   | TProd l -> par (dprint_list star_sep print_type l)
 
-let rec print_val v =
-  match v with
+let rec print_val = function
   | VNDim l ->
       dprintf "@[<hv>[%t]@]@ " (dprint_list nop print_val l)
   | VBit b -> dprint_bool b
@@ -130,7 +127,7 @@ let print_mem_kind mem_kind = print_mem_kind_desc mem_kind.desc
 
 let infix_nodes = ["xor"; "and"; "or"]
 let is_infix ident_desc =
-   List.mem ident_desc infix_nodes 
+   List.mem ident_desc infix_nodes
 
 let slice_nodes = ["slice"; "slice_from"; "slice_to"]
 let is_slice ident_desc =
@@ -143,8 +140,7 @@ let print_slice_param = function
   | SliceFrom lo ->   dprintf "%t.." (print_opt_sexp lo)
   | Slice (lo, hi) -> dprintf "%t..%t" (print_opt_sexp lo) (print_opt_sexp hi)
 
-let rec print_exp_desc exp_desc =
-  match exp_desc with
+let rec print_exp_desc = function
   | EConst v -> print_val v
   | EVar id  -> print_ident id
   | EPar e   -> par (print_exp e)
@@ -162,7 +158,7 @@ let rec print_exp_desc exp_desc =
   | ECall (ident, params, args) ->
       dbox 2 (
         print_ident ident @@
-        if_empty_list_dprint params 
+        if_empty_list_dprint params
           (mark ((dprint_list comma_sep print_opt_sexp) params)) @@
         par ((dprint_list comma_sep print_exp) args)
       )
@@ -173,7 +169,7 @@ let rec print_exp_desc exp_desc =
         (print_opt_sexp word_size)
         ((dprint_list comma_sep print_exp) args)
 
-and print_exp exp = print_exp_desc exp.desc
+and print_exp exp fmt = print_exp_desc exp.desc fmt
 
 let rec print_lval_desc lval_desc =
   match lval_desc with
@@ -202,7 +198,7 @@ let print_tid_desc tid_desc =
   dbox 1 (
     print_ident tid_desc.name @@
     dprint_if (not (is_bit tid_desc))
-    (dprintf ":@," @@ print_type tid_desc.typed.desc) 
+    (dprintf ":@," @@ print_type tid_desc.typed.desc)
   )
 
 let print_tid tid = print_tid_desc tid.desc
@@ -210,7 +206,7 @@ let print_tid tid = print_tid_desc tid.desc
 let rec print_block_desc block_desc =
   match block_desc with
   | BEqs l -> dprint_list semicolon_sep print_eq l
-  | BIf (se, b1, b2) -> 
+  | BIf (se, b1, b2) ->
       dbox 0 (
         dbox 0 (
           dprint_string "if" @@ dprint_space @@
@@ -260,7 +256,7 @@ let print_const_desc const_desc =
   )
 
 let print_const const = print_const_desc const.desc
-  
+
 let print_program prog =
   dprint_list dforce_newline print_const prog.p_consts @@
   (
