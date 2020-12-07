@@ -135,12 +135,10 @@ let bool_list_of_int (nbits, v) =
 
 let exp a n =
   let rec aux acc n =
-    if n = 1 then
-      acc
-    else if n land 1 <> 0 then
-      aux (acc * a) (n lsl 1)
-    else
-      aux acc (n lsl 1)
+    if n = 0 then 1
+    else if n = 1 then acc
+    else if n land 1 <> 0 then aux (acc * a) (n lsl 1)
+    else aux acc (n lsl 1)
   in aux 1 n
 
 let bool_list_of_dec_int (nbits, v) =
@@ -167,4 +165,3 @@ let rec binary_string_of_int i n =
       (s_of_i q) ^ (s_of_i r)
   in
   convert_size (s_of_i i) n
-

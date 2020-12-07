@@ -271,8 +271,8 @@ let const :=
       if fst i > 0 then
         VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_int i)
       else begin
-        Errors.raise_warning_lexical (Errors.Nonbinary_base (Loc $sloc));
-        VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_dec_int i)
+          Errors.raise_warning_lexical (Errors.Nonbinary_base (Loc $sloc));
+          VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_dec_int i)
       end
     }
   | "["; "]";   { VNDim [] }

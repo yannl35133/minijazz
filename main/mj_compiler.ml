@@ -79,6 +79,9 @@ let lexbuf_from_file file_name =
 
 let compile_impl filename =
   (* input and output files *)
+  if not (Filename.check_suffix filename "mj")
+  then raise (Invalid_argument filename);
+
   let ic, lexbuf = lexbuf_from_file filename in
   let net_name = (Filename.chop_suffix filename ".mj") ^ ".net" in
   let net = open_out net_name in
@@ -87,15 +90,15 @@ let compile_impl filename =
     close_out net
   in
   try
+    Format.printf "parsing %s@." filename;
     base_path := Filename.dirname filename;
 
     (* let pp = Printer.print_program stdout in *)
     (* Parsing of the file *)
     let parsing_ast = parse lexbuf in
-    let _ =
-      if !print_parsing_ast then
-        Printers.ParserAst.print_program parsing_ast Format.std_formatter;
-    in
+
+    if !print_parsing_ast then
+      Printers.ParserAst.print_program parsing_ast Format.std_formatter;
 
     (* let p = pass "Scoping" true Scoping.program p pp in
      *
@@ -117,4 +120,8 @@ let compile_impl filename =
 
     close_all_files ()
   with
-    | x -> close_all_files (); raise x
+  | Invalid_argument fname ->
+     Format.fprintf Format.err_formatter
+       "Invalid filename %s: must end with .mj@." fname;
+     exit 1;
+  | x -> close_all_files (); raise x

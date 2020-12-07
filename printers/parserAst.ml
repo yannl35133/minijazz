@@ -78,8 +78,7 @@ let print_sunop unop =
   in
   dprint_string op_str
 
-let rec print_sexp_desc se_desc =
-  match se_desc with
+let rec print_sexp_desc = function
   | SInt i    -> dprint_int i
   | SBool b   -> dprint_bool b
   | SIdent id -> print_ident id
@@ -112,13 +111,11 @@ let print_stid stid = print_stid_desc stid.desc
 
 (* Netlist expressions *)
 
-let rec print_type typ =
-  match typ with
+let rec print_type = function
   | TNDim opt_se_l -> bracket (dprint_list comma_sep print_opt_sexp opt_se_l )
   | TProd l -> par (dprint_list star_sep print_type l)
 
-let rec print_val v =
-  match v with
+let rec print_val = function
   | VNDim l ->
       dprintf "@[<hv>[%t]@]@ " (dprint_list nop print_val l)
   | VBit b -> dprint_bool b
@@ -145,8 +142,7 @@ let print_slice_param = function
   | SliceFrom lo ->   dprintf "%t.." (print_opt_sexp lo)
   | Slice (lo, hi) -> dprintf "%t..%t" (print_opt_sexp lo) (print_opt_sexp hi)
 
-let rec print_exp_desc exp_desc =
-  match exp_desc with
+let rec print_exp_desc = function
   | EConst v -> print_val v
   | EConstr (Estate0 c) -> print_ident c
   | EConstr (Estaten (c, es)) ->
@@ -182,7 +178,7 @@ let rec print_exp_desc exp_desc =
      dprintf "let %t@ =@ %t" (print_eq eq) (print_exp exp)
   | EMerge _ -> assert false
 
-and print_exp exp = print_exp_desc exp.desc
+and print_exp exp fmt = print_exp_desc exp.desc fmt
 
 and print_lval_desc lval_desc =
   match lval_desc with
