@@ -118,7 +118,7 @@ let rec print_type typ =
 let rec print_val v =
   match v with
   | VNDim l ->
-      dprintf "[%t]" (dprint_list nop print_val l)
+      dprintf "@[<hv>[%t]@]@ " (dprint_list nop print_val l)
   | VBit b -> dprint_bool b
 
 let print_mem_kind_desc mem_kind_desc =
@@ -138,6 +138,7 @@ let is_slice ident_desc =
 
 let print_slice_param = function
   | SliceAll   ->     dprintf ".."
+  | SliceOne x ->     dprintf "%t" (print_opt_sexp x)
   | SliceTo hi ->     dprintf "..%t" (print_opt_sexp hi)
   | SliceFrom lo ->   dprintf "%t.." (print_opt_sexp lo)
   | Slice (lo, hi) -> dprintf "%t..%t" (print_opt_sexp lo) (print_opt_sexp hi)
@@ -148,8 +149,6 @@ let rec print_exp_desc exp_desc =
   | EVar id  -> print_ident id
   | EPar e   -> par (print_exp e)
   | EReg e   -> dprintf "reg@ %t" (print_exp e)
-  | ESelect (idx, arg) ->
-      dprintf "%t[%t]" (print_exp arg) (dprint_list (dprintf ",") print_opt_sexp idx)
   | ESlice (params, arg) ->
       dprintf "%t[%t]" (print_exp arg) (dprint_list (dprintf ",") print_slice_param params)
   | ESupOp (op, args) when !!op = "not" ->

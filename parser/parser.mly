@@ -100,9 +100,6 @@ let typed_ident_desc :=
   | name=ident; ":"; type_ident=sntuple(opt_static_exp, "[", "]")+;
     { { name; typed = localize $loc(type_ident) (TNDim (List.flatten type_ident)) } }
 
-let type_ident ==
-  | "["; ~=opt_static_exp; "]"; < TBitArray >
-
 let opt_static_exp == localize(optional_static_exp_desc)
 let optional_static_exp_desc :=
   | WILDCARD;                 { None }
@@ -188,7 +185,7 @@ let exp_desc :=
   | e1=exp; ~=op; e2=exp;                                                     { ESupOp (op, [e1; e2]) }
   | _n=NOT; e=exp;                                                            { ESupOp (localize $loc(_n) "not", [e])}
   | e1=simple_exp; slice=sntuple(slice_arg, "[", "]")+;                       { ESlice (List.flatten slice, e1) }
-  | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESelect ((List.flatten idx), e1) }
+  | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESlice (List.map (fun e -> SliceOne e) (List.flatten idx), e1) }
   (* FIXME : Is it normal to have None as the first element of the list in all
    * three cases ? *)
   | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
@@ -216,7 +213,7 @@ let const :=
       if fst i > 0 then
         VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_int i)
       else begin
-        Errors.raise_warning (Errors.Nonbinary_base (Loc $sloc));
+        Errors.raise_warning_lexical (Errors.Nonbinary_base (Loc $sloc));
         VNDim (List.map (fun b -> VBit b) @@ Misc.bool_list_of_dec_int i)
       end
     }

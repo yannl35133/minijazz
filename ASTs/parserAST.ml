@@ -69,6 +69,7 @@ type value =
 
 type slice_param =
   | SliceAll
+  | SliceOne of  optional_static_exp
   | SliceFrom of optional_static_exp
   | SliceTo of   optional_static_exp
   | Slice of    (optional_static_exp * optional_static_exp)
@@ -80,7 +81,6 @@ type exp_desc =
   | EReg   of exp
   | ESupOp of ident * exp list
   | ESlice of slice_param list * exp
-  | ESelect of optional_static_exp list * exp
   | ECall  of ident * optional_static_exp list * exp list
       (* function * params * args *)
   | EMem   of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list

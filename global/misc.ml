@@ -26,6 +26,20 @@
 let fold_lefti f acc li =
   snd @@ List.fold_left (fun (i, acc) el -> (i + 1, f acc i el)) (0, acc) li
 
+let fold_left_map2 f acc l1 l2 =
+  let rec fold_left_map2_f (acc, res_l) l1 l2 = match l1, l2 with
+    | [], [] -> acc, List.rev res_l
+    | hd1 :: tl1, hd2 :: tl2 ->
+        let acc', r = f acc hd1 hd2 in fold_left_map2_f (acc', r :: res_l) tl1 tl2
+    | _::_, [] | [], _::_ -> invalid_arg "fold_left_map2"
+  in
+  fold_left_map2_f (acc, []) l1 l2
+
+let option_get ?(error=Invalid_argument "option_get") opt =
+  match opt with
+    | None -> raise error
+    | Some thing -> thing
+
 
 (* Functions to decompose a list into a tuple *)
 exception Arity_error of int * int (*expected, found*)

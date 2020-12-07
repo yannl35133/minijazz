@@ -1,4 +1,5 @@
 open CommonAST
+open StaticTypedPartialAST
 open StaticTypedAST
 
 let rec static_int_exp consts_env ?(params_env=IntEnv.empty) se =
@@ -114,20 +115,21 @@ let optional_static_int_exp env e : optional_static_int_exp = match !!e with
       let res = static_int_exp_full env (relocalize !@e ed) in
       relocalize !@res (Some !!res)
 
-let static_params types env params : static_unknown_exp list =
+let static_params types env fname params : static_unknown_exp list =
   let typed_params = List.map (optional_static_unknown_exp env) params in
   let static_param el ty = match !!el, ty with
     | Some SIntExp e1,  TInt ->  relocalize !@el (SIntExp e1)
     | Some SBoolExp e1, TBool -> relocalize !@el (SBoolExp e1)
     | None,             TInt ->  relocalize !@el (SIntExp None)
     | None,             TBool -> relocalize !@el (SBoolExp None)
-    | Some SIntExp _,   TBool -> raise @@ Errors.WrongTypeParam (List.map static_type_to_string types, "int", "bool", !@el)
-    | Some SBoolExp _,  TInt ->  raise @@ Errors.WrongTypeParam (List.map static_type_to_string types, "bool", "int", !@el)
+    | Some SIntExp _,   TBool -> raise @@ Errors.WrongTypeParam ("int", "bool", !@el, !!fname, List.map static_type_to_string types)
+    | Some SBoolExp _,  TInt ->  raise @@ Errors.WrongTypeParam ("bool", "int", !@el, !!fname, List.map static_type_to_string types)
   in
   List.map2 static_param typed_params types
 
 let slice_param env = function
   | StaticScopedAST.SliceAll ->       SliceAll
+  | StaticScopedAST.SliceOne x ->     SliceOne  (optional_static_int_exp env x)
   | StaticScopedAST.SliceFrom lo ->   SliceFrom (optional_static_int_exp env lo)
   | StaticScopedAST.SliceTo hi ->     SliceTo   (optional_static_int_exp env hi)
   | StaticScopedAST.Slice (lo, hi) -> Slice     (optional_static_int_exp env lo, optional_static_int_exp env hi)
@@ -139,15 +141,13 @@ let rec exp ((fun_env: fun_env), env) e = match !!e with
       relocalize !@e (EVar id)
   | StaticScopedAST.ESupOp (id, args) ->
       relocalize !@e (ESupOp (id, List.map (exp (fun_env, env)) args))
-  | StaticScopedAST.ESelect (params, e) ->
-      relocalize !@e (ESelect (List.map (optional_static_int_exp env) params, exp (fun_env, env) e))
   | StaticScopedAST.ESlice (params, e) ->
       relocalize !@e (ESlice (List.map (slice_param env) params, exp (fun_env, env) e))
   | StaticScopedAST.EReg e ->
       relocalize !@e (EReg (exp (fun_env, env) e))
   | StaticScopedAST.ECall (fname, params, args) ->
       let types = Env.find !!fname fun_env in
-      relocalize !@e (ECall (fname, static_params types env params, List.map (exp (fun_env, env)) args))
+      relocalize !@e (ECall (fname, static_params types env fname params, List.map (exp (fun_env, env)) args))
   | StaticScopedAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
       let addr_size = optional_static_int_exp env addr_size in
       let word_size = optional_static_int_exp env word_size in

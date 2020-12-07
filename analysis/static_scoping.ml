@@ -28,6 +28,7 @@ let optional_static_exp env e = match !!e with
 
 let slice_param env = function
   | ParserAST.SliceAll ->       SliceAll
+  | ParserAST.SliceOne x ->     SliceOne  (optional_static_exp env x)
   | ParserAST.SliceFrom lo ->   SliceFrom (optional_static_exp env lo)
   | ParserAST.SliceTo hi ->     SliceTo   (optional_static_exp env hi)
   | ParserAST.Slice (lo, hi) -> Slice     (optional_static_exp env lo, optional_static_exp env hi)
@@ -37,7 +38,6 @@ let rec exp env e = match !!e with
   | ParserAST.EVar id ->              relocalize !@e (EVar id)
   | ParserAST.EPar e ->               exp env e
   | ParserAST.ESupOp (id, args) ->    relocalize !@e (ESupOp (id, List.map (exp env) args))
-  | ParserAST.ESelect (params, e) ->  relocalize !@e (ESelect (List.map (optional_static_exp env) params, exp env e))
   | ParserAST.ESlice (params, e) ->   relocalize !@e (ESlice (List.map (slice_param env) params, exp env e))
   | ParserAST.EReg e ->               relocalize !@e (EReg (exp env e))
   | ParserAST.ECall (fname, params, args) ->

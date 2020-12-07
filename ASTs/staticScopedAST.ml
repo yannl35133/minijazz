@@ -23,17 +23,17 @@ type netlist_type =
   | TNDim of optional_static_exp list
   | TProd of netlist_type list
 
-type slice_param =
+  type slice_param =
   | SliceAll
+  | SliceOne of  optional_static_exp
   | SliceFrom of optional_static_exp
-  | SliceTo of optional_static_exp
-  | Slice of (optional_static_exp * optional_static_exp)
+  | SliceTo of   optional_static_exp
+  | Slice of    (optional_static_exp * optional_static_exp)
 
 type exp_desc = (* Removed EPar *)
   | EConst  of ParserAST.value
   | EVar    of ident
   | EReg    of exp
-  | ESelect of optional_static_exp list * exp
   | ESlice  of slice_param list * exp
   | ESupOp  of ident * exp list 
   | ECall   of ident * optional_static_exp list * exp list
