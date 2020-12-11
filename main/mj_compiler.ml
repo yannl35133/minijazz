@@ -100,6 +100,10 @@ let compile_impl filename =
     if !print_parsing_ast then
       Printers.ParserAst.print_program parsing_ast Format.std_formatter;
 
+    let static_scoped_ast = Static_scoping.program parsing_ast in
+    let static_typed_ast = Static_typer.program static_scoped_ast in
+    let _netlist_dim_ast = Netlist_dimensioning.program static_typed_ast in
+
     (* let p = pass "Scoping" true Scoping.program p pp in
      *
      * let p = pass "Typing" true Typing.program p pp in
