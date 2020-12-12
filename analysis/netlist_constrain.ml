@@ -3,15 +3,16 @@ open StaticTypedPartialAST
 open NetlistDimensionedAST
 open NetlistConstrainedAST
 
+let rec dim_to_blank_presize s = function
+  | NDim n ->  CDDim  (List.init n (fun i -> PSVar (s, i, UniqueId.get ())))
+  | NProd l -> CDProd (List.map (dim_to_blank_presize s) l)
+
 let rec eq_to_constraints c1 c2 = match c1, c2 with
   | CDProd l1, CDProd l2 -> List.flatten @@ List.rev_map2 eq_to_constraints l1 l2
-  | CDDim l1, CDDim l2 -> List.combine l1 l2
-  | CDDim _, CDProd _
-  | CDProd _, CDDim _ -> failwith "Misdimensioned value"
+  | CDDim l1,  CDDim l2 ->  List.combine l1 l2
+  | CDDim _,   CDProd _
+  | CDProd _,  CDDim _ ->   failwith "Misdimensioned value"
 
-let rec dim_to_blank_presize s = function
-  | NDim n -> CDDim (List.init n (fun i -> PSVar (s, i, UniqueId.get ())))
-  | NProd l -> CDProd (List.map (dim_to_blank_presize s) l)
 
 let fun_env_find fun_env params loc s =
   let regexp_slice = Str.regexp "slice\\(\\(_\\(all\\|to\\|from\\|fromto\\)\\)*\\)" in
@@ -32,9 +33,9 @@ let fun_env_find fun_env params loc s =
     let rec aux i args param = match args, param with
       | "all"  :: tl1,             tl2 -> List.nth pre_dims_in i :: aux (i+1) tl1 tl2
       | "one"  :: tl1, (_, loc) :: tl2 -> PSConst (relocalize loc (SInt 1)) :: aux (i+1) tl1 tl2
-      | "from" :: tl1, (p, _)   :: tl2 -> PSSub (List.nth pre_dims_in i, p) :: aux (i+1) tl1 tl2
+      | "from" :: tl1, (p, loc)   :: tl2 -> PSSub (List.nth pre_dims_in i, PSSub (p, PSConst (relocalize loc @@ SInt 1))) :: aux (i+1) tl1 tl2
       | "to"   :: tl1, (p, _)   :: tl2 -> p :: aux (i+1) tl1 tl2
-      | "fromto" :: tl1, (p1, _) :: (p2, _) :: tl2 -> PSSub (p2, p1) :: aux (i+1) tl1 tl2
+      | "fromto" :: tl1, (p1, _) :: (p2, loc) :: tl2 -> PSSub (p2, PSSub (p1, PSConst (relocalize loc @@ SInt 1))) :: aux (i+1) tl1 tl2
       | [], [] -> []
       | _ -> failwith "Miscounted arguments in slice"
     in

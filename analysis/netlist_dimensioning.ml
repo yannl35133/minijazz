@@ -166,7 +166,7 @@ and assert_exp fun_env dim dimensioned e =
     if dim <> !%%res then raise @@ (* Errors. *)WrongDimension (!%%res, dim, !@e, ErSimple);
     dimensioned, res
   with CannotDimensionYet -> match !!e with
-  | StaticTypedAST.EConst _ -> failwith "Cannot not dimension a constant"      
+  | StaticTypedAST.EConst _ -> failwith "Cannot fail to dimension a constant"      
   | StaticTypedAST.EVar id -> begin
       try
         match Env.find !!id dimensioned with
