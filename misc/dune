@@ -4,6 +4,5 @@
    (:standard -warn-error -A))))
 
 (library
- (name asts)
- (wrapped false)
- (libraries global misc))
+ (name misc)
+ (wrapped false))

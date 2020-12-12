@@ -77,6 +77,9 @@ exception SliceTooMuch of (int * int * Location.location)
 type dimension_warning =
   | InsufficientAnnotations of (string * Location.location * string) (** function name, case location, variable undimensionable *)
 
+(** Constant value does not have a unique dimension *)
+exception NonConstantSize of Location.location
+
 open Location
 
 exception ErrorDetected

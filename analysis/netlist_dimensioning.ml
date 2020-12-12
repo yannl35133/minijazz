@@ -37,8 +37,7 @@ let dim_value loc v =
 
 let supop name args dim =
   let funname = match dim with
-    | 0 -> failwith "Dimension was supposed to be non-zero"
-    | 1 -> !!name
+    | 0 -> !!name
     | n -> !!name ^ "_" ^ string_of_int n
   in
   let params = List.init dim (fun _ -> no_localize (SIntExp None)) in
@@ -48,6 +47,12 @@ let slice params dim =
   let n = List.length params in
   if dim < n then
     raise Errors.TmpError;
+  let params =
+    if dim > n then
+      params @ List.init (dim - n) (fun _ -> StaticTypedAST.SliceAll)
+    else
+      params
+  in
   let slice_dim_removed = function
     | StaticTypedAST.SliceAll ->       1
     | StaticTypedAST.SliceOne _ ->     0
@@ -69,11 +74,11 @@ let slice params dim =
     | StaticTypedAST.SliceTo hi ->     [relocalize !@hi (SIntExp !!hi)]
     | StaticTypedAST.Slice (lo, hi) -> [relocalize !@lo (SIntExp !!lo); relocalize !@hi (SIntExp !!hi)]
   in
-  let dims_removed = List.fold_left (fun acc el -> acc + slice_dim_removed el) 0 params in
+  let dims_remaining = List.fold_left (fun acc el -> acc + slice_dim_removed el) 0 params in
   let size = List.init dim (fun _ -> no_localize @@ SIntExp None) (* One argument per input dimension *)
   and name = String.concat "_" @@ List.map slice_name params
   and args = List.concat_map slice_param params in
-  NDim (dim - dims_removed), fun e1 -> ECall (no_localize @@ "slice_" ^ name, size @ args, [e1])
+  NDim dims_remaining, fun e1 -> ECall (no_localize @@ "slice_" ^ name, size @ args, [e1])
 
 
 let rec exp fun_env dimensioned e = match !!e with
@@ -105,7 +110,6 @@ let rec exp fun_env dimensioned e = match !!e with
         try
           assert_exp fun_env (NDim dim) dimensioned arg
         with (* Errors. *)WrongDimension (n1, n2, loc1, ErSimple) -> raise @@ (* Errors. *)WrongDimension (n1, n2, loc1, ErOp (!!op, !%@dim_ex))
-          
       in
       let dimensioned, dim_args = List.fold_left_map f dimensioned args in      
       dimensioned, dimension (supop op dim_args dim) !@e (NDim dim)
@@ -291,7 +295,7 @@ let eqs fun_env (name, loc, outputs) dimensioned eq_l =
           dimension_eq (Env.add one (Some (NDim 0)) dimensioned', dim_eqs')
   in
   let dimensioned, dim_eqs = dimension_eq @@ List.fold_left_map try_dimensioning dimensioned eq_l in
-  let dimensioned = Env.map (Misc.option_get ~error:(Failure "There remained undimensioned variables")) dimensioned in 
+  let _dimensioned = Env.map (Misc.option_get ~error:(Failure "There remained undimensioned variables")) dimensioned in 
   let dim_eqs = List.map (fun (eq_left, eq_right, loc) -> match eq_left, eq_right with
     | Some lval, Some exp ->
         if !%%lval <> !%%exp then
@@ -300,7 +304,7 @@ let eqs fun_env (name, loc, outputs) dimensioned eq_l =
           relocalize loc { eq_left = lval; eq_right = exp }
     | _ -> failwith "We can have all variables dimensioned, but not be able to dimension everything?"
     ) dim_eqs
-  in { dim_env = dimensioned; equations = dim_eqs }
+  in { equations = dim_eqs }
 
 
 

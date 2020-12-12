@@ -197,7 +197,7 @@ and string string_start buf = parse
 
 and preprocess = parse
     '\\' newline
-      {new_line lexbuf; preprocess lexbuf }
+      { new_line lexbuf; preprocess lexbuf }
   | newline
       { new_line lexbuf; token lexbuf }
   | eof
