@@ -1,9 +1,5 @@
 open CommonAST
 
-let scope_error id =
-  Format.eprintf "%aScope_error: unknown variable %s.@."
-    Location.print_location id.loc id.desc;
-  raise Errors.ErrorDetected
 
 (** Second Ast, resolve name domain *)
 

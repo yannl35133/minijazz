@@ -69,7 +69,7 @@ let compile_impl filename =
 
     if !parse_only then quit 0;
 
-    let static_scoped_ast = Static_scoping.program parsing_ast in
+    let _static_scoped_ast = Scoping.program parsing_ast in
     (* let static_typed_ast = Static_typer.program static_scoped_ast in
      * let _netlist_dim_ast = Netlist_dimensioning.program static_typed_ast in *)
 
