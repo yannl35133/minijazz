@@ -25,6 +25,8 @@
 
 open CommonAST
 
+(** Parsing Ast is produced by lexer/parser *)
+
 (* Static expressions *)
 
 type sop =
@@ -63,6 +65,7 @@ type netlist_type =
   | TProd of netlist_type list
 
 
+
 type value =
   | VNDim of value list
   | VBit of bool
@@ -74,22 +77,6 @@ type slice_param =
   | SliceTo of   optional_static_exp
   | Slice of    (optional_static_exp * optional_static_exp)
 
-type exp_desc =
-  | EConst of value
-  | EVar   of ident
-  | EPar   of exp     (* Created purely to have good locations *)
-  | EReg   of exp
-  | ESupOp of ident * exp list
-  | ESlice of slice_param list * exp
-  | ECall  of ident * optional_static_exp list * exp list
-      (* function * params * args *)
-  | EMem   of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
-      (* ro * address size * word size * input file * args *)
-
-and exp = exp_desc localized
-
-
-
 type lvalue_desc =
   | LValDrop
   | LValId of ident
@@ -97,13 +84,66 @@ type lvalue_desc =
 
 and lvalue = lvalue_desc localized
 
+type 'e state_expr =
+  | Estate0 of ident
+  | Estaten of ident * 'e list
 
-type equation_desc = {
-  eq_left: lvalue;
-  eq_right: exp
-}
-and equation = equation_desc localized
+type state_desc =
+  | Estate0pat of ident
+  | Estatenpat of ident * ident list
 
+type state = state_desc localized
+
+let state_name st = match st.desc with
+  | Estate0pat id -> id
+  | Estatenpat (id, _) -> id
+
+type ('e, 'b) match_hdl = {
+    m_constr: constructor;
+    m_body: 'b
+  }
+
+type ('e, 'b) escape = {
+    e_cond: 'e;
+    e_reset: bool;
+    e_body: 'b;
+    e_nx_state: 'e state_expr
+  }
+
+type ('e, 'b) automaton_hdl = {
+    s_state: state;
+    s_vars: ident list;
+    s_body: 'b;
+    s_until: ('e, 'b) escape list;
+    s_unless: ('e, 'b) escape list
+  }
+
+type exp_desc =
+  | EConst  of value
+  | EConstr of exp state_expr
+  | EVar    of ident
+  | EPar    of exp     (* Created purely to have good locations *)
+  | EReg    of exp
+  | ESupOp of ident * exp list
+  | ESlice of slice_param list * exp
+  | ECall   of ident * optional_static_exp list * exp list
+  (* function * params * args *)
+  | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
+  | ELet    of eq * exp
+  | EMerge  of exp * (exp, eq) match_hdl list
+
+and exp = exp_desc localized
+
+and eq_desc =
+  | EQempty
+  | EQeq        of lvalue * exp (* p = e *)
+  | EQand       of eq list (* eq1; ... ; eqn *)
+  | EQlet       of eq * eq (* let eq in eq *)
+  | EQreset     of eq * exp (* reset eq every e *)
+  | EQautomaton of (exp, eq) automaton_hdl list
+  | EQmatch     of exp * (exp, eq) match_hdl list
+
+and eq = eq_desc localized
 
 type typed_ident_desc = {
   name : ident;
@@ -113,7 +153,7 @@ and typed_ident = typed_ident_desc localized
 
 
 type block_desc =
-    | BEqs of equation list
+    | BEqs of eq list
     | BIf  of static_exp * block * block
 
 and block = block_desc localized
@@ -141,152 +181,3 @@ type program = {
   p_consts: const list;
   p_nodes : node list;
 }
-
-(* 
-module TypedAST = struct
-
-(* Types and typed expressions *)
-
-type static_type =
-  | TInt
-  | TBool
-
-type 'a static_typed =
-  {
-    st_desc: 'a;
-    st_type: static_type;
-    st_loc: Location.location
-  }
-
-let (!$!) = fun obj -> obj.st_desc
-let (!$$) = fun obj -> obj.st_type
-let (!$@) = fun obj -> obj.st_loc
-
-(* let static_type { desc; loc } t = {
-  st_desc = desc;
-  st_type = t;
-  st_loc = loc
-} *)
-
-(* Static expressions *)
-
-type int_op = SAdd | SMinus | SMult | SDiv | SPower
-type int_bool_op = SEq | SNeq | SLt | SLeq | SGt | SGeq
-type bool_op = SOr | SAnd
-
-type sop =
-  | IntOp of int_op
-  | IntBoolOp of int_bool_op
-  | BoolOp of bool_op
-
-type int_unop = SNeg
-type bool_unop = SNot
-type sunop = IntUnop of int_unop | BoolUnop of bool_unop
-
-type static_exp_desc =
-  | SInt   of int
-  | SBool  of bool
-  | SIdent of ident
-  | SUnOp  of      sunop * static_exp
-  | SBinOp of        sop * static_exp * static_exp
-  | SIf    of static_exp * static_exp * static_exp  (* se1 ? se2 : se3 *)
-
-and static_exp = static_exp_desc static_typed
-
-
-(* Netlist expressions *)
-
-type netlist_type =
-  | TBit
-  | TBitArray of static_exp
-  | TProd of netlist_type list
-
-type 'a netlist_typed =
-  {
-    nl_desc: 'a;
-    nl_type: netlist_type;
-    nl_loc: Location.location
-  }
-
-let (!&!) = fun obj -> obj.nl_desc
-let (!&&) = fun obj -> obj.nl_type
-let (!&@) = fun obj -> obj.nl_loc
-
-(* let netlist_type { desc; loc } t = {
-  nl_desc = desc;
-  nl_type = t;
-  nl_loc = loc
-} *)
-
-type mem_kind_desc = MRom | MRam
-and mem_kind = mem_kind_desc localized
-
-type value =
-  | VBit      of bool
-  | VBitArray of bool array
-
-type netlist_exp_desc =
-  | EConst of value
-  | EVar   of ident
-  | EReg   of netlist_exp
-  | ECall  of ident_desc * static_exp list * netlist_exp list
-      (* function * params * args *)
-  | EMem   of mem_kind * (static_exp * static_exp * string option) * netlist_exp list
-      (* ro * address size * word size * input file * args *)
-
-and netlist_exp = netlist_exp_desc netlist_typed
-
-
-type lvalue_desc =
-  | LValDrop
-  | LValId of ident
-  | LValTuple of lvalue list
-
-and lvalue = lvalue_desc localized
-
-
-type equation_desc = {
-  eq_left: lvalue;
-  eq_right: netlist_exp
-}
-and equation = equation_desc localized
-
-
-type block_desc =
-    | BEqs of equation list
-    | BIf  of static_exp * block * block
-
-and block = block_desc localized
-
-
-type inline_status = Inline | NotInline
-
-
-type node_desc = {
-  (* node_name:    ident; *)
-  node_params : ident list;
-  node_inputs : ident list;
-  node_outputs: ident list;
-  node_static_vars: static_exp Env.t;
-  node_netlist_vars: netlist_exp Env.t;
-  node_body:    block;
-  (* n_constraints : static_exp list; *)
-  node_inline:  inline_status;
-  node_probes:  ident list;
-}
-and node = node_desc localized
-and nodes = node Env.t
-
-
-and consts = {
-  const_values: static_exp Env.t;
-  const_idents: Location.location Env.t;
-  const_decls: Location.location Env.t
-}
-
-type program = {
-  p_consts: consts;
-  p_nodes : node list;
-}
-
-end *)

@@ -93,31 +93,18 @@ let compile_impl filename =
     Format.printf "parsing %s@." filename;
     base_path := Filename.dirname filename;
 
-    (* let pp = Printer.print_program stdout in *)
-    (* Parsing of the file *)
     let parsing_ast = parse lexbuf in
-    Format.printf "done parsing@.";
 
     if !print_parsing_ast then
       Printers.ParserAst.print_program parsing_ast Format.std_formatter;
 
-    (* let p = pass "Scoping" true Scoping.program p pp in
-     *
-     * let p = pass "Typing" true Typing.program p pp in
-     *
-     * let p = pass "Normalize" true Normalize.program p pp in
-     *
-     * let p = pass "Callgraph" true Callgraph.program p pp in *)
+    if !parse_only then (close_all_files (); exit 0);
 
-    (* let p = pass "Simplify" true Simplify.program p pp in *)
+    let static_scoped_ast = Static_scoping.program parsing_ast in
+    let static_typed_ast = Static_typer.program static_scoped_ast in
+    let _netlist_dim_ast = Netlist_dimensioning.program static_typed_ast in
 
-    (* let p = Mj2net.program p in *)
-
-    (* let p = if !netlist_simplify
-     *         then Netlist_simplify.simplify p
-     *         else p in
-     *
-     * Netlist_printer.print_program net p; *)
+    if !type_only then (close_all_files (); exit 0);
 
     close_all_files ()
   with

@@ -1,0 +1,6 @@
+two_state_machine(i) = (o) where
+automaton
+  FstSt -> do x = x & i then SndSt
+| SndSt -> do x = x ^ i then Fst
+end
+end where

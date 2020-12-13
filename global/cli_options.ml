@@ -34,6 +34,9 @@ let main_node = ref "main"
 
 let print_parsing_ast = ref false
 
+let parse_only = ref false
+let type_only = ref false
+
 let base_path = ref ""
 
 let show_version () =
@@ -46,3 +49,5 @@ and doc_full_type_info = "\t\tPrint full type information"
 and doc_netlist_simplify = "\t\t\tSimplify the compiled net-list"
 and doc_main_node = "\t\t\tSet the main node"
 and doc_parsing_ast = "\t\tPrint program after parsing it"
+and doc_parse_only = "\t\tStop execution after parsing"
+and doc_type_only = "\t\tStop execution after typing"

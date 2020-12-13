@@ -134,28 +134,40 @@ let slice_param env = function
   | StaticScopedAST.SliceTo hi ->     SliceTo   (optional_static_int_exp env hi)
   | StaticScopedAST.Slice (lo, hi) -> Slice     (optional_static_int_exp env lo, optional_static_int_exp env hi)
 
-let rec exp ((fun_env: fun_env), env) e = match !!e with
-  | StaticScopedAST.EConst c ->
-      relocalize !@e (EConst c)
-  | StaticScopedAST.EVar id -> 
-      relocalize !@e (EVar id)
+let rec exp_desc ((fun_env: fun_env), env) = function
+  | StaticScopedAST.EConst c -> EConst c
+  | StaticScopedAST.EConstr _ -> assert false
+  | StaticScopedAST.EVar id -> EVar id
   | StaticScopedAST.ESupOp (id, args) ->
-      relocalize !@e (ESupOp (id, List.map (exp (fun_env, env)) args))
+     ESupOp (id, List.map (exp (fun_env, env)) args)
   | StaticScopedAST.ESlice (params, e) ->
-      relocalize !@e (ESlice (List.map (slice_param env) params, exp (fun_env, env) e))
+     ESlice (List.map (slice_param env) params, exp (fun_env, env) e)
   | StaticScopedAST.EReg e ->
-      relocalize !@e (EReg (exp (fun_env, env) e))
+     EReg (exp (fun_env, env) e)
   | StaticScopedAST.ECall (fname, params, args) ->
-      let types = Env.find !!fname fun_env in
-      relocalize !@e (ECall (fname, static_params types env fname params, List.map (exp (fun_env, env)) args))
+     let types = Env.find !!fname fun_env in
+     let static_typed_params = static_params types env fname params in
+      ECall (fname, static_typed_params, List.map (exp (fun_env, env)) args)
   | StaticScopedAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
       let addr_size = optional_static_int_exp env addr_size in
       let word_size = optional_static_int_exp env word_size in
-      relocalize !@e (EMem (mem_kind, (addr_size, word_size, input_file), List.map (exp (fun_env, env)) args))
+      let args = List.map (exp (fun_env, env)) args in
+      EMem (mem_kind, (addr_size, word_size, input_file), args)
+  | StaticScopedAST.ELet _ -> assert false
+  | StaticScopedAST.EMerge _ -> assert false
 
-let eq env = relocalize_fun @@ fun StaticScopedAST.{ eq_left; eq_right } ->
-  { eq_left; eq_right = exp env eq_right }
+and exp env e = relocalize !@e @@ exp_desc env !!e
 
+and eq_desc env = function
+  | StaticScopedAST.EQempty -> EQempty
+  | StaticScopedAST.EQeq (lv, e) -> EQeq (lv, exp env e)
+  | StaticScopedAST.EQand es -> EQand (List.map (eq env) es)
+  | StaticScopedAST.EQlet (e1, e2) -> EQlet (eq env e1, eq env e2)
+  | StaticScopedAST.EQreset (e, ex) -> EQreset (eq env e, exp env ex)
+  | StaticScopedAST.EQautomaton _ -> assert false
+  | StaticScopedAST.EQmatch _ -> assert false
+
+and eq env eq = relocalize !@eq @@ eq_desc env !!eq
 
 let rec body (fun_env, env) e = relocalize_fun (function
   | StaticScopedAST.BIf (condition, block1, block2) -> BIf (static_bool_exp_full env condition, body (fun_env, env) block1, body (fun_env, env) block2)

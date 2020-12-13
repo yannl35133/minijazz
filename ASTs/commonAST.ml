@@ -1,4 +1,4 @@
-
+type constructor_desc = string
 type ident_desc = string
 module Env = Map.Make (struct type t = ident_desc let compare = compare end)
 module IntEnv = Map.Make (Int)
@@ -31,6 +31,7 @@ let no_localize x = {
   loc = Location.no_location
 }
 
+type constructor = constructor_desc localized
 type ident = ident_desc localized
 
 type inline_status = Inline | NotInline
