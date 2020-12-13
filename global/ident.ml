@@ -26,27 +26,28 @@
 type t = {
   i_id : int;
   i_name : string;
-  i_from_source : bool
+  i_loc: Location.location
 }
 
-let string_of_ident id =
-  if id.i_from_source then
-    id.i_name
-  else
-    id.i_name^"_"^(string_of_int id.i_id)
+let compare i1 i2 = compare i1.i_id i2.i_id
+
+let string_of_ident id = id.i_name^"_"^(string_of_int id.i_id)
 
 let print_ident ff id =
   Format.fprintf ff "%s" (string_of_ident id)
 
-module StringEnv = Map.Make (struct type t = string let compare = compare end)
+let dprint_ident id ff = print_ident ff id
+
+module StringEnv = Map.Make (struct type t = string
+                                    let compare = String.compare end)
 
 let ident_counter = ref 0
-let fresh_ident from_source s =
+let fresh_ident loc s =
   incr ident_counter;
-  { i_id = !ident_counter; i_name = s; i_from_source = from_source }
+  { i_id = !ident_counter; i_name = s; i_loc = loc }
 
 let copy id =
-  fresh_ident false (string_of_ident id)
+  fresh_ident id.i_loc (string_of_ident id)
 
 let symbol_table = ref StringEnv.empty
 let reset_symbol_table () =
@@ -55,9 +56,7 @@ let ident_of_string s =
   if StringEnv.mem s !symbol_table then
     StringEnv.find s !symbol_table
   else (
-    let id = fresh_ident true s in
+    let id = fresh_ident Location.no_location s in
     symbol_table := StringEnv.add s id !symbol_table;
     id
   )
-
-let fresh_ident = fresh_ident false

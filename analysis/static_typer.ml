@@ -19,25 +19,25 @@
  *   in
  *
  *   try match !!se with
- *     | StaticScopedAST.SInt n ->
+ *     | ParserAST.SInt n ->
  *         relocalize !@se (SInt n)
- *     | StaticScopedAST.SBool _ ->
+ *     | ParserAST.SBool _ ->
  *         raise Errors.TmpError
- *     | StaticScopedAST.SConst id -> begin
+ *     | ParserAST.SConst id -> begin
  *         match Env.find !!id consts_env with
  *           | TInt -> relocalize !@se (SIConst id)
  *           | TBool -> raise Errors.TmpError
  *         end
- *     | StaticScopedAST.SParam nb -> begin
+ *     | ParserAST.SParam nb -> begin
  *       match IntEnv.find nb params_env with
  *         | TInt -> relocalize !@se (SIParam nb)
  *         | TBool -> raise Errors.TmpError
  *       end
- *     | StaticScopedAST.SUnOp (sunop, se1) ->
+ *     | ParserAST.SUnOp (sunop, se1) ->
  *         relocalize !@se (static_int_unop sunop se1)
- *     | StaticScopedAST.SBinOp (sop, se1, se2) ->
+ *     | ParserAST.SBinOp (sop, se1, se2) ->
  *         relocalize !@se (static_int_binop sop se1 se2)
- *     | StaticScopedAST.SIf (seb, se1, se2) ->
+ *     | ParserAST.SIf (seb, se1, se2) ->
  *         relocalize !@se (SIIf (fb seb, fi se1, fi se2))
  *   with Errors.TmpError -> raise @@ Errors.WrongType ("bool", "int", !@se)
  *
@@ -63,25 +63,25 @@
  *
  *   try
  *     match !!se with
- *       | StaticScopedAST.SInt _ ->
+ *       | ParserAST.SInt _ ->
  *           raise Errors.TmpError
- *       | StaticScopedAST.SBool b ->
+ *       | ParserAST.SBool b ->
  *           relocalize !@se (SBool b)
- *       | StaticScopedAST.SConst id -> begin
+ *       | ParserAST.SConst id -> begin
  *           match Env.find !!id consts_env with
  *             | TInt -> raise Errors.TmpError
  *             | TBool -> relocalize !@se (SBConst id)
  *           end
- *       | StaticScopedAST.SParam nb -> begin
+ *       | ParserAST.SParam nb -> begin
  *         match IntEnv.find nb params_env with
  *           | TInt -> raise Errors.TmpError
  *           | TBool -> relocalize !@se (SBParam nb)
  *         end
- *       | StaticScopedAST.SUnOp (sunop, se1) ->
+ *       | ParserAST.SUnOp (sunop, se1) ->
  *           relocalize !@se (static_bool_unop sunop se1)
- *       | StaticScopedAST.SBinOp (sop, se1, se2) ->
+ *       | ParserAST.SBinOp (sop, se1, se2) ->
  *           relocalize !@se (static_bool_binop sop se1 se2)
- *       | StaticScopedAST.SIf (seb, se1, se2) ->
+ *       | ParserAST.SIf (seb, se1, se2) ->
  *           relocalize !@se (SBIf (fb seb, fb se1, fb se2))
  *     with Errors.TmpError -> raise @@ Errors.WrongType ("int", "bool", !@se)
  *
@@ -128,54 +128,54 @@
  *   List.map2 static_param typed_params types
  *
  * let slice_param env = function
- *   | StaticScopedAST.SliceAll ->       SliceAll
- *   | StaticScopedAST.SliceOne x ->     SliceOne  (optional_static_int_exp env x)
- *   | StaticScopedAST.SliceFrom lo ->   SliceFrom (optional_static_int_exp env lo)
- *   | StaticScopedAST.SliceTo hi ->     SliceTo   (optional_static_int_exp env hi)
- *   | StaticScopedAST.Slice (lo, hi) -> Slice     (optional_static_int_exp env lo, optional_static_int_exp env hi)
+ *   | ParserAST.SliceAll ->       SliceAll
+ *   | ParserAST.SliceOne x ->     SliceOne  (optional_static_int_exp env x)
+ *   | ParserAST.SliceFrom lo ->   SliceFrom (optional_static_int_exp env lo)
+ *   | ParserAST.SliceTo hi ->     SliceTo   (optional_static_int_exp env hi)
+ *   | ParserAST.Slice (lo, hi) -> Slice     (optional_static_int_exp env lo, optional_static_int_exp env hi)
  *
  * let rec exp_desc ((fun_env: fun_env), env) = function
- *   | StaticScopedAST.EConst c -> EConst c
- *   | StaticScopedAST.EConstr _ -> assert false
- *   | StaticScopedAST.EVar id -> EVar id
- *   | StaticScopedAST.ESupOp (id, args) ->
+ *   | ParserAST.EConst c -> EConst c
+ *   | ParserAST.EConstr _ -> assert false
+ *   | ParserAST.EVar id -> EVar id
+ *   | ParserAST.ESupOp (id, args) ->
  *      ESupOp (id, List.map (exp (fun_env, env)) args)
- *   | StaticScopedAST.ESlice (params, e) ->
+ *   | ParserAST.ESlice (params, e) ->
  *      ESlice (List.map (slice_param env) params, exp (fun_env, env) e)
- *   | StaticScopedAST.EReg e ->
+ *   | ParserAST.EReg e ->
  *      EReg (exp (fun_env, env) e)
- *   | StaticScopedAST.ECall (fname, params, args) ->
+ *   | ParserAST.ECall (fname, params, args) ->
  *      let types = Env.find !!fname fun_env in
  *      let static_typed_params = static_params types env fname params in
  *       ECall (fname, static_typed_params, List.map (exp (fun_env, env)) args)
- *   | StaticScopedAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
+ *   | ParserAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
  *       let addr_size = optional_static_int_exp env addr_size in
  *       let word_size = optional_static_int_exp env word_size in
  *       let args = List.map (exp (fun_env, env)) args in
  *       EMem (mem_kind, (addr_size, word_size, input_file), args)
- *   | StaticScopedAST.ELet _ -> assert false
- *   | StaticScopedAST.EMerge _ -> assert false
+ *   | ParserAST.ELet _ -> assert false
+ *   | ParserAST.EMerge _ -> assert false
  *
  * and exp env e = relocalize !@e @@ exp_desc env !!e
  *
  * and eq_desc env = function
- *   | StaticScopedAST.EQempty -> EQempty
- *   | StaticScopedAST.EQeq (lv, e) -> EQeq (lv, exp env e)
- *   | StaticScopedAST.EQand es -> EQand (List.map (eq env) es)
- *   | StaticScopedAST.EQlet (e1, e2) -> EQlet (eq env e1, eq env e2)
- *   | StaticScopedAST.EQreset (e, ex) -> EQreset (eq env e, exp env ex)
- *   | StaticScopedAST.EQautomaton _ -> assert false
- *   | StaticScopedAST.EQmatch _ -> assert false
+ *   | ParserAST.EQempty -> EQempty
+ *   | ParserAST.EQeq (lv, e) -> EQeq (lv, exp env e)
+ *   | ParserAST.EQand es -> EQand (List.map (eq env) es)
+ *   | ParserAST.EQlet (e1, e2) -> EQlet (eq env e1, eq env e2)
+ *   | ParserAST.EQreset (e, ex) -> EQreset (eq env e, exp env ex)
+ *   | ParserAST.EQautomaton _ -> assert false
+ *   | ParserAST.EQmatch _ -> assert false
  *
  * and eq env eq = relocalize !@eq @@ eq_desc env !!eq
  *
  * let rec body (fun_env, env) e = relocalize_fun (function
- *   | StaticScopedAST.BIf (condition, block1, block2) -> BIf (static_bool_exp_full env condition, body (fun_env, env) block1, body (fun_env, env) block2)
- *   | StaticScopedAST.BEqs eq_l -> BEqs (List.map (eq (fun_env, env)) eq_l)
+ *   | ParserAST.BIf (condition, block1, block2) -> BIf (static_bool_exp_full env condition, body (fun_env, env) block1, body (fun_env, env) block2)
+ *   | ParserAST.BEqs eq_l -> BEqs (List.map (eq (fun_env, env)) eq_l)
  *   ) e
  *
- * let starput env = relocalize_fun @@ fun StaticScopedAST.{ name; typed } ->
- *   let rec fun_typed : StaticScopedAST.netlist_type -> 'a = function
+ * let starput env = relocalize_fun @@ fun ParserAST.{ name; typed } ->
+ *   let rec fun_typed : ParserAST.netlist_type -> 'a = function
  *     | TProd l -> TProd (List.map fun_typed l)
  *     | TNDim l -> TNDim (List.map (optional_static_int_exp env) l)
  *   in
@@ -190,10 +190,10 @@
  *   let param_env = Misc.fold_lefti (fun env i el -> IntEnv.add i !! (!!el.st_type) env) IntEnv.empty new_params in
  *   new_params, param_env
  *
- * let fun_env StaticScopedAST.{ node_params; _ } =
+ * let fun_env ParserAST.{ node_params; _ } =
  *   List.map (fun (param: ParserAST.static_typed_ident) -> (!!) @@ static_type_of_string !!param.st_type_name) node_params
  *
- * let node fun_env consts_env StaticScopedAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
+ * let node fun_env consts_env ParserAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
  *   let new_params, params_env = params node_params in
  *   {
  *     node_params = new_params;
@@ -203,13 +203,13 @@
  *     node_name_loc; node_loc; node_inline; node_probes
  *   }
  *
- * let const consts_env StaticScopedAST.{ const_decl; const_ident; const_total } =
+ * let const consts_env ParserAST.{ const_decl; const_ident; const_total } =
  *   {
  *     const_decl = static_unknown_exp consts_env const_decl;
  *     const_ident; const_total
  *   }
  *
- * let program StaticScopedAST.{ p_consts; p_consts_order; p_nodes } : program =
+ * let program ParserAST.{ p_consts; p_consts_order; p_nodes } : program =
  *   let type_const { const_decl; _ } = match !!const_decl with
  *     | SIntExp _ -> TInt
  *     | SBoolExp _ -> TBool

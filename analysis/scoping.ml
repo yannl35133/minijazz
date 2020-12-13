@@ -26,21 +26,28 @@
 open CommonAST
 open ParserAST
 
+(** verify all names are well defined
+    merge all ident to unique id *)
+
+module NameEnv = Map.Make (struct type t = string
+                               let compare = String.compare end)
+
 let scope_error (id:ident) =
   Format.eprintf "%aError: unknown variable %s.@."
-    Location.print_location id.loc id.desc;
+    Location.print_location id.i_loc id.i_name;
   raise Errors.ErrorDetected
 
 let duplicate_error kind (id:ident) =
   Format.eprintf "%aError: duplicate %s name: %s.@."
-    Location.print_location id.loc kind id.desc;
+    Location.print_location id.i_loc kind id.i_name;
   raise Errors.ErrorDetected
 
 (* static *)
 
 let rec check_st_exp_desc s e = match e with
   | SInt _ | SBool _ -> e
-  | SIdent id -> if IdentSet.mem !!id s then e else scope_error id
+  | SIdent id -> (try SIdent (NameEnv.find id.i_name s)
+                 with Not_found -> scope_error id)
   | SPar e -> check_st_exp_desc s e.desc
   | SUnOp (op, e) -> SUnOp (op, check_st_exp s e)
   | SBinOp (op, e1, e2) -> SBinOp (op, check_st_exp s e1, check_st_exp s e2)
@@ -64,9 +71,11 @@ let check_slice s = function
 
 let rec check_exp_desc ((s, c, d) as env) e = match e with
   | EConst _ -> e
-  | EConstr (Estate0 id) -> if IdentSet.mem !!id c then e else scope_error id
+  | EConstr (Estate0 id) -> (try EConstr (Estate0 (NameEnv.find id.i_name c))
+                            with Not_found -> scope_error id)
   | EConstr _ -> assert false
-  | EVar id -> if IdentSet.mem !!id d then e else scope_error id
+  | EVar id -> (try EVar (NameEnv.find id.i_name d)
+               with Not_found -> scope_error id)
   | EPar e -> check_exp_desc env !!e
   | EReg e -> EReg (check_exp env e)
   | ESupOp (op, es) -> ESupOp (op, List.map (check_exp env) es)
@@ -88,7 +97,7 @@ and check_exp env e = relocalize !@e @@ check_exp_desc env !!e
 
 let rec insert_lvalue ((s,c,d) as env) lv = match lv.desc with
   | LValDrop -> env
-  | LValId id -> s, c, IdentSet.add !!id d
+  | LValId id -> s, c, NameEnv.add id.i_name id d
   | LValTuple ids -> List.fold_left insert_lvalue env ids
 
 let filter_eq (env) d = match !!d with
@@ -112,22 +121,22 @@ and check_decl env d = relocalize !@d @@ check_decl_desc env !!d
 (* shortcut to build set from list
    raise error if insert duplicates *)
 
-let build kind f lst env =
-  List.fold_left (fun s c -> if IdentSet.mem !!(f c) s
+let build kind (f: 'a -> ident) lst env =
+  List.fold_left (fun s c -> if NameEnv.mem (f c).i_name s
                             then duplicate_error kind (f c)
-                            else IdentSet.add !!(f c) s) env lst
+                            else NameEnv.add (f c).i_name (f c) s) env lst
 
 (* check program names *)
 let check_names p =
   (* global env *)
-  let s = build "constant" (fun c -> c.const_left) p.p_consts IdentSet.empty in
-  let d = build "node" (fun n -> n.node_name) p.p_nodes IdentSet.empty in
+  let s = build "constant" (fun c -> c.const_left) p.p_consts NameEnv.empty in
+  let d = build "node" (fun n -> n.node_name) p.p_nodes NameEnv.empty in
 
   (* check doubles enum name *)
-  let _ = build "enum" (fun e -> e.enum_name) p.p_enums IdentSet.empty in
+  let _ = build "enum" (fun e -> e.enum_name) p.p_enums NameEnv.empty in
 
   let c_lst = List.concat (List.map (fun e -> e.enum_pats) p.p_enums) in
-  let c = build "constructor" (fun x -> x) c_lst IdentSet.empty in
+  let c = build "constructor" (fun x -> x) c_lst NameEnv.empty in
 
   let node n =
     let s = build "parameter" (fun p -> p.st_name) n.node_params s in

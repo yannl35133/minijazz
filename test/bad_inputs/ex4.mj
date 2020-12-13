@@ -1,0 +1,7 @@
+node() = () where
+  o = 1
+end where
+
+node() = o where
+  o = 2
+end where

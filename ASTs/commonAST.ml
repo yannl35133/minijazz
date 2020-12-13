@@ -1,10 +1,3 @@
-type constructor_desc = string
-type ident_desc = string
-module Env = Map.Make (struct type t = ident_desc let compare = compare end)
-module IntEnv = Map.Make (Int)
-module IdentSet = Set.Make (struct type t = ident_desc let compare = compare end)
-
-
 (* Localize an element *)
 
 type 'a localized =
@@ -33,8 +26,13 @@ let no_localize x = {
     loc = Location.no_location
   }
 
-type constructor = constructor_desc localized
-type ident = ident_desc localized
+type name = string localized
+type constructor = Ident.t
+type ident = Ident.t
+
+module Env = Map.Make (struct type t = ident let compare = compare end)
+module IntEnv = Map.Make (Int)
+module IdentSet = Set.Make (struct type t = ident let compare = compare end)
 
 type inline_status = Inline | NotInline
 

@@ -71,8 +71,9 @@ let snlist_optlast (x, sep) :=
   | ~=x; sep; ~=snlist_optlast (x, sep);  < (::) >
 
 let localize (x) == ~=x; { localize $sloc x }
-let ident == localize(IDENT)
-let constructor == localize(CONSTRUCTOR)
+let name  == localize(IDENT)
+let ident := id=IDENT; { Ident.fresh_ident (Loc $sloc) id }
+let constructor := id=CONSTRUCTOR; { Ident.fresh_ident (Loc $sloc) id }
 
 let program :=
   | p_consts = list(const_decl);
@@ -123,9 +124,9 @@ let node_params :=
 
 let node_param :=
   | st_name=ident;
-      { { st_name; st_type_name = localize $sloc "int"; st_loc = Loc $sloc } }
-  | st_name=ident; ":"; st_type_name=ident;
-      { { st_name; st_type_name; st_loc = Loc $sloc  } }
+    { { st_name; st_type_name = localize $sloc "int"; st_loc = Loc $sloc } }
+  | st_name=ident; ":"; st_type_name=name;
+    { { st_name; st_type_name; st_loc = Loc $sloc  } }
 
 let state :=
   | c = constructor; { Estate0 c }
@@ -250,10 +251,10 @@ let exp_desc :=
   | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESlice (List.map (fun e -> SliceOne e) (List.flatten idx), e1) }
   (* FIXME : Is it normal to have None as the first element of the list in all
    * three cases ? *)
-  | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
+  | e1=exp; _c="."; e2=exp;                                                   { ECall (Ident.fresh_ident (Loc $loc(_c)) "concat", [no_localize None; no_localize None], [e1; e2]) }
   | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
       word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);
-                                                                              { EMem  (ro, (addr_size, word_size, input_file), a) }
+    { EMem  (ro, (addr_size, word_size, input_file), a) }
 
 let slice_arg :=
   |                    "..";                                                  { SliceAll }
@@ -287,7 +288,7 @@ let _rom_or_ram :=
   | RAM;        { MRam }
 
 let input_file :=
-  | ","; STRING
+  | ","; localize(STRING)
 
 let call_params :=
   | (* empty *)   { [] }

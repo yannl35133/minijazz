@@ -51,7 +51,7 @@ and optional_static_exp = optional_static_exp_desc localized
 
 type static_typed_ident = {
   st_name:      ident;
-  st_type_name: ident; (* ideally, "int" or "bool" *)
+  st_type_name: name; (* ideally, "int" or "bool" *)
   st_loc: Location.location;
 }
 
@@ -119,14 +119,14 @@ type exp_desc =
   | EVar    of ident
   | EPar    of exp     (* Created purely to have good locations *)
   | EReg    of exp
-  | ESupOp  of ident * exp list
+  | ESupOp  of name * exp list
   | ESlice  of slice_param list * exp
   | ECall   of ident * optional_static_exp list * exp list
   (* function * params * args *)
-  | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
+  | EMem    of mem_kind * (optional_static_exp * optional_static_exp * name option) * exp list
   | ELet    of decl * exp
   | EMerge  of exp * (exp, decl) match_hdl list
-  | EMatch     of exp * (exp, decl) match_hdl list
+  | EMatch  of exp * (exp, decl) match_hdl list
 and exp = exp_desc localized
 
 and decl_desc =
