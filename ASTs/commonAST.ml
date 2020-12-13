@@ -17,19 +17,21 @@ let (!!) = fun obj -> obj.desc
 let (!@) = fun obj -> obj.loc
 
 let localize loc x = {
-  desc = x;
-  loc = Loc loc
-}
+    desc = x;
+    loc = Loc loc
+  }
+
 let relocalize loc x = {
-  desc = x;
-  loc
-}
-let relocalize_fun f obj =
-  relocalize !@obj (f !!obj)
+    desc = x;
+    loc
+  }
+
+let relocalize_fun f obj = relocalize !@obj (f !!obj)
+
 let no_localize x = {
-  desc = x;
-  loc = Location.no_location
-}
+    desc = x;
+    loc = Location.no_location
+  }
 
 type constructor = constructor_desc localized
 type ident = ident_desc localized

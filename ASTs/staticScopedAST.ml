@@ -1,5 +1,10 @@
 open CommonAST
 
+let scope_error id =
+  Format.eprintf "%aScope_error: unknown variable %s.@."
+    Location.print_location id.loc id.desc;
+  raise Errors.ErrorDetected
+
 (** Second Ast, resolve name domain *)
 
 type sunop = ParserAST.sunop
@@ -41,12 +46,10 @@ type exp_desc = (* Removed EPar *)
   | ESupOp  of ident * exp list
   | ECall   of ident * optional_static_exp list * exp list
       (* function * params * args *)
-  | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
+  | EMem    of mem_kind * optional_static_exp * optional_static_exp * string option * exp list
 (* ro * (address size * word size * input file) * args *)
   | ELet    of eq * exp
   | EMerge  of exp * (exp, eq) ParserAST.match_hdl list
-
-
 and exp = exp_desc localized
 
 and eq_desc =

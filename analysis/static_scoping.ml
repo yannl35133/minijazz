@@ -3,17 +3,17 @@ open StaticScopedAST
 
 let static_exp consts_set ?(params_order=Env.empty) =
   let rec desc : ParserAST.static_exp_desc -> static_exp_desc = function
-  | ParserAST.SInt n -> SInt n
-  | ParserAST.SBool b -> SBool b
-  | ParserAST.SIdent id ->
-     if Env.mem !!id params_order then
-       SParam (Env.find !!id params_order)
-     else if IdentSet.mem !!id consts_set then SConst id
-     else raise (Errors.Scope_error (!!id, !@id))
-  | ParserAST.SPar e -> desc e.desc
-  | ParserAST.SUnOp (sunop, se1)     -> SUnOp (sunop, aux se1)
-  | ParserAST.SBinOp (sop, se1, se2) -> SBinOp (sop, aux se1, aux se2)
-  | ParserAST.SIf (seb, se1, se2)    -> SIf (aux seb, aux se1, aux se2)
+    | ParserAST.SInt n -> SInt n
+    | SBool b -> SBool b
+    | SIdent id ->
+       if Env.mem !!id params_order then
+         SParam (Env.find !!id params_order)
+       else if IdentSet.mem !!id consts_set then SConst id
+       else scope_error id
+    | SPar e -> desc e.desc
+    | SUnOp (sunop, se1)     -> SUnOp (sunop, aux se1)
+    | SBinOp (sop, se1, se2) -> SBinOp (sop, aux se1, aux se2)
+    | SIf (seb, se1, se2)    -> SIf (aux seb, aux se1, aux se2)
   and aux se : static_exp = relocalize !@se (desc !!se)
   in aux
 
@@ -27,35 +27,36 @@ let optional_static_exp env e = match !!e with
      relocalize !@res (Some !!res)
 
 let slice_param env = function
-  | ParserAST.SliceAll ->       SliceAll
-  | ParserAST.SliceOne x ->     SliceOne  (optional_static_exp env x)
-  | ParserAST.SliceFrom lo ->   SliceFrom (optional_static_exp env lo)
-  | ParserAST.SliceTo hi ->     SliceTo   (optional_static_exp env hi)
-  | ParserAST.Slice (lo, hi) ->
+  | ParserAST.SliceAll -> SliceAll
+  | SliceOne x ->         SliceOne  (optional_static_exp env x)
+  | SliceFrom lo ->       SliceFrom (optional_static_exp env lo)
+  | SliceTo hi ->         SliceTo   (optional_static_exp env hi)
+  | Slice (lo, hi) ->
      Slice (optional_static_exp env lo, optional_static_exp env hi)
 
 let rec exp_desc env = function
   | ParserAST.EConst c -> EConst c
-  | ParserAST.EConstr (Estate0 id) -> EConstr (Estate0 id)
-  | ParserAST.EConstr (Estaten (id, es)) ->
+  | EConstr (Estate0 id) -> EConstr (Estate0 id)
+  | EConstr (Estaten (id, es)) ->
      EConstr (Estaten (id, List.map (exp env) es))
-  | ParserAST.EVar id -> EVar id
-  | ParserAST.EPar e -> exp_desc env e.desc
-  | ParserAST.ESupOp (id, args) ->
+  | EVar id -> EVar id
+  | EPar e -> exp_desc env e.desc
+  | ESupOp (id, args) ->
      ESupOp (id, List.map (exp env) args)
-  | ParserAST.ESlice (params, e) ->
+  | ESlice (params, e) ->
      ESlice (List.map (slice_param env) params, exp env e)
-  | ParserAST.EReg e -> EReg (exp env e)
-  | ParserAST.ECall (fname, params, args) ->
+  | EReg e -> EReg (exp env e)
+  | ECall (fname, params, args) ->
      let params = List.map (optional_static_exp env) params in
      ECall (fname, params, List.map (exp env) args)
-  | ParserAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
+  | EMem (mem_kind, (addr_size, word_size, input_file), args) ->
      let addr_size = optional_static_exp env addr_size in
      let word_size = optional_static_exp env word_size in
      let args = List.map (exp env) args in
-     EMem (mem_kind, (addr_size, word_size, input_file), args)
+     EMem (mem_kind, addr_size, word_size, input_file, args)
   | ELet _ -> assert false
   | EMerge _ -> assert false
+  | EMatch _ -> assert false
 
 and exp env e = relocalize !@e @@ exp_desc env !!e
 
@@ -107,7 +108,9 @@ let const consts_set const =
   }
 
 let program ParserAST.{ p_consts; p_nodes } : program =
-  let consts_set = List.fold_left (fun set el -> IdentSet.add !!(!!el.ParserAST.const_left) set) IdentSet.empty p_consts in
+  let consts_set = List.fold_left
+                     (fun set el -> IdentSet.add !!(!!el.ParserAST.const_left)
+                                     set) IdentSet.empty p_consts in
   { p_consts = List.fold_left
     (fun env const_ ->
       Env.add !!(!!const_.ParserAST.const_left) (const consts_set const_) env

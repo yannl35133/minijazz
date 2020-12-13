@@ -62,7 +62,8 @@ let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
   "until", UNLESS;
   "continue", CONTINUE;
   "do", DO;
-  "done", DONE
+  "done", DONE;
+  "enum", ENUM
 ]
 
 

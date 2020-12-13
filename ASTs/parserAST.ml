@@ -34,7 +34,6 @@ type sop =
   | SEq | SNeq | SLt | SLeq | SGt | SGeq  (* int -> bool *)
   | SOr | SAnd                            (* bool -> bool *)
 
-
 type sunop = SNeg | SNot
 
 type static_exp_desc =
@@ -45,26 +44,22 @@ type static_exp_desc =
   | SUnOp  of      sunop * static_exp
   | SBinOp of        sop * static_exp * static_exp
   | SIf    of static_exp * static_exp * static_exp  (* se1 ? se2 : se3 *)
-
 and static_exp = static_exp_desc localized
 
 type optional_static_exp_desc = static_exp_desc option
 and optional_static_exp = optional_static_exp_desc localized
 
-type static_typed_ident_desc = {
+type static_typed_ident = {
   st_name:      ident;
   st_type_name: ident; (* ideally, "int" or "bool" *)
+  st_loc: Location.location;
 }
-and static_typed_ident = static_typed_ident_desc localized
-
 
 (* Netlist expressions *)
 
 type netlist_type =
   | TNDim of optional_static_exp list
   | TProd of netlist_type list
-
-
 
 type value =
   | VNDim of value list
@@ -124,60 +119,57 @@ type exp_desc =
   | EVar    of ident
   | EPar    of exp     (* Created purely to have good locations *)
   | EReg    of exp
-  | ESupOp of ident * exp list
-  | ESlice of slice_param list * exp
+  | ESupOp  of ident * exp list
+  | ESlice  of slice_param list * exp
   | ECall   of ident * optional_static_exp list * exp list
   (* function * params * args *)
   | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
-  | ELet    of eq * exp
-  | EMerge  of exp * (exp, eq) match_hdl list
-
+  | ELet    of decl * exp
+  | EMerge  of exp * (exp, decl) match_hdl list
+  | EMatch     of exp * (exp, decl) match_hdl list
 and exp = exp_desc localized
 
-and eq_desc =
-  | EQempty
-  | EQeq        of lvalue * exp (* p = e *)
-  | EQand       of eq list (* eq1; ... ; eqn *)
-  | EQlet       of eq * eq (* let eq in eq *)
-  | EQreset     of eq * exp (* reset eq every e *)
-  | EQautomaton of (exp, eq) automaton_hdl list
-  | EQmatch     of exp * (exp, eq) match_hdl list
+and decl_desc =
+  | Dempty
+  | Deq        of lvalue * exp (* p = e *)
+  | Dand       of decl list (* eq1; ... ; eqn *)
+  | Dlet       of decl * decl (* let eq in eq *)
+  | Dreset     of decl * exp (* reset eq every e *)
+  | Dautomaton of (exp, decl) automaton_hdl list
+  | Dif        of static_exp * decl * decl
+and decl = decl_desc localized
 
-and eq = eq_desc localized
+type typed_ident = {
+    name : ident;
+    typed : netlist_type localized;
+    loc: Location.location
+  }
 
-type typed_ident_desc = {
-  name : ident;
-  typed : netlist_type localized;
-}
-and typed_ident = typed_ident_desc localized
+type node = {
+    node_name:    ident;
+    node_inline:  inline_status;
+    node_inputs : typed_ident list;
+    node_outputs: typed_ident list;
+    node_params : static_typed_ident list;
+    node_body:    decl;
+    node_probes : ident list;
+    node_loc :    Location.location
+  }
 
+type const = {
+    const_left: ident;
+    const_right: static_exp;
+    const_loc: Location.location
+  }
 
-type block_desc =
-    | BEqs of eq list
-    | BIf  of static_exp * block * block
-
-and block = block_desc localized
-
-
-type node_desc = {
-  node_name:    ident;
-  node_inline:  inline_status;
-  node_inputs : typed_ident list;
-  node_outputs: typed_ident list;
-  node_params : static_typed_ident list;
-  node_body:    block;
-  (* n_constraints : static_exp list; *)
-  node_probes : ident list;
-}
-and node = node_desc localized
-
-type const_desc = {
-  const_left: ident;
-  const_right: static_exp;
-}
-and const = const_desc localized
+type enum = {
+    enum_name: ident;
+    enum_pats: constructor list;
+    enum_loc: Location.location
+  }
 
 type program = {
-  p_consts: const list;
-  p_nodes : node list;
-}
+    p_consts: const list;
+    p_enums: enum list;
+    p_nodes : node list;
+  }

@@ -58,6 +58,8 @@ let bracket printer = delim (dprint_string "[") printer (dprint_string "]")
 
 let print_ident id = dprint_string id.desc
 
+let dprint_ident ff id = pp_print_string ff id.desc
+
 (* Static expression *)
 
 let print_sop sop =
@@ -102,12 +104,10 @@ let print_opt_sexp_desc opt_se_desc =
 
 let print_opt_sexp opt_se = print_opt_sexp_desc opt_se.desc
 
-let print_stid_desc stid_desc =
+let print_stid stid =
   dprintf "%t:%t"
-    (print_ident stid_desc.st_name)
-    (print_ident stid_desc.st_type_name)
-
-let print_stid stid = print_stid_desc stid.desc
+    (print_ident stid.st_name)
+    (print_ident stid.st_type_name)
 
 (* Netlist expressions *)
 
@@ -175,8 +175,9 @@ let rec print_exp_desc = function
         (print_opt_sexp word_size)
         ((dprint_list comma_sep print_exp) args)
   | ELet (eq, exp) ->
-     dprintf "let %t@ =@ %t" (print_eq eq) (print_exp exp)
+     dprintf "let %t@ =@ %t" (print_decl eq) (print_exp exp)
   | EMerge _ -> assert false
+  | EMatch _ -> assert false
 
 and print_exp exp fmt = print_exp_desc exp.desc fmt
 
@@ -191,24 +192,30 @@ and print_lval lval = print_lval_desc lval.desc
 and print_automaton_hdl hdl =
   dprintf "%t -> do %t"
     (state_name hdl.s_state |> print_ident)
-    (print_eq hdl.s_body)
+    (print_decl hdl.s_body)
 
-and print_eq_desc = function
-  | EQempty -> fun _ -> ()
-  | EQeq (lv, exp) ->
-     dbox 1 (
-         print_lval lv @@
-           binop_sep "=" @@
-             print_exp exp
-       )
-  | EQand eqs -> dprint_list and_sep print_eq eqs
-  | EQlet (eq, eq') -> dprintf "let %t in %t" (print_eq eq) (print_eq eq')
-  | EQreset (eq, exp) ->
-     dprintf "reset %t every %t" (print_eq eq) (print_exp exp)
-  | EQautomaton hdls -> dprint_list bar_sep print_automaton_hdl hdls
-  | EQmatch _ -> assert false
-
-and print_eq eq = print_eq_desc eq.desc
+and print_decl_desc = function
+  | Dempty -> fun _ -> ()
+  | Deq (lv, exp) ->
+     dprintf "@[<1>%t@ =@ %t@]" (print_lval lv) (print_exp exp)
+  | Dand eqs -> dprint_list semicolon_sep print_decl eqs
+  | Dlet (eq, eq') ->
+     dprintf "@[<1>let %t in %t@]" (print_decl eq) (print_decl eq')
+  | Dreset (eq, exp) ->
+     dprintf "@[<1>reset %t every %t@]" (print_decl eq) (print_exp exp)
+  | Dautomaton hdls -> dprint_list bar_sep print_automaton_hdl hdls
+  | Dif (se, b1, b2) ->
+       dbox 0 (
+        dbox 0 (
+          dprint_string "if" @@ dprint_space @@
+          print_sexp se @@ dprint_space @@
+          dprint_string "then"
+        ) @@ dprint_break 1 2 @@
+        dbox 0 (print_decl b1) @@ dprint_space @@
+        dprint_string "else" @@ dprint_break 1 2 @@
+        dbox 0 (print_decl b2)
+      )
+and print_decl eq = print_decl_desc eq.desc
 
 let is_bit tid_desc =
   match tid_desc.typed.desc with
@@ -216,68 +223,50 @@ let is_bit tid_desc =
   | TNDim [] -> true
   | TNDim _ -> false
 
-let print_tid_desc tid_desc =
+let print_tid tid =
   dbox 1 (
-    print_ident tid_desc.name @@
-    dprint_if (not (is_bit tid_desc))
-    (dprintf ":@," @@ print_type tid_desc.typed.desc)
+    print_ident tid.name @@
+    dprint_if (not (is_bit tid))
+    (dprintf ":@," @@ print_type tid.typed.desc)
   )
-
-let print_tid tid = print_tid_desc tid.desc
-
-let rec print_block_desc block_desc =
-  match block_desc with
-  | BEqs l -> dprint_list semicolon_sep print_eq l
-  | BIf (se, b1, b2) ->
-      dbox 0 (
-        dbox 0 (
-          dprint_string "if" @@ dprint_space @@
-          print_sexp se @@ dprint_space @@
-          dprint_string "then"
-        ) @@ dprint_break 1 2 @@
-        dbox 0 (print_block b1) @@ dprint_space @@
-        dprint_string "else" @@ dprint_break 1 2 @@
-        dbox 0 (print_block b2)
-      )
-
-and print_block block = print_block_desc block.desc
 
 let print_inline_status inline_status =
   match inline_status with
   | Inline    -> dprint_string "inline "
   | NotInline -> nop
 
-let print_node_desc node_desc =
+let print_node node =
   dvbox 1 (
     dbox 1 (
-      print_inline_status node_desc.node_inline @@
-      print_ident node_desc.node_name @@
-      if_empty_list_dprint node_desc.node_params
-        (mark (dprint_list comma_sep print_stid node_desc.node_params)) @@
+      print_inline_status node.node_inline @@
+      print_ident node.node_name @@
+      if_empty_list_dprint node.node_params
+        (mark (dprint_list comma_sep print_stid node.node_params)) @@
       dprint_cut @@
-      par (dprint_list comma_sep print_tid node_desc.node_inputs) @@
+      par (dprint_list comma_sep print_tid node.node_inputs) @@
       binop_sep "=" @@
-      par (dprint_list comma_sep print_tid node_desc.node_outputs) @@
+      par (dprint_list comma_sep print_tid node.node_outputs) @@
       dprint_break 1 (-2)
     ) @@
     dprint_string "where" @@
     dprint_space @@
-    print_block node_desc.node_body
+    print_decl node.node_body
   ) @@
   dprint_space @@
   dprint_string "end where"
 
-let print_node node = print_node_desc node.desc
-
-let print_const_desc const_desc =
+let print_const const =
   dbox 1 (
     dprint_string "const " @@
-    print_ident const_desc.const_left @@
+    print_ident const.const_left @@
     binop_sep "=" @@
-    print_sexp const_desc.const_right
+    print_sexp const.const_right
   )
 
-let print_const const = print_const_desc const.desc
+let print_enum (e: enum) =
+  dprintf "@[<1>enum %s@ (%t)]"
+    e.enum_name.desc
+    (dprint_list comma_sep (fun c ff -> pp_print_string ff c.desc) e.enum_pats)
 
 let print_program prog =
   dprint_list dforce_newline print_const prog.p_consts @@
