@@ -104,7 +104,31 @@ let filter_eq (env) d = match !!d with
   | Deq (lv, _) -> insert_lvalue env lv
   | _ -> env
 
-let rec check_decl_desc ((s,_,_) as env) de = match de with
+let insert_state (s,c,d) hdl = match !!(hdl.s_state) with
+  | Estate0pat id | Estatenpat (id, _) -> s, NameEnv.add id.i_name id c, d
+
+let rec check_escape ((_,c,_) as env) e =
+  let e_cond = check_exp env e.e_cond in
+  let e_body = check_decl env e.e_body in
+  let e_nx_state = match e.e_nx_state with
+    | Estate0 id -> (try Estate0 (NameEnv.find id.i_name c)
+                    with Not_found -> scope_error id)
+    | Estaten (id, es) ->
+       try Estaten (NameEnv.find id.i_name c, List.map (check_exp env) es)
+       with Not_found -> scope_error id
+  in
+  { e with e_cond; e_body; e_nx_state }
+
+and check_hdl (s,c,d) hdl =
+  let d = List.fold_left
+            (fun d (v:ident) -> NameEnv.add v.i_name v d) d hdl.s_vars in
+  let env = s, c, d in
+  let s_body = check_decl env hdl.s_body in
+  let s_until = List.map (check_escape env) hdl.s_until in
+  let s_unless = List.map (check_escape env) hdl.s_unless in
+  { hdl with s_body; s_until; s_unless }
+
+and check_decl_desc ((s,_,_) as env) de = match de with
   | Dempty -> de
   | Deq (lv, e) -> Deq (lv, check_exp env e)
   | Dand ds ->
@@ -114,7 +138,9 @@ let rec check_decl_desc ((s,_,_) as env) de = match de with
      Dif (check_st_exp s guard, check_decl env b1, check_decl env b2)
   | Dlet _ -> (* remove ? *) assert false
   | Dreset (d, e) -> Dreset (check_decl env d, check_exp env e)
-  | Dautomaton _ -> (* TODO *) assert false
+  | Dautomaton hdls ->
+     let env = List.fold_left insert_state env hdls in
+     Dautomaton (List.map (check_hdl env) hdls)
 
 and check_decl env d = relocalize !@d @@ check_decl_desc env !!d
 
