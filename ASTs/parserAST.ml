@@ -29,6 +29,12 @@ open CommonAST
 
 (* Static expressions *)
 
+type static_type = TInt | TBool
+
+let static_type_to_string = function
+  | TInt -> "int"
+  | TBool -> "bool"
+
 type sop =
   | SAdd | SMinus | SMult | SDiv | SPower (* int -> int *)
   | SEq | SNeq | SLt | SLeq | SGt | SGeq  (* int -> bool *)
@@ -57,6 +63,21 @@ type static_typed_ident = {
 
 (* Netlist expressions *)
 
+type ty =
+  | TUnit | TBit | TBitArray of static_exp | TProd of ty list
+  | TVar of link ref
+and link =
+  | TIndex of int
+  | TLink of ty
+let invalid_type = TUnit
+
+let rec type_to_string = function
+  | TUnit -> "unit"
+  | TBit -> "[1]"
+  | TBitArray _ -> assert false (* TODO *)
+  | TProd ts -> String.concat " * " (List.map type_to_string ts)
+  | TVar _ -> assert false
+
 type netlist_type =
   | TNDim of optional_static_exp list
   | TProd of netlist_type list
@@ -76,7 +97,6 @@ type lvalue_desc =
   | LValDrop
   | LValId of ident
   | LValTuple of lvalue list
-
 and lvalue = lvalue_desc localized
 
 type 'e state_expr =

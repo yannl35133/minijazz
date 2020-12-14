@@ -28,10 +28,95 @@
 open CommonAST
 open ParserAST
 
+exception Unify
 
+let static_type_error loc ty ety =
+  Format.eprintf "%aError: type %s was expected but type %s was found.@."
+    Location.print_location loc
+    (static_type_to_string ety) (static_type_to_string ty);
+  raise Errors.ErrorDetected
 
+let unify_error loc ty1 ty2 =
+  Format.eprintf "%aError: can't unify %s with type %s.@."
+    Location.print_location loc
+    (type_to_string ty1) (type_to_string ty2);
+  raise Errors.ErrorDetected
 
+(* static *)
 
+let static_env: (ident, static_type) Hashtbl.t = Hashtbl.create 16
+let find_static_type id = Hashtbl.find static_env id
+
+let rec type_static se = match !!se with
+  | SInt _ -> TInt
+  | SBool _ -> TBool
+  | SIdent id -> find_static_type id
+  | SPar e -> type_static e
+  | SUnOp(SNeg, e) -> expect_static_type TInt e
+  | SUnOp(SNot, e) -> expect_static_type TBool e
+  | SBinOp((SOr|SAnd), e1, e2) ->
+     let _ = expect_static_type TBool e1 in
+     let _ = expect_static_type TBool e2 in
+     TBool
+  | SBinOp((SAdd|SMinus|SMult|SDiv|SPower), e1, e2) ->
+     let _ = expect_static_type TInt e1 in
+     let _ = expect_static_type TInt e2 in
+     TInt
+  | SBinOp((SEq|SNeq|SLt|SLeq|SGt|SGeq) , e1, e2) ->
+     let _ = expect_static_type TInt e1 in
+     let _ = expect_static_type TInt e2 in
+     TBool
+  | SIf (cond, e1, e2) ->
+     let _ = expect_static_type TBool cond in
+     let t = type_static e1 in
+     expect_static_type t e2
+
+and expect_static_type ty se =
+  let t = type_static se in
+  if t <> ty then static_type_error se.loc t ty else t
+
+(* type functions *)
+
+let fresh_type =
+  let index = ref 0 in
+  let gen_index () = (incr index; !index) in
+  let fresh_type () = TVar (ref (TIndex (gen_index ()))) in
+  fresh_type
+
+(** returns the canonic (short) representant of [ty]
+     and update it to this value. *)
+let rec ty_repr ty = match ty with
+  | TVar link ->
+     (match !link with
+      | TLink ty ->
+         let ty = ty_repr ty in
+         link := TLink ty;
+         ty
+      | _ -> ty)
+  | _ -> ty
+
+(** verifies that index is fresh in ck. *)
+let rec occur_check index ty =
+  let ty = ty_repr ty in
+  match ty with
+  | TUnit | TBit | TBitArray _  -> ()
+  | TVar { contents = TIndex n } when index <> n -> ()
+  | TProd ty_list -> List.iter (occur_check index) ty_list
+  | _ -> raise Unify
+
+let rec unify ty1 ty2 =
+  let ty1 = ty_repr ty1 in
+  let ty2 = ty_repr ty2 in
+  if ty1 == ty2 then ()
+  else () (* TODO add constrains *)
+
+(* expressions *)
+
+let type_node _env = assert false
+
+let program p =
+  let env = Env.empty in
+  { p with p_nodes = List.map (type_node env) p.p_nodes }
 
 (* open CommonAST
  * open ParserAST
