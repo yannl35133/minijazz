@@ -35,6 +35,7 @@ let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
   "_", WILDCARD;
   "ram", RAM;
   "rom", ROM;
+  "mux", MUX;
   "where", WHERE;
   "end", END;
   "true", BOOL true;

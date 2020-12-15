@@ -8,3 +8,5 @@
 type t
 
 val get : unit -> t
+
+val compare : t -> t -> int

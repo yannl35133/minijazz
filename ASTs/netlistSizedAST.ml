@@ -3,50 +3,45 @@ open StaticTypedPartialAST
 
 (* Netlist expressions *)
 
-type presize =
-  | PSVar of ident * int * UniqueId.t
-  | PSConst of static_int_exp
-  | PSOtherContext of ident_desc * Location.location * static_unknown_exp list * presize
-
-type size_constraint_equality =
-  presize * presize
+type size =
+  | Size of static_int_exp_desc
 
 
-type netlist_presized_dimensioned =
-  | CDProd of netlist_presized_dimensioned list
-  | CDDim of presize list
+type netlist_sized =
+  | TProd of netlist_sized list
+  | TDim of size list
 
-type 'a presized =
+type 'a sized =
   {
-    ps_desc: 'a;
-    ps_loc: Location.location;
-    ps_size: netlist_presized_dimensioned
+    s_desc: 'a;
+    s_loc: Location.location;
+    s_size: netlist_sized
   }
 
-let (!&!) = fun obj -> obj.ps_desc
-let (!&@) = fun obj -> obj.ps_loc
-let (!&&) = fun obj -> obj.ps_size
+let (!$!) = fun obj -> obj.s_desc
+let (!$@) = fun obj -> obj.s_loc
+let (!$$) = fun obj -> obj.s_size
 
-let presize desc loc size =
-  { ps_desc = desc; ps_loc = loc; ps_size = size }
+let size desc loc size =
+  { s_desc = desc; s_loc = loc; s_size = size }
 
 type exp_desc =
   | EConst  of ParserAST.value
   | EVar    of ident
   | EReg    of exp
-  | ECall   of ident * static_unknown_exp list * exp list
+  | ECall   of ident * static_bitype_exp list * exp list
       (* function * params * args *)
-  | EMem    of mem_kind * (optional_static_int_exp * optional_static_int_exp * string option) * exp list
+  | EMem    of mem_kind * (static_int_exp * static_int_exp * string option) * exp list
       (* ro * (address size * word size * input file) * args *)
 
-and exp = exp_desc presized
+and exp = exp_desc sized
 
 type lvalue_desc =
   | LValDrop
   | LValId of ident
   | LValTuple of lvalue list
 
-and lvalue = lvalue_desc presized
+and lvalue = lvalue_desc sized
 
 type equation_desc = {
   eq_left:  lvalue;
@@ -56,14 +51,14 @@ and equation = equation_desc localized
 
 
 type typed_ident_desc = {
-  name:  ident;
-  presize: netlist_presized_dimensioned localized
+  name: ident;
+  size: netlist_sized localized
 }
 and typed_ident = typed_ident_desc localized
 
 type case = {
   equations: equation list;
-  dim_env: netlist_presized_dimensioned Env.t
+  dim_env:   netlist_sized Env.t;
 }
 
 type block_desc =
@@ -89,5 +84,4 @@ type program = {
   p_consts: StaticTypedPartialAST.const Env.t;
   p_consts_order: ident_desc list;
   p_nodes:  node  Env.t;
-  constraints: size_constraint_equality list
 }

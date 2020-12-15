@@ -24,15 +24,17 @@ let rec static_int_exp consts_env ?(params_env=IntEnv.empty) se =
     | StaticScopedAST.SBool _ ->
         raise Errors.TmpError
     | StaticScopedAST.SConst id -> begin
-        match Env.find !!id consts_env with
-          | TInt -> relocalize !@se (SIConst id)
-          | TBool -> raise Errors.TmpError
+        match Env.find_opt !!id consts_env with
+          | Some TInt -> relocalize !@se (SIConst id)
+          | Some TBool -> raise Errors.TmpError
+          | None -> failwith "Unscoped static constant"
         end
     | StaticScopedAST.SParam nb -> begin
-      match IntEnv.find nb params_env with
-        | TInt -> relocalize !@se (SIParam nb)
-        | TBool -> raise Errors.TmpError
-      end
+        match IntEnv.find_opt nb params_env with
+          | Some TInt -> relocalize !@se (SIParam nb)
+          | Some TBool -> raise Errors.TmpError
+          | None -> failwith "Unscoped static parameter"
+        end
     | StaticScopedAST.SUnOp (sunop, se1) ->
         relocalize !@se (static_int_unop sunop se1)
     | StaticScopedAST.SBinOp (sop, se1, se2) ->
@@ -68,14 +70,16 @@ and static_bool_exp consts_env ?(params_env=IntEnv.empty) se =
       | StaticScopedAST.SBool b ->
           relocalize !@se (SBool b)
       | StaticScopedAST.SConst id -> begin
-          match Env.find !!id consts_env with
-            | TInt -> raise Errors.TmpError
-            | TBool -> relocalize !@se (SBConst id)
+          match Env.find_opt !!id consts_env with
+            | Some TInt -> raise Errors.TmpError
+            | Some TBool -> relocalize !@se (SBConst id)
+            | None -> failwith "Unscoped static constant"
           end
       | StaticScopedAST.SParam nb -> begin
-        match IntEnv.find nb params_env with
-          | TInt -> raise Errors.TmpError
-          | TBool -> relocalize !@se (SBParam nb)
+        match IntEnv.find_opt nb params_env with
+          | Some TInt -> raise Errors.TmpError
+          | Some TBool -> relocalize !@se (SBParam nb)
+          | None -> failwith "Unscoped static parameter"
         end
       | StaticScopedAST.SUnOp (sunop, se1) ->
           relocalize !@se (static_bool_unop sunop se1)
@@ -85,7 +89,7 @@ and static_bool_exp consts_env ?(params_env=IntEnv.empty) se =
           relocalize !@se (SBIf (fb seb, fb se1, fb se2))
     with Errors.TmpError -> raise @@ Errors.WrongType ("int", "bool", !@se)
 
-let static_unknown_exp consts_env ?(params_env=IntEnv.empty) se : static_unknown_exp =
+let static_bitype_exp consts_env ?(params_env=IntEnv.empty) se : static_bitype_exp =
   let int_exp = try Ok (static_int_exp consts_env ~params_env se)
     with Errors.WrongType arg -> Error (Errors.WrongType arg)
   in
@@ -93,37 +97,37 @@ let static_unknown_exp consts_env ?(params_env=IntEnv.empty) se : static_unknown
     with Errors.WrongType arg -> Error (Errors.WrongType arg)
   in
   match int_exp, bool_exp with
-    | Ok e, Error _ -> relocalize !@e (SIntExp (Some !!e))
-    | Error _, Ok e -> relocalize !@e (SBoolExp (Some !!e))
+    | Ok e, Error _ -> relocalize !@e (SIntExp  !!e)
+    | Error _, Ok e -> relocalize !@e (SBoolExp !!e)
     | Ok _, Ok _ ->       raise @@ Errors.NoTypes !@se
     | Error _, Error _ -> raise @@ Errors.TwoTypes !@se
 
 let static_int_exp_full (consts_set, params_env) = static_int_exp consts_set ~params_env
 let static_bool_exp_full (consts_set, params_env) = static_bool_exp consts_set ~params_env
-let static_unknown_exp_full (consts_set, params_env) = static_unknown_exp consts_set ~params_env
+let static_bitype_exp_full (consts_set, params_env) = static_bitype_exp consts_set ~params_env
 
 
 let optional_static_unknown_exp env e = match !!e with
-  | None -> relocalize !@e None
-  | Some ed ->
-      let res = static_unknown_exp_full env (relocalize !@e ed) in
-      relocalize !@res (Some !!res)
+  | StaticScopedAST.SUnknown uid -> relocalize !@e (SUnknown uid)
+  | StaticScopedAST.SExp ed ->
+      let res = static_bitype_exp_full env (relocalize !@e ed) in
+      relocalize !@res (SExp !!res)
 
 let optional_static_int_exp env e : optional_static_int_exp = match !!e with
-  | None -> relocalize !@e None
-  | Some ed ->
+  | StaticScopedAST.SUnknown uid -> relocalize !@e (SUnknown uid)
+  | StaticScopedAST.SExp ed ->
       let res = static_int_exp_full env (relocalize !@e ed) in
-      relocalize !@res (Some !!res)
+      relocalize !@res (SExp !!res)
 
 let static_params types env fname params : static_unknown_exp list =
   let typed_params = List.map (optional_static_unknown_exp env) params in
   let static_param el ty = match !!el, ty with
-    | Some SIntExp e1,  TInt ->  relocalize !@el (SIntExp e1)
-    | Some SBoolExp e1, TBool -> relocalize !@el (SBoolExp e1)
-    | None,             TInt ->  relocalize !@el (SIntExp None)
-    | None,             TBool -> relocalize !@el (SBoolExp None)
-    | Some SIntExp _,   TBool -> raise @@ Errors.WrongTypeParam ("int", "bool", !@el, !!fname, List.map static_type_to_string types)
-    | Some SBoolExp _,  TInt ->  raise @@ Errors.WrongTypeParam ("bool", "int", !@el, !!fname, List.map static_type_to_string types)
+    | SExp SIntExp e1,  TInt ->  relocalize !@el (SOIntExp  (SExp e1))
+    | SExp SBoolExp e1, TBool -> relocalize !@el (SOBoolExp (SExp e1))
+    | SUnknown uid,     TInt ->  relocalize !@el (SOIntExp  (SUnknown uid))
+    | SUnknown uid,     TBool -> relocalize !@el (SOBoolExp (SUnknown uid))
+    | SExp SIntExp _,   TBool -> raise @@ Errors.WrongTypeParam ("int", "bool", !@el, !!fname, List.map static_type_to_string types)
+    | SExp SBoolExp _,  TInt ->  raise @@ Errors.WrongTypeParam ("bool", "int", !@el, !!fname, List.map static_type_to_string types)
   in
   List.map2 static_param typed_params types
 
@@ -146,7 +150,7 @@ let rec exp ((fun_env: fun_env), env) e = match !!e with
   | StaticScopedAST.EReg e ->
       relocalize !@e (EReg (exp (fun_env, env) e))
   | StaticScopedAST.ECall (fname, params, args) ->
-      let types = Env.find !!fname fun_env in
+      let types = Misc.option_get ~error:(Failure "Unscoped node") @@ Env.find_opt !!fname fun_env in
       relocalize !@e (ECall (fname, static_params types env fname params, List.map (exp (fun_env, env)) args))
   | StaticScopedAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
       let addr_size = optional_static_int_exp env addr_size in
@@ -193,7 +197,7 @@ let node fun_env consts_env StaticScopedAST.{ node_name_loc; node_loc; node_para
 
 let const consts_env StaticScopedAST.{ const_decl; const_ident; const_total } =
   {
-    const_decl = static_unknown_exp consts_env const_decl;
+    const_decl = static_bitype_exp consts_env const_decl;
     const_ident; const_total
   }
 

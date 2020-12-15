@@ -14,7 +14,9 @@ type static_exp_desc = (* Removed SPar *)
 
 and static_exp = static_exp_desc localized
 
-type optional_static_exp_desc = static_exp_desc option
+type optional_static_exp_desc =
+  | SExp of static_exp_desc
+  | SUnknown of UniqueId.t
 and optional_static_exp = optional_static_exp_desc localized
 
 (* Netlist expressions *)
@@ -23,7 +25,7 @@ type netlist_type =
   | TNDim of optional_static_exp list
   | TProd of netlist_type list
 
-  type slice_param =
+type slice_param =
   | SliceAll
   | SliceOne of  optional_static_exp
   | SliceFrom of optional_static_exp

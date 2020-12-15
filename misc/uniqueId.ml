@@ -7,8 +7,12 @@
 
 type t = int
 
-let get : unit -> int =
+let get =
   let n = ref 0 in
   fun () ->
-    assert(!n <> -1);
-    let x = !n in incr n; x
+    assert (!n <> -1);
+    let x = !n in
+    incr n;
+    x
+
+let compare = Int.compare

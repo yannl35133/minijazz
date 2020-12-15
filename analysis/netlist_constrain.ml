@@ -3,9 +3,9 @@ open StaticTypedPartialAST
 open NetlistDimensionedAST
 open NetlistConstrainedAST
 
-let rec dim_to_blank_presize s = function
-  | NDim n ->  CDDim  (List.init n (fun i -> PSVar (s, i, UniqueId.get ())))
-  | NProd l -> CDProd (List.map (dim_to_blank_presize s) l)
+let rec other_context fname loc ctxt = function
+  | CDProd l -> CDProd (List.map (other_context fname loc ctxt) l)
+  | CDDim l -> CDDim (List.map (fun p -> PSOtherContext (fname, loc, ctxt, p)) l)
 
 let rec eq_to_constraints c1 c2 = match c1, c2 with
   | CDProd l1, CDProd l2 -> List.flatten @@ List.rev_map2 eq_to_constraints l1 l2
@@ -14,70 +14,48 @@ let rec eq_to_constraints c1 c2 = match c1, c2 with
   | CDProd _,  CDDim _ ->   failwith "Misdimensioned value"
 
 
-let fun_env_find fun_env params loc s =
-  let regexp_slice = Str.regexp "slice\\(\\(_\\(all\\|to\\|from\\|fromto\\)\\)*\\)" in
-  let regexp_supop = Str.regexp "\\(or\\|and\\|xor\\|nand\\|nor\\|not\\)_\\([0-9]+\\)" in
+let fun_env_find fun_env s =
+  let regexp_slice = Str.regexp {|slice\(\(_\(all\|to\|from\|fromto\)\)*\)|} in
+  let regexp_supop = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\)_\([0-9]+\)|} in
   if Env.mem s fun_env then
     Env.find s fun_env
   else if Str.string_match regexp_slice s 0 then begin
     let args = List.tl @@ String.split_on_char '_' @@ Str.matched_group 1 s in
     let dim = List.length args in
-    let re_params = List.mapi
-      (fun i p -> match !!p with
-        | SIntExp Some se -> PSConst (relocalize !@p se), !@p
-        | SIntExp None ->    PSParam (s, i, UniqueId.get (), loc), loc
-        | SBoolExp _ -> failwith "Mistyped slice static argument") params
-    in
-    let pre_dims_in, rem = let rec nth_tl n = function [] -> [], [] | l when n = 0 -> l, [] | hd :: tl -> let l1, l2 = nth_tl (n - 1) tl in hd :: l1, l2 in nth_tl dim re_params in
-    let pre_dims_in = List.map fst pre_dims_in in
-    let rec aux i args param = match args, param with
-      | "all"  :: tl1,             tl2 -> List.nth pre_dims_in i :: aux (i+1) tl1 tl2
-      | "one"  :: tl1, (_, loc) :: tl2 -> PSConst (relocalize loc (SInt 1)) :: aux (i+1) tl1 tl2
-      | "from" :: tl1, (p, loc)   :: tl2 -> PSSub (List.nth pre_dims_in i, PSSub (p, PSConst (relocalize loc @@ SInt 1))) :: aux (i+1) tl1 tl2
-      | "to"   :: tl1, (p, _)   :: tl2 -> p :: aux (i+1) tl1 tl2
-      | "fromto" :: tl1, (p1, _) :: (p2, loc) :: tl2 -> PSSub (p2, PSSub (p1, PSConst (relocalize loc @@ SInt 1))) :: aux (i+1) tl1 tl2
-      | [], [] -> []
+    let nl = no_localize in
+    let dims_in = List.init dim (fun i -> PSConst (nl (SIParam i))) in
+    let rec aux idim iparam = function
+      | "all"  :: tl ->   PSConst (nl (SIParam idim)) :: aux (idim+1) iparam tl
+      | "one"  :: tl ->                                  aux idim (iparam+1) tl
+      | "from" :: tl ->   PSConst (nl (SIBinOp (SAdd, nl (SIBinOp (SMinus, nl (SIParam idim), nl (SIParam iparam))), nl (SInt 1)))) :: aux (idim+1) (iparam+1) tl
+      | "to"   :: tl ->   PSConst (nl (SIBinOp (SAdd, nl (SIParam iparam), nl (SInt 1)))) :: aux (idim+1) (iparam+1) tl
+      | "fromto" :: tl -> PSConst (nl (SIBinOp (SAdd, nl (SIBinOp (SMinus, nl (SIParam (iparam+1)), nl (SIParam iparam))), nl (SInt 1)))) :: aux (idim+1) (iparam+2) tl
+      | [] -> []
       | _ -> failwith "Miscounted arguments in slice"
     in
-    let dims_out = CDDim (aux 0 args rem) in
-    [CDDim pre_dims_in], dims_out
+    let dims_out = CDDim (aux 0 dim args) in
+    [CDDim dims_in], dims_out
   end else if Str.string_match regexp_supop s 0 then begin
     let op = Str.matched_group 0 s in
-    let size_in = CDDim (List.mapi
-      (fun i p -> match !!p with
-        | SIntExp Some se -> PSConst (relocalize !@p se)
-        | SIntExp None ->    PSParam (s, i, UniqueId.get (), loc)
-        | SBoolExp _ -> failwith "Mistyped slice static argument")
-      params)
-    in
+    let dim = int_of_string @@ Str.matched_group 1 s in
+    let dims_in = CDDim (List.init dim (fun i -> PSConst (no_localize (SIParam i)))) in
     if op = "not" then
-      [size_in], size_in
+      [dims_in], dims_in
+    else if op = "mux" then
+      [CDDim []; dims_in; dims_in], dims_in
     else
-      [size_in; size_in], size_in
+      [dims_in; dims_in], dims_in
   end else
     failwith "Undefined function in presizing"
 
-let rom_ram_size loc (addr_size, word_size, _) = function
+let rom_ram_size (* loc (addr_size, word_size, _) *) =
+  let addr_size = PSConst (no_localize (SIParam 0)) in
+  let word_size = PSConst (no_localize (SIParam 1)) in
+  function
   | MRom ->
-    let addr_size = match !!addr_size with
-      | Some se -> PSConst (relocalize !@addr_size se)
-      | None ->    PSParam ("rom", 1, UniqueId.get (), !@addr_size)
-    in
-    let word_size = match !!word_size with
-      | Some se -> PSConst (relocalize !@word_size se)
-      | None ->    PSParam ("rom", 2, UniqueId.get (), !@word_size)
-    in    
-    [CDDim [addr_size]], CDDim [word_size]
+      "rom", [CDDim [addr_size]], CDDim [word_size]
   | MRam ->
-    let addr_size = match !!addr_size with
-      | Some se -> PSConst (relocalize !@addr_size se)
-      | None ->    PSParam ("ram", 1, UniqueId.get (), !@addr_size)
-    in
-    let word_size = match !!word_size with
-      | Some se -> PSConst (relocalize !@word_size se)
-      | None ->    PSParam ("ram", 2, UniqueId.get (), !@word_size)
-    in
-    [CDDim [addr_size; PSConst (relocalize loc (SInt 1)); addr_size; word_size]], CDDim [word_size]
+      "ram", [CDDim [addr_size]; CDDim []; CDDim [addr_size]; CDDim [word_size]], CDDim [word_size]
 
 let size_value loc v =
   let rec assert_size sizes value = match sizes, value with
@@ -103,22 +81,30 @@ let rec exp (fun_env, var_env as env) constraints e = match !%!e with
       constraints, presize (EVar id) !%@e size
   | NetlistDimensionedAST.EReg e1 ->
       let constraints, e1 = exp env constraints e1 in
-      let size = match !$$e1 with
+      let size = match !&&e1 with
         | CDProd _ -> failwith "UnexpectedProd in sizing"
         | CDDim l -> CDDim l
       in
       constraints, presize (EReg e1) !%@e size
   | NetlistDimensionedAST.ECall (fname, params, args) ->
-      let dims_in, dims_out = fun_env_find fun_env params !%@e !!fname in
+      let dims_in, dims_out = fun_env_find fun_env !!fname in
+      let dims_in = List.map (other_context !!fname !%@e params) dims_in in
+      let dims_out = other_context !!fname !%@e params dims_out in
       let constraints, dim_args = List.fold_left_map (exp env) constraints args in
-      let new_constraints = List.concat @@ List.rev_map2 eq_to_constraints dims_in @@ List.map (!$$) dim_args in
+      let new_constraints = List.concat @@ List.rev_map2 eq_to_constraints dims_in @@ List.map (!&&) dim_args in
       new_constraints @ constraints, presize (ECall (fname, params, dim_args)) !%@e dims_out
-  | NetlistDimensionedAST.EMem (mem_kind, params, args) ->
-      let dims_in, dims_out = rom_ram_size !%@e params !!mem_kind in
+  | NetlistDimensionedAST.EMem (mem_kind, (addr_size, word_size, _ as params), args) ->
+      let fname, dims_in, dims_out = rom_ram_size !!mem_kind in
+      let re_params = [relocalize !@addr_size @@ SOIntExp !!addr_size; relocalize !@word_size @@ SOIntExp !!word_size] in
+      let dims_in = List.map (other_context fname !%@e re_params) dims_in in
+      let dims_out = other_context fname !%@e re_params dims_out in
       let constraints, dim_args = List.fold_left_map (exp env) constraints args in
-      let new_constraints = List.concat @@ List.map2 eq_to_constraints dims_in @@ List.map (!$$) dim_args in
+      let new_constraints = List.concat @@ List.rev_map2 eq_to_constraints dims_in @@ List.map (!&&) dim_args in
       new_constraints @ constraints, presize (EMem (mem_kind, params, dim_args)) !%@e dims_out
 
+let rec dim_to_blank_presize s = function
+  | NDim n ->  CDDim  (List.init n (fun i -> PSVar (s, i, UniqueId.get ())))
+  | NProd l -> CDProd (List.map (dim_to_blank_presize s) l)
 
 let rec lvalue var_env lval = match !%!lval with
   | NetlistDimensionedAST.LValDrop ->
@@ -128,7 +114,7 @@ let rec lvalue var_env lval = match !%!lval with
       presize (LValId id) !%@lval size
   | NetlistDimensionedAST.LValTuple l ->
       let size_l = List.map (lvalue var_env) l in
-      let size = List.map (!$$) size_l in
+      let size = List.map (!&&) size_l in
       presize (LValTuple size_l) !%@lval (CDProd size)
 
 
@@ -144,52 +130,69 @@ let eqs fun_env var_env0 NetlistDimensionedAST.{ equations } =
     let NetlistDimensionedAST.{ eq_left; eq_right } = !!equation in
     let constraints, eq_right = exp (fun_env, var_env) constraints eq_right in
     let eq_left = lvalue var_env eq_left in
-    let new_constraints = eq_to_constraints !$$eq_left !$$eq_right in
+    let new_constraints = eq_to_constraints !&&eq_left !&&eq_right in
     new_constraints @ constraints, relocalize !@equation { eq_left; eq_right }
   in
   let constraints, presized_equations = List.fold_left_map eq [] equations in
 
-  { dim_env = var_env; equations = presized_equations; constraints }
+  List.rev constraints, { dim_env = var_env; equations = presized_equations }
 
 
 
-let rec body fun_env name var_env e = relocalize_fun (function
-  | NetlistDimensionedAST.BIf (condition, block1, block2) -> BIf (condition, body fun_env name var_env block1, body fun_env name var_env block2)
-  | NetlistDimensionedAST.BEqs case -> BEqs (eqs fun_env var_env case)
-  ) e
+let rec body fun_env name var_env e = match !!e with
+  | NetlistDimensionedAST.BIf (condition, block1, block2) ->
+      let constraints, body1 = body fun_env name var_env block1 in
+      let constraints2, body2 = body fun_env name var_env block2 in
+      constraints @ constraints2, relocalize !@e @@ BIf (condition, body1, body2)
+  | NetlistDimensionedAST.BEqs case ->
+      let (r, eqs) = eqs fun_env var_env case in
+      r, relocalize !@e @@ BEqs eqs
+
+let node (var_env_env, sized_inouts_env, fun_env) name NetlistDimensionedAST.{ node_name_loc; node_loc; node_params; node_inline; node_body; node_probes; _ } =
+  let var_env0 = Env.find name var_env_env in
+  let node_inputs, node_outputs = Env.find name sized_inouts_env in
+  let constraints, node_body = body fun_env name var_env0 node_body in
+  constraints,
+  {
+    node_inputs;
+    node_outputs;
+    node_body;
+    node_name_loc; node_loc; node_inline; node_params; node_probes
+  }
 
 let rec presize_of_netlist_type ident = function
   | StaticTypedAST.TProd l -> CDProd (List.map (presize_of_netlist_type ident) l)
   | StaticTypedAST.TNDim l -> CDDim (List.mapi
       (fun i opt_static_exp -> match !!opt_static_exp with
-        | None -> PSVar (ident, i, UniqueId.get ())
-        | Some e -> PSConst (relocalize !@opt_static_exp e)
+        | SUnknown uid -> PSVar (ident, i, uid)
+        | SExp se -> PSConst (relocalize !@opt_static_exp se)
         ) l
       )
 
-let starput var_env NetlistDimensionedAST.{desc = { name; typed; _ }; loc } =
-  Env.add !!name (presize_of_netlist_type name !!typed) var_env,
+let starput NetlistDimensionedAST.{desc = { name; typed; _ }; loc } =
+  (!!name, presize_of_netlist_type name !!typed),
   relocalize loc { name; presize = relocalize !@typed @@ presize_of_netlist_type name !!typed }
 
 let fun_env NetlistDimensionedAST.{ node_inputs; node_outputs; _ } =
-  List.map (fun input -> presize_of_netlist_type !!input.NetlistDimensionedAST.name !!(!!input.typed) ) node_inputs,
-  CDProd (List.map (fun input -> presize_of_netlist_type !!input.NetlistDimensionedAST.name !!(!!input.typed)) node_outputs)
-  
-
-let node fun_env name NetlistDimensionedAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
-  let var_env0 = Env.empty in
-  let var_env0, node_inputs  = List.fold_left_map starput var_env0 node_inputs in
-  let var_env0, node_outputs = List.fold_left_map starput var_env0 node_outputs in
-  {
-    node_inputs;
-    node_outputs;
-    node_body = body fun_env name var_env0 node_body;
-    node_name_loc; node_loc; node_inline; node_params; node_probes
-  }
+  let ins = List.map starput node_inputs in
+  let outs = List.map starput node_outputs in
+  List.fold_left (fun var_env ((name, presize), _) -> Env.add name presize var_env) Env.empty (ins @ outs),
+  (List.map snd ins, List.map snd outs),
+  (List.map (fun ((_, presize), _) -> presize) ins, CDProd (List.map (fun ((_, presize), _) -> presize) outs))
 
 let program NetlistDimensionedAST.{ p_consts; p_consts_order; p_nodes } : program =
-  let fun_env = Env.map fun_env p_nodes in
+  let pre_fun_env = Env.map fun_env p_nodes in
+  let var_env_env = Env.map (fun (var_env, _, _) -> var_env) pre_fun_env in
+  let sized_inouts_env = Env.map (fun (_, inouts, _) -> inouts) pre_fun_env in
+  let fun_env = Env.map (fun (_, _, inout_sizes) -> inout_sizes) pre_fun_env in
+  let constraints = ref [] in
+  let f nam nod =
+    let c, r = node (var_env_env, sized_inouts_env, fun_env) nam nod in
+    constraints := c @ !constraints;
+    r
+  in
+  let p_nodes = Env.mapi f p_nodes in
   { 
     p_consts; p_consts_order;
-    p_nodes = Env.mapi (node fun_env) p_nodes;
+    p_nodes; constraints = !constraints
   }

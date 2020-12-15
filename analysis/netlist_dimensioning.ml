@@ -22,6 +22,10 @@ exception ImpossibleProd of (Location.location * prod_context * fun_context opti
 exception WrongDimension of (netlist_dimension * netlist_dimension * Location.location * error_context)
 exception UndefinedReturnVariables of (string * string * Location.location)
 
+let rec print_netlist_dimension fmt = function
+  | NDim n -> Format.fprintf fmt "%d" n
+  | NProd l -> Format.fprintf fmt "@[<hv2>%a@]" (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt " * ") print_netlist_dimension) l
+
 
 let dim_value loc v =
   let rec assert_height depth = function
@@ -40,7 +44,7 @@ let supop name args dim =
     | 0 -> !!name
     | n -> !!name ^ "_" ^ string_of_int n
   in
-  let params = List.init dim (fun _ -> no_localize (SIntExp None)) in
+  let params = List.init dim (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))) in
   ECall (relocalize !@name funname, params, args)
 
 let slice params dim =
@@ -69,13 +73,13 @@ let slice params dim =
   in
   let slice_param = function
     | StaticTypedAST.SliceAll ->       []
-    | StaticTypedAST.SliceOne x ->     [relocalize !@x  (SIntExp !!x) ]
-    | StaticTypedAST.SliceFrom lo ->   [relocalize !@lo (SIntExp !!lo)]
-    | StaticTypedAST.SliceTo hi ->     [relocalize !@hi (SIntExp !!hi)]
-    | StaticTypedAST.Slice (lo, hi) -> [relocalize !@lo (SIntExp !!lo); relocalize !@hi (SIntExp !!hi)]
+    | StaticTypedAST.SliceOne x ->     [relocalize !@x  (SOIntExp !!x) ]
+    | StaticTypedAST.SliceFrom lo ->   [relocalize !@lo (SOIntExp !!lo)]
+    | StaticTypedAST.SliceTo hi ->     [relocalize !@hi (SOIntExp !!hi)]
+    | StaticTypedAST.Slice (lo, hi) -> [relocalize !@lo (SOIntExp !!lo); relocalize !@hi (SOIntExp !!hi)]
   in
   let dims_remaining = List.fold_left (fun acc el -> acc + slice_dim_removed el) 0 params in
-  let size = List.init dim (fun _ -> no_localize @@ SIntExp None) (* One argument per input dimension *)
+  let size = List.init dim (fun _ -> no_localize @@ SOIntExp (SUnknown (UniqueId.get ()))) (* One argument per input dimension *)
   and name = String.concat "_" @@ List.map slice_name params
   and args = List.concat_map slice_param params in
   NDim dims_remaining, fun e1 -> ECall (no_localize @@ "slice_" ^ name, size @ args, [e1])

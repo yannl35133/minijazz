@@ -41,12 +41,21 @@ and static_bool_exp_desc =
 and static_int_exp  = static_int_exp_desc  localized
 and static_bool_exp = static_bool_exp_desc localized
 
+type 'a static_exp_option =
+  | SExp of 'a
+  | SUnknown of UniqueId.t
+
 type static_unknown_exp_desc =
-  | SIntExp  of static_int_exp_desc  option
-  | SBoolExp of static_bool_exp_desc option
+  | SOIntExp  of static_int_exp_desc  static_exp_option
+  | SOBoolExp of static_bool_exp_desc static_exp_option
 and static_unknown_exp = static_unknown_exp_desc localized
 
-type optional_static_int_exp_desc = static_int_exp_desc option
+type static_bitype_exp_desc =
+  | SIntExp  of static_int_exp_desc
+  | SBoolExp of static_bool_exp_desc
+and static_bitype_exp = static_bitype_exp_desc localized
+
+type optional_static_int_exp_desc = static_int_exp_desc static_exp_option
 and optional_static_int_exp = optional_static_int_exp_desc localized
 
 type static_typed_ident_desc = {
@@ -56,7 +65,7 @@ type static_typed_ident_desc = {
 and static_typed_ident = static_typed_ident_desc localized
 
 type const = {
-  const_decl:  static_unknown_exp;
+  const_decl:  static_bitype_exp;
   const_ident: Location.location;
   const_total: Location.location;
 }

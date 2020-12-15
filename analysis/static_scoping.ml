@@ -21,10 +21,10 @@ let static_exp consts_set ?(params_order=Env.empty) =
 let static_exp_full (consts_set, params_order) = static_exp consts_set ~params_order
 
 let optional_static_exp env e = match !!e with
-  | None -> relocalize !@e None
-  | Some ed ->
+  | ParserAST.SUnknown uid -> relocalize !@e (SUnknown uid)
+  | ParserAST.SExp ed ->
       let res = static_exp_full env (relocalize !@e ed) in
-      relocalize !@res (Some !!res)
+      relocalize !@res (SExp !!res)
 
 let slice_param env = function
   | ParserAST.SliceAll ->       SliceAll

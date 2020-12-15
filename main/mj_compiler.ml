@@ -95,21 +95,30 @@ let compile_impl filename =
 
     (* let pp = Printer.print_program stdout in *)
     (* Parsing of the file *)
-    let parsing_ast = parse lexbuf in
+    let parsed_program = parse lexbuf in
     Format.printf "done parsing@.";
 
     if !print_parsing_ast then
-      Printers.ParserAst.print_program parsing_ast Format.std_formatter;
+      Printers.ParserAst.print_program parsed_program Format.std_formatter;
 
-    (* let p = pass "Scoping" true Scoping.program p pp in
-     *
-     * let p = pass "Typing" true Typing.program p pp in
-     *
-     * let p = pass "Normalize" true Normalize.program p pp in
-     *
-     * let p = pass "Callgraph" true Callgraph.program p pp in *)
+    let st_scoped_program = Static_scoping.program parsed_program in
+    
+    let st_typed_program = Static_typer.program st_scoped_program in
+    
+    let dimensioned_program =
+      try
+        Netlist_dimensioning.program st_typed_program
+      with
+        | Netlist_dimensioning.WrongDimension (obtained, expected, loc, _args) ->
+            Format.eprintf "%a@[<v>Expected dimension : %a@ Got dimension : %a@]@ "
+              Location.print_location loc
+              Netlist_dimensioning.print_netlist_dimension obtained
+              Netlist_dimensioning.print_netlist_dimension expected; exit 1
+    in
+    
+    let constrained_program = Netlist_constrain.program dimensioned_program in
 
-    (* let p = pass "Simplify" true Simplify.program p pp in *)
+    let _sized_program = Netlist_sizer.program constrained_program in
 
     (* let p = Mj2net.program p in *)
 

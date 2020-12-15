@@ -31,7 +31,7 @@ open ParserAST
 %}
 
 %token CONST INLINE WHERE END PROBING
-%token ROM RAM REG
+%token ROM RAM REG MUX
 %token IF THEN ELSE
 %token LANGLE "<" RANGLE ">" LBRACKET "[" RBRACKET "]" LPAREN "(" RPAREN ")"
 %token COLON ":" SEMICOL ";" COMMA "," EQUAL "=" DOT "." DOTDOT ".."
@@ -102,8 +102,8 @@ let typed_ident_desc :=
 
 let opt_static_exp == localize(optional_static_exp_desc)
 let optional_static_exp_desc :=
-  | WILDCARD;                 { None }
-  | ~=simple_static_exp_desc; < Some >
+  | WILDCARD;                 { SUnknown (UniqueId.get ()) }
+  | ~=simple_static_exp_desc; < SExp >
 
 let node_params :=
   | (* empty *)           { [] }
@@ -183,12 +183,14 @@ let exp_desc :=
   | REG; ~=exp;                                                               < EReg >
   | ~=ident; ~=call_params; ~=tuple(exp);                                     < ECall >
   | e1=exp; ~=op; e2=exp;                                                     { ESupOp (op, [e1; e2]) }
+  | _m=MUX; e=tuple(exp);                                                     { ESupOp (localize $loc(_m) "mux", e) }
   | _n=NOT; e=exp;                                                            { ESupOp (localize $loc(_n) "not", [e])}
   | e1=simple_exp; slice=sntuple(slice_arg, "[", "]")+;                       { ESlice (List.flatten slice, e1) }
   | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESlice (List.map (fun e -> SliceOne e) (List.flatten idx), e1) }
   (* FIXME : Is it normal to have None as the first element of the list in all
    * three cases ? *)
-  | e1=exp; _c="."; e2=exp;                                                   { ECall (localize $loc(_c) "concat", [no_localize None; no_localize None], [e1; e2]) }
+  | e1=exp; _c="."; e2=exp;
+      { ECall (localize $loc(_c) "concat", [no_localize (SUnknown (UniqueId.get ())); no_localize (SUnknown (UniqueId.get ()))], [e1; e2]) }
   | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
       word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);
                                                                               { EMem  (ro, (addr_size, word_size, input_file), a) }

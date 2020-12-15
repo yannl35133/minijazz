@@ -6,4 +6,4 @@
 (library
  (name analysis)
  (wrapped false)
- (libraries global asts))
+ (libraries global asts str))

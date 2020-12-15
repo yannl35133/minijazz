@@ -95,8 +95,8 @@ and print_sexp se = print_sexp_desc se.desc
 
 let print_opt_sexp_desc opt_se_desc =
   match opt_se_desc with
-  | Some se_desc -> print_sexp_desc se_desc
-  | None         -> nop
+  | SExp se_desc -> print_sexp_desc se_desc
+  | SUnknown _   -> nop
 
 let print_opt_sexp opt_se = print_opt_sexp_desc opt_se.desc
 
@@ -148,6 +148,8 @@ let rec print_exp_desc = function
   | ESlice (params, arg) ->
       dprintf "%t[%t]" (print_exp arg) (dprint_list (dprintf ",") print_slice_param params)
   | ESupOp (op, args) when !!op = "not" ->
+      dprintf "@[<2>%t%t@]" (print_ident op) (par ((dprint_list comma_sep print_exp) args))
+  | ESupOp (op, args) when !!op = "mux" ->
       dprintf "@[<2>%t%t@]" (print_ident op) (par ((dprint_list comma_sep print_exp) args))
   | ESupOp (op, args) ->
       let e1, e2 = Misc.assert_2 args in
