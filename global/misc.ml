@@ -137,12 +137,12 @@ let exp a n =
   let rec aux acc n =
     if n = 0 then 1
     else if n = 1 then acc
-    else if n land 1 <> 0 then aux (acc * a) (n lsl 1)
-    else aux acc (n lsl 1)
-  in aux 1 n
+    else if n land 1 <> 0 then aux (a * acc * acc) (n lsr 1)
+    else aux (acc * acc) (n lsr 1)
+  in aux a n
 
 let bool_list_of_dec_int (nbits, v) =
-  List.init (-nbits) (fun n -> v / (exp 10 n) mod (exp 10 (n + 1)) = 1)
+  List.init (-nbits) (fun n -> v / (exp 10 n) mod (exp 10 (n + 1)) <> 0)
 
 exception Int_too_big
 let convert_size s n =

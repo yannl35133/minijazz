@@ -1,5 +1,5 @@
 equ_1<n>() = (o:[n]) where
-	o = 0
+	o = [0]
 end where
 
 main() = (o:[1]) where

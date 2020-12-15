@@ -3,7 +3,7 @@ const word_size = 4
 (* Transforme un fil en une nappe de n fils avec la meme valeur *)
 power<n>(i) = (o:[n]) where
   if n = 1 then
-    o = i
+    o = [i]
   else
     o = power<n-1>(i) . i
   end if

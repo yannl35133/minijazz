@@ -79,8 +79,10 @@ let lexbuf_from_file file_name =
 
 let compile_impl filename =
   (* input and output files *)
-  if not (Filename.check_suffix filename "mj")
-  then raise (Invalid_argument filename);
+  if not (Filename.check_suffix filename "mj") then begin
+    Format.eprintf "Invalid filename %s: must end with .mj@." filename;
+    exit 1
+  end;
 
   let ic, lexbuf = lexbuf_from_file filename in
   let net_name = (Filename.chop_suffix filename ".mj") ^ ".net" in
@@ -112,8 +114,9 @@ let compile_impl filename =
         | Netlist_dimensioning.WrongDimension (obtained, expected, loc, _args) ->
             Format.eprintf "%a@[<v>Expected dimension : %a@ Got dimension : %a@]@ "
               Location.print_location loc
-              Netlist_dimensioning.print_netlist_dimension obtained
-              Netlist_dimensioning.print_netlist_dimension expected; exit 1
+              Netlist_dimensioning.print_netlist_dimension expected
+              Netlist_dimensioning.print_netlist_dimension obtained;
+              raise Errors.ErrorDetected
     in
     
     let constrained_program = Netlist_constrain.program dimensioned_program in
@@ -130,8 +133,4 @@ let compile_impl filename =
 
     close_all_files ()
   with
-  | Invalid_argument fname ->
-     Format.fprintf Format.err_formatter
-       "Invalid filename %s: must end with .mj@." fname;
-     exit 1;
   | x -> close_all_files (); raise x

@@ -15,8 +15,8 @@ let rec eq_to_constraints c1 c2 = match c1, c2 with
 
 
 let fun_env_find fun_env s =
-  let regexp_slice = Str.regexp {|slice\(\(_\(all\|to\|from\|fromto\)\)*\)|} in
-  let regexp_supop = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\)_\([0-9]+\)|} in
+  let regexp_slice = Str.regexp {|slice\(\(_\(all\|one\|to\|from\|fromto\)\)*\)|} in
+  let regexp_supop = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\|concat\|add_dim\)_\([0-9]+\)|} in
   if Env.mem s fun_env then
     Env.find s fun_env
   else if Str.string_match regexp_slice s 0 then begin
@@ -36,13 +36,16 @@ let fun_env_find fun_env s =
     let dims_out = CDDim (aux 0 dim args) in
     [CDDim dims_in], dims_out
   end else if Str.string_match regexp_supop s 0 then begin
-    let op = Str.matched_group 0 s in
-    let dim = int_of_string @@ Str.matched_group 1 s in
-    let dims_in = CDDim (List.init dim (fun i -> PSConst (no_localize (SIParam i)))) in
+    let op = Str.matched_group 1 s in
+    let dim = int_of_string @@ Str.matched_group 2 s in
+    let dims_in_list = List.init dim (fun i -> PSConst (no_localize (SIParam i))) in
+    let dims_in = CDDim dims_in_list in
     if op = "not" then
       [dims_in], dims_in
     else if op = "mux" then
       [CDDim []; dims_in; dims_in], dims_in
+    else if op = "add_dim" then
+      [dims_in], CDDim (PSConst (no_localize (SInt 1)) :: dims_in_list)
     else
       [dims_in; dims_in], dims_in
   end else
@@ -66,7 +69,7 @@ let size_value loc v =
   in
   let rec search_size depth = function
     | ParserAST.VNDim (hd :: tl) -> let r = search_size depth hd in List.iter (assert_size r) tl; (List.length tl + 1) :: r
-    | ParserAST.VNDim [] -> raise (Errors.ZeroWideBusMulti (depth, loc))
+    | ParserAST.VNDim [] -> if depth > 0 then raise (Errors.ZeroWideBusMulti (depth, loc)) else [0]
     | ParserAST.VBit _ -> []
   in
   CDDim (List.map (fun n -> PSConst (relocalize loc (SInt n))) (search_size 0 v))
@@ -178,7 +181,11 @@ let fun_env NetlistDimensionedAST.{ node_inputs; node_outputs; _ } =
   let outs = List.map starput node_outputs in
   List.fold_left (fun var_env ((name, presize), _) -> Env.add name presize var_env) Env.empty (ins @ outs),
   (List.map snd ins, List.map snd outs),
-  (List.map (fun ((_, presize), _) -> presize) ins, CDProd (List.map (fun ((_, presize), _) -> presize) outs))
+  (List.map (fun ((_, presize), _) -> presize) ins,
+    match List.map (fun ((_, presize), _) -> presize) outs with
+      | [out] -> out
+      | l -> CDProd l
+  )
 
 let program NetlistDimensionedAST.{ p_consts; p_consts_order; p_nodes } : program =
   let pre_fun_env = Env.map fun_env p_nodes in

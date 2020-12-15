@@ -16,3 +16,5 @@ let get =
     x
 
 let compare = Int.compare
+
+let print fmt uid = Format.fprintf fmt "%d" uid

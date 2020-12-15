@@ -99,7 +99,10 @@ let syntax_error loc =
   raise ErrorDetected
 
 let raise_warning_lexical = function
-  | Nonbinary_base _loc -> ignore "base unadapted to binary@."
+  | Nonbinary_base loc -> Format.eprintf "%awarning:base unadapted to binary@." Location.print_location loc
 
 let raise_warning_dimension = function
-  | InsufficientAnnotations (_name, _loc, _var) -> ()
+  | InsufficientAnnotations (name, loc, var) ->
+      Format.eprintf "%awarning:could not guess dimension of variable %s in function %s@."
+        Location.print_location loc
+        var name

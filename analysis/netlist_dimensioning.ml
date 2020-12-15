@@ -19,6 +19,7 @@ type prod_context =
 
 exception UnexpectedProd of (Location.location * prod_context) (* Obtained product, expected dimension *)
 exception ImpossibleProd of (Location.location * prod_context * fun_context option) (* Expected product, obtained expression which returns dimension *)
+exception ImpossibleDimension of (netlist_dimension * Location.location)
 exception WrongDimension of (netlist_dimension * netlist_dimension * Location.location * error_context)
 exception UndefinedReturnVariables of (string * string * Location.location)
 
@@ -34,18 +35,33 @@ let dim_value loc v =
   in
   let rec search_height depth = function
     | ParserAST.VNDim (hd :: tl) -> let r = search_height (succ depth) hd in List.iter (assert_height r) tl; succ r
-    | ParserAST.VNDim [] -> raise (Errors.ZeroWideBusMulti (depth, loc))
+    | ParserAST.VNDim [] -> if depth > 0 then raise (Errors.ZeroWideBusMulti (depth, loc)) else 1
     | ParserAST.VBit _ -> 0
   in
   NDim (search_height 0 v)
 
 let supop name args dim =
-  let funname = match dim with
-    | 0 -> !!name
-    | n -> !!name ^ "_" ^ string_of_int n
+  let params = List.init dim (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))) in
+  ECall (relocalize !@name (!!name ^ "_" ^ string_of_int dim), params, args)
+
+let concat name loc (arg1, n1) (arg2, n2) =
+  let funname, dim, arg1, arg2 = match n1, n2 with
+    | 0, 0 -> "concat_1", 1,
+        dimension (ECall (no_localize "add_dim", [], [arg1])) !%@arg1 (NDim 1),
+        dimension (ECall (no_localize "add_dim", [], [arg2])) !%@arg2 (NDim 1)
+    | n1, n2 when n2 = n1 -> "concat_" ^ string_of_int n1, n1, arg1, arg2
+    | n1, n2 when n2 = n1 - 1 -> "concat_" ^ string_of_int n1, n1, arg1,
+        dimension (ECall (no_localize @@ "add_dim_" ^ string_of_int n2,
+                          List.init n2 (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))), [arg2])) !%@arg2 (NDim (n2 + 1))
+    | n1, n2 when n2 = n1 + 1 -> "concat_" ^ string_of_int n2, n2, 
+        dimension (ECall (no_localize @@ "add_dim_" ^ string_of_int n1,
+                          List.init n1 (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))), [arg1])) !%@arg1 (NDim (n1 + 1)),
+        arg2
+    | _, _ -> failwith "abs (n2 - n1) > 1"
   in
   let params = List.init dim (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))) in
-  ECall (relocalize !@name funname, params, args)
+  let exp = ECall (relocalize !@name funname, params, [arg1; arg2]) in
+  dimension exp loc (NDim dim)
 
 let slice params dim =
   let n = List.length params in
@@ -96,7 +112,41 @@ let rec exp fun_env dimensioned e = match !!e with
         | Some dim -> dimensioned, dimension (EVar id) !@e dim
       with Not_found -> raise (Errors.Scope_error (!!id, !@id))
       end
+  | StaticTypedAST.ESupOp (op, args) when !!op = "concat" -> begin
+      let dimensioned, dim_args = List.fold_left_map (exp fun_env) dimensioned args in
+      let arg1, arg2 = match dim_args with
+        | [arg1; arg2] -> arg1, arg2 
+        | _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 2, !!op)
+      in
+      let n1, n2 = match !%%arg1, !%%arg2 with
+        | NProd _, _ -> raise @@ (* Errors. *)UnexpectedProd (!%@arg1, ProdOp !!op)
+        | _, NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@arg2, ProdOp !!op)
+        | NDim n1, NDim n2 ->
+            if abs (n1 - n2) > 1 then
+              raise @@ (* Errors. *)WrongDimension (!%%arg1, !%%arg2, !%@arg2, ErOp (!!op, !%@arg1))
+            else n1, n2
+      in
+      dimensioned, concat op !@e (arg1, n1) (arg2, n2)
+      end
+  | StaticTypedAST.ESupOp (op, args) when !!op = "add_dim" -> begin
+      let dimensioned, dim_args = List.fold_left_map (exp fun_env) dimensioned args in
+      let arg = match dim_args with
+        | [arg] -> arg 
+        | _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 1, !!op)
+      in
+      let dim = match !%%arg with
+        | NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@arg, ProdOp !!op)
+        | NDim n -> n
+      in
+      dimensioned, dimension (supop op (dim_args) dim) !@e (NDim (dim+1))
+      end 
   | StaticTypedAST.ESupOp (op, args) ->
+      let special_arg, args =
+        if !!op = "mux" then
+          try [List.hd args], List.tl args with Failure _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 3, !!op)
+        else
+          [], args
+      in
       let f d arg =
         try
           let d, res = exp fun_env d arg in
@@ -110,13 +160,14 @@ let rec exp fun_env dimensioned e = match !!e with
         | NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@dim_ex, ProdOp !!op)
         | NDim n -> n
       in
-      let f dimensioned arg =
+      let f dim dimensioned arg =
         try
           assert_exp fun_env (NDim dim) dimensioned arg
         with (* Errors. *)WrongDimension (n1, n2, loc1, ErSimple) -> raise @@ (* Errors. *)WrongDimension (n1, n2, loc1, ErOp (!!op, !%@dim_ex))
       in
-      let dimensioned, dim_args = List.fold_left_map f dimensioned args in      
-      dimensioned, dimension (supop op dim_args dim) !@e (NDim dim)
+      let dimensioned, dim_special_arg = List.fold_left_map (f 0) dimensioned special_arg in
+      let dimensioned, dim_args = List.fold_left_map (f dim) dimensioned args in      
+      dimensioned, dimension (supop op (dim_special_arg @ dim_args) dim) !@e (NDim dim)
   | StaticTypedAST.ESlice (params, e1) ->
       let dimensioned, e1 = exp fun_env dimensioned e1 in
       let dim = match !%%e1 with
@@ -182,6 +233,30 @@ and assert_exp fun_env dim dimensioned e =
             dimensioned, dimension (EVar id) !@e dim'
       with Not_found -> raise (Errors.Scope_error (!!id, !@id))
       end
+  | StaticTypedAST.ESupOp (op, _) when !!op = "concat" -> begin
+      match dim with
+        | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
+        | NDim _ -> raise CannotDimensionYet
+      end
+  | StaticTypedAST.ESupOp (op, args) when !!op = "dim_add" ->
+      let dim_int = match dim with
+        | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
+        | NDim 0 -> raise @@ (* Errors. *)ImpossibleDimension (NDim 0, !@e)
+        | NDim n -> n
+      in
+      let dimensioned, dim_args = List.fold_left_map (assert_exp fun_env (NDim (dim_int - 1))) dimensioned args in
+      dimensioned, dimension (supop op dim_args dim_int) !@e dim
+  | StaticTypedAST.ESupOp (op, args) when !!op = "mux" ->
+      let dim_int = match dim with
+        | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
+        | NDim n -> n
+      in
+      let special_arg, args =
+        try List.hd args, List.tl args with Failure _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 3, !!op)
+      in
+      let dimensioned, dim_spe_arg = assert_exp fun_env (NDim 0) dimensioned special_arg in
+      let dimensioned, dim_args = List.fold_left_map (assert_exp fun_env dim) dimensioned args in
+      dimensioned, dimension (supop op (dim_spe_arg :: dim_args) dim_int) !@e dim
   | StaticTypedAST.ESupOp (op, args) ->
       let dim_int = match dim with
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
@@ -327,7 +402,9 @@ let starput dimensioned StaticTypedAST.{desc = { name; typed }; loc } =
 
 let fun_env StaticTypedAST.{ node_inputs; node_outputs; _ } =
   List.map (fun input -> dimension_of_netlist_type !!(!!input.StaticTypedAST.typed) ) node_inputs,
-  NProd (List.map (fun input -> dimension_of_netlist_type !!(!!input.StaticTypedAST.typed)) node_outputs)
+  match List.map (fun input -> dimension_of_netlist_type !!(!!input.StaticTypedAST.typed)) node_outputs with
+  | [out] -> out
+  | l -> NProd l
   
 
 let node fun_env name StaticTypedAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
@@ -338,7 +415,7 @@ let node fun_env name StaticTypedAST.{ node_name_loc; node_loc; node_params; nod
   {
     node_inputs;
     node_outputs;
-    node_body =     body fun_env (name, output_set) dimensioned node_body;
+    node_body = body fun_env (name, output_set) dimensioned node_body;
     node_name_loc; node_loc; node_inline; node_params; node_probes
   }
 
