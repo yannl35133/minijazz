@@ -47,8 +47,8 @@ let supop name args dim =
 let concat name loc (arg1, n1) (arg2, n2) =
   let funname, dim, arg1, arg2 = match n1, n2 with
     | 0, 0 -> "concat_1", 1,
-        dimension (ECall (no_localize "add_dim", [], [arg1])) !%@arg1 (NDim 1),
-        dimension (ECall (no_localize "add_dim", [], [arg2])) !%@arg2 (NDim 1)
+        dimension (ECall (no_localize "add_dim_0", [], [arg1])) !%@arg1 (NDim 1),
+        dimension (ECall (no_localize "add_dim_0", [], [arg2])) !%@arg2 (NDim 1)
     | n1, n2 when n2 = n1 -> "concat_" ^ string_of_int n1, n1, arg1, arg2
     | n1, n2 when n2 = n1 - 1 -> "concat_" ^ string_of_int n1, n1, arg1,
         dimension (ECall (no_localize @@ "add_dim_" ^ string_of_int n2,
@@ -73,7 +73,7 @@ let slice params dim =
     else
       params
   in
-  let slice_dim_removed = function
+  let slice_dim_remaining = function
     | StaticTypedAST.SliceAll ->       1
     | StaticTypedAST.SliceOne _ ->     0
     | StaticTypedAST.SliceFrom _ ->    1
@@ -94,7 +94,7 @@ let slice params dim =
     | StaticTypedAST.SliceTo hi ->     [relocalize !@hi (SOIntExp !!hi)]
     | StaticTypedAST.Slice (lo, hi) -> [relocalize !@lo (SOIntExp !!lo); relocalize !@hi (SOIntExp !!hi)]
   in
-  let dims_remaining = List.fold_left (fun acc el -> acc + slice_dim_removed el) 0 params in
+  let dims_remaining = List.fold_left (fun acc el -> acc + slice_dim_remaining el) 0 params in
   let size = List.init dim (fun _ -> no_localize @@ SOIntExp (SUnknown (UniqueId.get ()))) (* One argument per input dimension *)
   and name = String.concat "_" @@ List.map slice_name params
   and args = List.concat_map slice_param params in
@@ -270,11 +270,11 @@ and assert_exp fun_env dim dimensioned e =
         | NDim n -> n
       in
       let slice_dim_removed = function
-        | StaticTypedAST.SliceAll ->       1
-        | StaticTypedAST.SliceOne _ ->     0
-        | StaticTypedAST.SliceFrom _ ->    1
-        | StaticTypedAST.SliceTo _ ->      1
-        | StaticTypedAST.Slice _ ->        1
+        | StaticTypedAST.SliceAll ->       0
+        | StaticTypedAST.SliceOne _ ->     1
+        | StaticTypedAST.SliceFrom _ ->    0
+        | StaticTypedAST.SliceTo _ ->      0
+        | StaticTypedAST.Slice _ ->        0
       in
       let dims_removed = List.fold_left (fun acc el -> acc + slice_dim_removed el) 0 params in
       let dim_int = dim_int_pre + dims_removed in

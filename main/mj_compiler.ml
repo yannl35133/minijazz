@@ -86,10 +86,10 @@ let compile_impl filename =
 
   let ic, lexbuf = lexbuf_from_file filename in
   let net_name = (Filename.chop_suffix filename ".mj") ^ ".net" in
-  let net = open_out net_name in
+  (* let net = open_out net_name in *)
   let close_all_files () =
     close_in ic;
-    close_out net
+    (* close_out net *)
   in
   try
     Format.printf "parsing %s@." filename;
@@ -98,7 +98,6 @@ let compile_impl filename =
     (* let pp = Printer.print_program stdout in *)
     (* Parsing of the file *)
     let parsed_program = parse lexbuf in
-    Format.printf "done parsing@.";
 
     if !print_parsing_ast then
       Printers.ParserAst.print_program parsed_program Format.std_formatter;
@@ -122,6 +121,8 @@ let compile_impl filename =
     let constrained_program = Netlist_constrain.program dimensioned_program in
 
     let _sized_program = Netlist_sizer.program constrained_program in
+
+    Format.printf "done typing@.";
 
     (* let p = Mj2net.program p in *)
 

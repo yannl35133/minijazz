@@ -2,88 +2,531 @@ open CommonAST
 open StaticTypedPartialAST
 open NetlistConstrainedAST
 
+type ternary =
+  | Yes
+  | No
+  | Maybe
+
+let b_to_t = function
+  | true -> Yes
+  | false -> No
+
+(* let (&&) a b = match a, b with
+  | No, _
+  | _, No -> No
+  | Yes, Yes -> Yes
+  | _, _ -> Maybe *)
+
+let (&&?) a b = match a, b with
+  | Yes, Yes -> Yes
+  | _, _ -> Maybe
+
+let (||) a b = match a, b with
+  | Yes, _
+  | _, Yes -> Yes
+  | No, No -> No
+  | _, _ -> Maybe
+
+let (||?) a b = match a, b with
+  | Yes, _
+  | _, Yes -> Yes
+  | _, _ -> Maybe
+
+
+type unknown_description =
+  | VarDim of ident * int
+  | Param of ident_desc * Location.location * int
+
+type new_context =
+  | Uid of UniqueId.t
+  | Recontextualize of static_bitype_exp list * new_context
+
+and static_int_exp_desc =
+  | UInt      of int
+  | UIParam   of int
+  | UIConst   of ident
+  | UIUnknown of unknown_description * new_context
+  | UIUnOp    of        int_unop * static_int_exp
+  | UIBinOp   of          int_op * static_int_exp * static_int_exp
+  | UIIf      of static_bool_exp * static_int_exp * static_int_exp  (* se1 ? se2 : se3 *)
+
+and static_bool_exp_desc =
+  | UBool     of bool
+  | UBParam   of int
+  | UBConst   of ident
+  | UBUnknown of unknown_description * new_context
+  | UBUnOp    of       bool_unop * static_bool_exp
+  | UBBinOp   of         bool_op * static_bool_exp * static_bool_exp
+  | UBBinIntOp of    int_bool_op * static_int_exp  * static_int_exp
+  | UBIf      of static_bool_exp * static_bool_exp * static_bool_exp  (* se1 ? se2 : se3 *)
+
+and static_int_exp  = static_int_exp_desc  localized
+and static_bool_exp = static_bool_exp_desc localized
+
+and static_bitype_exp_desc =
+  | UIntExp  of static_int_exp_desc
+  | UBoolExp of static_bool_exp_desc
+and static_bitype_exp = static_bitype_exp_desc localized
+
+let sintexp = fun se -> SIntExp se
+
+
+(* ------------------------------------------------------------------------------------------------------ *)
+
+(* Printing Static expression *)
+
+open Format
+open CommonAST
+
+(* Helpers *)
+
+let dprint_bool b = dprintf "%s" (if b then "1" else "0")
+let dprint_nop = dprintf ""
+
+
+let rec print_list_naked sep printer l =
+  match l with
+  | []     -> dprint_nop
+  | [h]    -> printer h
+  | h :: t ->
+      dprintf "%t%t%t"
+        (printer h)
+        sep
+        (print_list_naked sep printer t)
+
+let print_list del sep printer l =
+  del (print_list_naked sep printer l)
+
+let print_list_if_nonempty del sep printer l =
+  match l with
+  | [] -> dprint_nop
+  | _  -> print_list del sep printer l
+
+let dprint_if b printer = if b then printer else dprint_nop
+let dprint_newline = dprintf "@ "
+
+
+let binop_sep str = dprintf " %s@ " str
+let star_sep = binop_sep "*"
+let comma_sep = dprintf ",@ "
+let semicolon_sep = dprintf ";@ "
+
+let delim prefix suffix printer =
+  dprintf "@[<hv 2>%t@,%t@;<0 -2>%t@]"
+    prefix
+    printer
+    suffix
+
+
+let par  = delim (dprintf "(") (dprintf ")")
+let chev = delim (dprintf "<") (dprintf ">")
+let brak = delim (dprintf "[") (dprintf "]")
+
+
+(* CommonAST *)
+
+let print_ident (id: ident) = dprintf "%s" id.desc
+
+let print_mem_kind_desc = function
+  | MRom -> dprintf "rom"
+  | MRam -> dprintf "ram"
+
+let print_mem_kind mem_kind = print_mem_kind_desc mem_kind.desc
+
+let print_inline_status = function
+  | Inline    -> dprintf "inline "
+  | NotInline -> dprint_nop
+
+
+let print_int_op = function
+  | SAdd -> "+" | SMinus -> "-" | SMult -> "*" | SDiv -> "/" | SPower -> "^"
+let print_int_bool_op = function
+  | SEq -> "=" | SNeq -> "!="
+  | SLt -> "<" | SLeq -> "<=" | SGt -> ">" | SGeq -> ">="
+let print_bool_op = function
+  | SOr -> "||" | SAnd -> "&&"
+
+let print_int_unop unop =
+  let op_str =
+    match unop with
+    | SNeg -> "-"
+  in
+  dprintf "%s" op_str
+
+let print_bool_unop unop =
+  let op_str =
+    match unop with
+    | SNot -> "!"
+  in
+  dprintf "%s" op_str
+
+let print_desc = function
+  | VarDim (name, i) -> dprintf "%s.%i" !!name i
+  | Param (fname, _, i) -> dprintf "%s#%i" fname i
+
+let rec print_unknown d = function
+  | Uid uid ->
+      dprintf "?%a(%t)"
+        UniqueId.print uid
+        (print_desc d)
+  | Recontextualize (params, r) ->
+      dprintf "%t%t"
+        (print_unknown d r)
+        (print_list brak comma_sep print_bitype_exp params)
+
+and print_int_exp_desc = function
+  | UInt n     -> dprintf "%i" n
+  | UIParam i  -> dprintf "#%i" i
+  | UIUnknown (d, nc) ->
+        print_unknown d nc
+  | UIConst id -> print_ident id
+  | UIUnOp (sunop, se) ->
+      dprintf "%t %t" 
+        (print_int_unop sunop)
+        (print_int_exp se)
+  | UIBinOp (sop, se1, se2) ->
+      dprintf "%t%t%t"
+        (print_int_exp se1)
+        (binop_sep (print_int_op sop))
+        (print_int_exp se2)
+  | UIIf (c, se1, se2) ->
+      dprintf "@[<hv 2>%t ?@ %t@ : %t@]"
+        (print_bool_exp c)
+        (print_int_exp se1)
+        (print_int_exp se2)
+
+and print_bool_exp_desc = function
+  | UBool b    -> dprint_bool b
+  | UBParam i  -> dprintf "#%i" i
+  | UBConst id -> print_ident id
+  | UBUnknown (d, nc) ->
+      print_unknown d nc
+  | UBUnOp (sunop, se) ->
+      dprintf "%t %t" 
+        (print_bool_unop sunop)
+        (print_bool_exp se)
+  | UBBinOp (sop, se1, se2) ->
+      dprintf "%t%t%t"
+        (print_bool_exp se1)
+        (binop_sep (print_bool_op sop))
+        (print_bool_exp se2)
+  | UBBinIntOp (sop, se1, se2) ->
+      dprintf "%t%t%t"
+        (print_int_exp se1)
+        (binop_sep (print_int_bool_op sop))
+        (print_int_exp se2)
+  | UBIf (c, se1, se2) ->
+      dprintf "@[<hv 2>%t ?@ %t@ : %t@]"
+        (print_bool_exp c)
+        (print_bool_exp se1)
+        (print_bool_exp se2)
+
+and print_int_exp se = print_int_exp_desc se.desc
+and print_bool_exp se = print_bool_exp_desc se.desc
+
+and print_bitype_exp_desc = function
+  | UIntExp  se -> print_int_exp_desc se
+  | UBoolExp se -> print_bool_exp_desc se
+and print_bitype_exp se = print_bitype_exp_desc se.desc
+
+let print_opt_int_exp_desc = function
+  | SUnknown uid ->
+      dprintf "?%a" UniqueId.print uid
+  | SExp se -> print_int_exp_desc se
+
+let print_opt_int_exp se = print_opt_int_exp_desc se.desc
+
+(* ---------------------------------------------------------------------------------- *)
+
+
 module UIDEnv = Map.Make(UniqueId)
 
 type union_find =
-  | LinkVar of (ident * int) * UniqueId.t
-  | Direct of static_int_exp
+  | Link of unknown_description * UniqueId.t
+  | Indirect of Location.location * union_find
+  | Direct of StaticTypedPartialAST.static_bitype_exp
 
 type env = union_find UIDEnv.t
 
 let rec mem uid env = match UIDEnv.find_opt uid env with
   | None -> false
-  | Some Direct _ -> true
-  | Some LinkVar (_, uid) -> mem uid env
+  | Some thing -> mem' env thing
+and mem' env = function
+  | Link (_, uid) -> mem uid env
+  | Direct _ -> true
+  | Indirect (_, link) -> mem' env link
 
-let rec find uid env = match UIDEnv.find_opt uid env with
-  | None -> invalid_arg "find"
-  | Some Direct se -> se
-  | Some LinkVar (_, uid) -> find uid env
+let rec find_opt uid env = match UIDEnv.find_opt uid env with
+  | None -> None
+  | Some thing -> find_opt' env thing
+and find_opt' env = function
+  | Link (_, uid) -> find_opt uid env
+  | Direct se -> Some !!se
+  | Indirect (_, link) -> find_opt' env link
 
-let rec repr uid env = match UIDEnv.find_opt uid env with
-  | None
-  | Some Direct _ -> uid
-  | Some LinkVar (_, uid) -> repr uid env
-
-let add uid el env =
-  let rep = repr uid env in
-  assert (not (mem rep env));
-  UIDEnv.add rep el env
-
-let (&&) a b = match a, b with
-  | Some false, _
-  | _, Some false -> Some false
-  | Some true, Some true -> Some true
-  | _ -> None
-
-let (||) a b = match a, b with
-  | Some true, _
-  | _, Some true -> Some true
-  | Some false, Some false -> None
-  | _ -> None
-
-let rec static_equal = function
-  | SInt n1,    SInt n2 -> Some (n1 = n2)
-  | SIParam i1, SIParam i2 -> Some (i1 = i2)
-  | SIConst v1, SIConst v2 -> Some (!!v1 = !!v2)
-  | (SInt _ | SIParam _ | SIConst _), (SInt _ | SIParam _ | SIConst _) -> Some false   (* We don't want to rely on the equality of two value types *)
-  | SIUnOp (SNeg, se1), SIUnOp (SNeg, se2) -> static_equal (!!se1, !!se2)
-  | SIBinOp (op, se1, se2), SIBinOp (op', se1', se2') -> if op <> op' then None else static_equal (!!se1, !!se2) && static_equal (!!se1', !!se2')
-  | SIIf (c, se1, se2), SIIf (c', se1', se2') -> if c <> c' then None else static_equal (!!se1, !!se2) && static_equal (!!se1', !!se2')
-  | _ -> None
-
-let analyze_result c1 c2 = function
-  | Some true -> ()
-  | None -> Format.eprintf "raise_warning c1 c2\n"
-  | Some false -> failwith "raise_error"
+let rec add uid el env = match UIDEnv.find_opt uid env with
+  | None -> UIDEnv.add uid el env
+  | Some thing -> add' el env thing
+and add' el env = function
+  | Link (_, uid) -> add uid el env
+  | Direct _ -> assert false
+  | Indirect (_, link) -> add' el env link
 
 
-let rec substitute_int params = function
-  | SInt n -> SInt n
-  | SIConst id -> SIConst id
-  | SIParam i -> (let r = List.nth params i in match !!r with SOIntExp (SExp se) -> se | SOIntExp (SUnknown _) -> failwith "TODO" | SOBoolExp _ -> failwith "Static type error")
-  | SIUnOp (op, se) -> SIUnOp (op, relocalize_fun (substitute_int params) se)
-  | SIBinOp (op, se1, se2) -> SIBinOp (op, relocalize_fun (substitute_int params) se1, relocalize_fun (substitute_int params) se2)
-  | SIIf (c, se1, se2) -> SIIf (relocalize_fun (substitute_bool params) c, relocalize_fun (substitute_int params) se1, relocalize_fun (substitute_int params) se2)
+let rec to_uiexp = function
+  | SInt n -> UInt n
+  | SIConst id -> UIConst id
+  | SIParam i -> UIParam i
+  | SIUnOp (op, se) -> UIUnOp (op, relocalize_fun to_uiexp se)
+  | SIBinOp (op, se1, se2) -> UIBinOp (op, relocalize_fun to_uiexp se1, relocalize_fun to_uiexp se2)
+  | SIIf (c, se1, se2) -> UIIf (relocalize_fun to_ubexp c, relocalize_fun to_uiexp se1, relocalize_fun to_uiexp se2)
 
-and substitute_bool params = function
-  | SBool b -> SBool b
-  | SBConst id -> SBConst id
-  | SBParam i -> (let r = List.nth params i in match !!r with SOBoolExp (SExp se) -> se | SOBoolExp (SUnknown _) -> failwith "TODO" | SOIntExp _ -> failwith "Static type error")
-  | SBUnOp (op, se) -> SBUnOp (op, relocalize_fun (substitute_bool params) se)
-  | SBBinOp (op, se1, se2) -> SBBinOp (op, relocalize_fun (substitute_bool params) se1, relocalize_fun (substitute_bool params) se2)
-  | SBBinIntOp (op, se1, se2) -> SBBinIntOp (op, relocalize_fun (substitute_int params) se1, relocalize_fun (substitute_int params) se2)
-  | SBIf (c, se1, se2) -> SBIf (relocalize_fun (substitute_bool params) c, relocalize_fun (substitute_bool params) se1, relocalize_fun (substitute_bool params) se2)
+and to_ubexp = function
+  | SBool b -> UBool b
+  | SBConst id -> UBConst id
+  | SBParam i -> UBParam i
+  | SBUnOp (op, se) -> UBUnOp (op, relocalize_fun to_ubexp se)
+  | SBBinOp (op, se1, se2) -> UBBinOp (op, relocalize_fun to_ubexp se1, relocalize_fun to_ubexp se2)
+  | SBBinIntOp (op, se1, se2) -> UBBinIntOp (op, relocalize_fun to_uiexp se1, relocalize_fun to_uiexp se2)
+  | SBIf (c, se1, se2) -> UBIf (relocalize_fun to_ubexp c, relocalize_fun to_ubexp se1, relocalize_fun to_ubexp se2)
+
+let to_ubiexp fname loc arg_nb = function
+  | SOIntExp  (SUnknown uid) -> UIntExp  (UIUnknown (Param (fname, loc, arg_nb), Uid uid))
+  | SOBoolExp (SUnknown uid) -> UBoolExp (UBUnknown (Param (fname, loc, arg_nb), Uid uid))
+  | SOIntExp  (SExp se) -> UIntExp (to_uiexp se)
+  | SOBoolExp (SExp se) -> UBoolExp (to_ubexp se)
+
+let rec aux_substitute_int params = function
+  | UInt n -> UInt n
+  | UIConst id -> UIConst id
+  | UIParam i -> (match List.nth_opt params i with
+      | None -> failwith "Param list too short"
+      | Some { desc = UBoolExp _; loc = _ } -> failwith "Static type error"
+      | Some { desc = UIntExp se; loc = _ } -> se)
+  | UIUnknown (d, nc) -> UIUnknown (d, Recontextualize (params, nc))
+  | UIUnOp (op, se) -> UIUnOp (op, relocalize_fun (aux_substitute_int params) se)
+  | UIBinOp (op, se1, se2) -> UIBinOp (op, relocalize_fun (aux_substitute_int params) se1, relocalize_fun (aux_substitute_int params) se2)
+  | UIIf (c, se1, se2) -> UIIf (relocalize_fun (aux_substitute_bool params) c, relocalize_fun (aux_substitute_int params) se1, relocalize_fun (aux_substitute_int params) se2)
+
+and aux_substitute_bool params = function
+  | UBool b -> UBool b
+  | UBConst id -> UBConst id
+  | UBParam i -> (match List.nth_opt params i with
+      | None -> failwith "Param list too short"
+      | Some { desc = UIntExp _; loc = _ } -> failwith "Static type error"
+      | Some { desc = UBoolExp se; loc = _ } -> se)
+  | UBUnknown (d, nc) -> UBUnknown (d, Recontextualize (params, nc))
+  | UBUnOp (op, se) -> UBUnOp (op, relocalize_fun (aux_substitute_bool params) se)
+  | UBBinOp (op, se1, se2) -> UBBinOp (op, relocalize_fun (aux_substitute_bool params) se1, relocalize_fun (aux_substitute_bool params) se2)
+  | UBBinIntOp (op, se1, se2) -> UBBinIntOp (op, relocalize_fun (aux_substitute_int params) se1, relocalize_fun (aux_substitute_int params) se2)
+  | UBIf (c, se1, se2) -> UBIf (relocalize_fun (aux_substitute_bool params) c, relocalize_fun (aux_substitute_bool params) se1, relocalize_fun (aux_substitute_bool params) se2)
+
+let rec substitute_params_int = function
+  | [] -> Fun.id
+  | [params] -> aux_substitute_int params
+  | params :: tl -> fun se -> substitute_params_int tl @@ aux_substitute_int params @@ se
+
+let rec substitute_params_bool = function
+  | [] -> Fun.id
+  | [params] -> aux_substitute_bool params
+  | params :: tl -> fun se -> substitute_params_bool tl @@ aux_substitute_bool params @@ se
+
+let rec extract_uid = function
+  | Recontextualize (_, e) -> extract_uid e
+  | Uid uid -> uid
+
+let rec extract_params acc = function
+  | Recontextualize (p, nc) -> extract_params (p :: acc) nc
+  | Uid _ -> acc
 
 
- 
-let rec solve_constraint env = function
-  | (PSOtherContext (_, _, params, PSConst se1) as c1), c2 ->
-      solve_constraint env (PSConst (relocalize !@se1 (substitute_int params !!se1)), c2)
-  | c1, (PSOtherContext (_, _, params, PSConst se2) as c2) ->
-      solve_constraint env (c1, PSConst (relocalize !@se2 (substitute_int params !!se2)))
-  | PSOtherContext (_, _, _, _), _ | _, PSOtherContext (_, _, _, _) ->
+let rec substitute_env_int env = function
+  | UInt n -> UInt n
+  | UIConst id -> UIConst id
+  | UIParam i -> UIParam i
+  | UIUnknown (d, nc) -> begin
+      match find_opt (extract_uid nc) env with
+      | None -> UIUnknown (d, nc)
+      | Some SBoolExp _ -> failwith "Static type error"
+      | Some SIntExp se ->
+        let p_list = extract_params [] nc in
+        substitute_params_int p_list (to_uiexp se)
+    end
+  | UIUnOp (op, se) -> UIUnOp (op, relocalize_fun (substitute_env_int env) se)
+  | UIBinOp (op, se1, se2) -> UIBinOp (op, relocalize_fun (substitute_env_int env) se1, relocalize_fun (substitute_env_int env) se2)
+  | UIIf (c, se1, se2) -> UIIf (relocalize_fun (substitute_env_bool env) c, relocalize_fun (substitute_env_int env) se1, relocalize_fun (substitute_env_int env) se2)
+
+and substitute_env_bool env = function
+  | UBool b -> UBool b
+  | UBConst id -> UBConst id
+  | UBParam i -> UBParam i
+  | UBUnknown (d, nc) -> begin
+      match find_opt (extract_uid nc) env with
+      | None -> UBUnknown (d, nc)
+      | Some SIntExp _ -> failwith "Static type error"
+      | Some SBoolExp se ->
+        let p_list = extract_params [] nc in
+        substitute_params_bool p_list (to_ubexp se)
+    end
+  | UBUnOp (op, se) -> UBUnOp (op, relocalize_fun (substitute_env_bool env) se)
+  | UBBinOp (op, se1, se2) -> UBBinOp (op, relocalize_fun (substitute_env_bool env) se1, relocalize_fun (substitute_env_bool env) se2)
+  | UBBinIntOp (op, se1, se2) -> UBBinIntOp (op, relocalize_fun (substitute_env_int env) se1, relocalize_fun (substitute_env_int env) se2)
+  | UBIf (c, se1, se2) -> UBIf (relocalize_fun (substitute_env_bool env) c, relocalize_fun (substitute_env_bool env) se1, relocalize_fun (substitute_env_bool env) se2)
+
+
+
+
+let rec presize_to_uiexp = function
+  | PSVar (name, i, uid) -> relocalize !@name (UIUnknown (VarDim (name, i), Uid uid))
+  | PSConst se -> relocalize_fun to_uiexp se
+  | PSOtherContext (fname, loc, params, ps) ->
+      let f_param i = relocalize_fun (to_ubiexp fname loc i) in
+      relocalize_fun (aux_substitute_int (List.mapi f_param params)) (presize_to_uiexp ps)
+
+
+
+let rec maybe_equal_int = function
+  | UInt n1,    UInt n2 -> b_to_t (n1 = n2)
+  | UIParam i1, UIParam i2 -> b_to_t (i1 = i2)
+  | UIConst v1, UIConst v2 -> b_to_t (!!v1 = !!v2)
+  | UIUnknown (_, nc1), UIUnknown (_, nc2) -> b_to_t (extract_uid nc1 = extract_uid nc2)
+  | (UInt _ | UIParam _ | UIConst _ | UIUnknown _), (UInt _ | UIParam _ | UIConst _ | UIUnknown _) -> No   (* We don't want to rely on the equality of two value types *)
+  | UIUnOp (SNeg, se1), UIUnOp (SNeg, se2) -> maybe_equal_int (!!se1, !!se2)
+  | UIBinOp (op, se1, se2), UIBinOp (op', se1', se2') -> if op <> op' then Maybe else maybe_equal_int (!!se1, !!se2) &&? maybe_equal_int (!!se1', !!se2')
+  | UIIf (c, se1, se2), UIIf (c', se1', se2') -> maybe_equal_bool (!!c, !!c') &&? maybe_equal_int (!!se1, !!se2) &&? maybe_equal_int (!!se1', !!se2')
+  | _ -> Maybe
+
+and maybe_equal_bool = function
+  | UBool b1,   UBool b2 -> b_to_t (b1 = b2)
+  | UBParam i1, UBParam i2 -> b_to_t (i1 = i2)
+  | UBConst v1, UBConst v2 -> b_to_t (!!v1 = !!v2)
+  | UBUnknown (_, nc1), UBUnknown (_, nc2) -> b_to_t (extract_uid nc1 = extract_uid nc2)
+  | (UBool _ | UBParam _ | UBConst _ | UBUnknown _), (UBool _ | UBParam _ | UBConst _ | UBUnknown _) -> No   (* We don't want to rely on the equality of two value types *)
+  | UBUnOp (SNot, se1), UBUnOp (SNot, se2) -> maybe_equal_bool (!!se1, !!se2)
+  | UBBinOp (op, se1, se2), UBBinOp (op', se1', se2') -> if op <> op' then Maybe else maybe_equal_bool (!!se1, !!se2) &&? maybe_equal_bool (!!se1', !!se2')
+  | UBIf (c, se1, se2), UBIf (c', se1', se2') -> maybe_equal_bool (!!c, !!c') &&? maybe_equal_bool (!!se1, !!se2) &&? maybe_equal_bool (!!se1', !!se2')
+  | _ -> Maybe
+
+
+let rec from_uiexp = function
+  | UInt n -> SInt n
+  | UIConst id -> SIConst id
+  | UIParam i -> SIParam i
+  | UIUnknown _ -> assert false
+  | UIUnOp (op, se) -> SIUnOp (op, relocalize_fun from_uiexp se)
+  | UIBinOp (op, se1, se2) -> SIBinOp (op, relocalize_fun from_uiexp se1, relocalize_fun from_uiexp se2)
+  | UIIf (c, se1, se2) -> SIIf (relocalize_fun from_ubexp c, relocalize_fun from_uiexp se1, relocalize_fun from_uiexp se2)
+
+and from_ubexp = function
+  | UBool b -> SBool b
+  | UBConst id -> SBConst id
+  | UBParam i -> SBParam i
+  | UBUnknown _ -> assert false
+  | UBUnOp (op, se) -> SBUnOp (op, relocalize_fun from_ubexp se)
+  | UBBinOp (op, se1, se2) -> SBBinOp (op, relocalize_fun from_ubexp se1, relocalize_fun from_ubexp se2)
+  | UBBinIntOp (op, se1, se2) -> SBBinIntOp (op, relocalize_fun from_uiexp se1, relocalize_fun from_uiexp se2)
+  | UBIf (c, se1, se2) -> SBIf (relocalize_fun from_ubexp c, relocalize_fun from_ubexp se1, relocalize_fun from_ubexp se2)
+
+let rec no_free_variable_int env = function
+  | UInt _ | UIConst _ | UIParam _ -> true
+  | UIUnknown (_, nc) -> not (mem (extract_uid nc) env)
+  | UIUnOp (_, se) -> no_free_variable_int env !!se
+  | UIBinOp (_, se1, se2) -> no_free_variable_int env !!se1 && no_free_variable_int env !!se2
+  | UIIf (c, se1, se2) -> no_free_variable_bool env !!c && no_free_variable_int env !!se1 && no_free_variable_int env !!se2
+
+and no_free_variable_bool env = function
+  | UBool _ | UBConst _ | UBParam _ -> true
+  | UBUnknown (_, nc) -> not (mem (extract_uid nc) env)
+  | UBUnOp (_, se) -> no_free_variable_bool env !!se
+  | UBBinOp (_, se1, se2) -> no_free_variable_bool env !!se1 && no_free_variable_bool env !!se2
+  | UBBinIntOp (_, se1, se2) -> no_free_variable_int env !!se1 && no_free_variable_int env !!se2
+  | UBIf (c, se1, se2) -> no_free_variable_bool env !!c && no_free_variable_bool env !!se1 && no_free_variable_bool env !!se2
+
+
+
+
+let analyze_result ue1 ue2 = function
+  | Yes -> ()
+  | Maybe ->
+      Format.eprintf "%a(unfinished) warning: could not unite size@ %t with expected size@ %t, located here:@ %a@."
+        Location.print_location !@ue2
+        (print_int_exp ue2)
+        (print_int_exp ue1)
+        Location.print_location !@ue1
+  | No ->
+      Format.eprintf "%a(unfinished) warning: could not unite size@ %t with expected size@ %t, located here:@ %a@."
+          Location.print_location !@ue2
+          (print_int_exp ue2)
+          (print_int_exp ue1)
+          Location.print_location !@ue1;
+          raise Errors.ErrorDetected
+
+
+
+
+let solve_constraint_one env (a, b) = match !!a, !!b with
+  | UIUnknown (d, Uid uid), UIUnknown (_, Uid uid') when not (mem uid env) ->
+      add uid (Link (d, uid')) env, true
+  | UIUnknown (_, Uid uid'), UIUnknown (d, Uid uid) when not (mem uid env) ->
+      add uid (Link (d, uid')) env, true
+  | UIUnknown (_, Uid uid), ue when not (mem uid env) && no_free_variable_int env ue ->
+      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ substitute_env_int env @@ ue))) env, true
+  | ue, UIUnknown (_, Uid uid) when not (mem uid env) && no_free_variable_int env ue ->
+      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ substitute_env_int env @@ ue))) env, true
+  | ue1, ue2 when no_free_variable_int env ue1 && no_free_variable_int env ue2 ->
+      let se1 = substitute_env_int env @@ ue1 in
+      let se2 = substitute_env_int env @@ ue2 in
+      analyze_result a b @@ maybe_equal_int (se1, se2);
+      env, true
+  | _ ->
+      env, false
+
+
+let solve_constraints l =
+  let env = UIDEnv.empty in
+
+  let presize_to_uiexp2 (a, b) = (presize_to_uiexp a, presize_to_uiexp b) in
+  let rec one_round env acc = function
+    | [] -> env, acc
+    | hd :: tl ->
+        let env, ok = solve_constraint_one env @@ presize_to_uiexp2 hd in
+        if ok then
+          one_round env acc tl
+        else
+          one_round env (hd :: acc) tl
+  in
+
+  let rec repeat env l =
+    let env', remaining = one_round env [] l in
+    if env <> env' then
+      repeat env' remaining
+    else
       env
+  in
+  repeat env l
+  
+
+(* let (<?) a b = match a, b with
+  | UInt n, UInt n' -> n < n'
+  | UIParam i, UIParam i' -> i < i'
+  | UIConst v1, UIConst v2 -> !!v1 < !!v2
+  | UIUnknown nc1, UIUnknown nc2 -> b_to_t (extract_uid nc1 = extract_uid nc2)
+  | UIUnOp (SNeg, se1), UIUnOp (SNeg, se2) -> exactly_equal_int (!!se1, !!se2)
+  | UIBinOp (op, se1, se2), UIBinOp (op', se1', se2') -> if op <> op' then No else exactly_equal_int (!!se1, !!se2) && exactly_equal_int (!!se1', !!se2')
+  | UIIf (c, se1, se2), UIIf (c', se1', se2') -> exactly_equal_bool (!!c, !!c') && exactly_equal_int (!!se1, !!se2) && exactly_equal_int (!!se1', !!se2')
+
+
+let rec normal_form = function
+  | UInt n -> UInt n
+  | UIParam i -> UIParam i
+  | UIConst v -> UIConst v
+  | UIUnOp (SNeg, se) -> UIUnop (SNeg, relocalize_fun normal_form se)
+  | UIBinOp (SAdd, ({ desc = (UInt _ | UIParam _ | UIConst _ | UIUnOp (SNeg, _)); loc = _ } as se1),
+                   ({ desc = (UInt _ | UIParam _ | UIConst _ | UIUnOp (SNeg, _)); loc = _ } as se2)) ->
+        if !!se1 <? !!se2 then UIBinOp (SAdd, se1, se2) else UIBinOp (SAdd, se2, se1) *)
+
+
+(* let rec solve_constraint env = function
   | PSVar (name, n, uid), PSVar (_, _, uid') when not @@ mem uid env ->
       add uid (LinkVar ((name, n), uid')) env
   | PSVar (_, _, uid'), PSVar (name, n, uid) when not @@ mem uid env ->
@@ -95,16 +538,16 @@ let rec solve_constraint env = function
   | (PSVar (_, _, uid) as c1), (PSVar (_, _, uid') as c2) ->
       let se = find uid env in
       let se' = find uid' env in
-      analyze_result c1 c2 @@ static_equal (!!se, !!se');
+      analyze_result c1 c2 @@ maybe_equal_int (!!se, !!se');
       env
   | (PSVar (_, _, uid) as c1), (PSConst se' as c2) ->
       let se = find uid env in
-      analyze_result c1 c2 @@ static_equal (!!se, !!se');
+      analyze_result c1 c2 @@ maybe_equal_int (!!se, !!se');
       env
   | (PSConst se as c1), (PSVar (_, _, uid') as c2) ->
       let se' = find uid' env in
-      analyze_result c1 c2 @@ static_equal (!!se, !!se');
+      analyze_result c1 c2 @@ maybe_equal_int (!!se, !!se');
       env
   | (PSConst se as c1), (PSConst se' as c2) ->
-      analyze_result c1 c2 @@ static_equal (!!se, !!se');
-      env
+      analyze_result c1 c2 @@ maybe_equal_int (!!se, !!se');
+      env *)

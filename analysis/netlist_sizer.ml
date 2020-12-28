@@ -5,21 +5,22 @@ open NetlistSizedAST
 
 module UIDEnv = Constraints_solver.UIDEnv
 type union_find = Constraints_solver.union_find
-let rec find_opt uid env = match UIDEnv.find_opt uid env with
-  | None -> None
-  | Some Constraints_solver.Direct se -> Some !!se
-  | Some Constraints_solver.LinkVar (_, uid) -> find_opt uid env
+let rec find_opt = Constraints_solver.find_opt
+
+exception CouldNotSize of ident * int
+exception CouldNotInfer of ident_desc * Location.location * int
+
+let assert_int = function
+  | SIntExp se -> se
+  | SBoolExp _ -> failwith "Static type error"
+let assert_bool = function
+  | SBoolExp se -> se
+  | SIntExp _ -> failwith "Static type error"
 
 let rec substitute_int var_env params = function
   | SInt n -> SInt n
   | SIConst id -> SIConst id
-  | SIParam i -> begin
-      let r = List.nth params i in
-      match !!r with
-      | SOIntExp (SExp se) -> se
-      | SOIntExp (SUnknown uid) -> Misc.option_get ~error:(Failure "CouldNotSizeError !!id i !@id") @@ find_opt uid var_env
-      | SOBoolExp _ -> failwith "Static type error"
-    end
+  | SIParam i -> assert_int @@ (!!) @@ List.nth params i
   | SIUnOp (op, se) -> SIUnOp (op, relocalize_fun (substitute_int var_env params) se)
   | SIBinOp (op, se1, se2) -> SIBinOp (op, relocalize_fun (substitute_int var_env params) se1, relocalize_fun (substitute_int var_env params) se2)
   | SIIf (c, se1, se2) -> SIIf (relocalize_fun (substitute_bool var_env params) c,
@@ -28,13 +29,7 @@ let rec substitute_int var_env params = function
 and substitute_bool var_env params = function
   | SBool b -> SBool b
   | SBConst id -> SBConst id
-  | SBParam i -> begin
-      let r = List.nth params i in
-      match !!r with
-      | SOBoolExp (SExp se) -> se
-      | SOBoolExp (SUnknown _) -> failwith "Not implemented"
-      | SOIntExp _ -> failwith "Static type error"
-    end
+  | SBParam i -> assert_bool @@ (!!) @@ List.nth params i
   | SBUnOp (op, se) -> SBUnOp (op, relocalize_fun (substitute_bool var_env params) se)
   | SBBinOp (op, se1, se2) -> SBBinOp (op, relocalize_fun (substitute_bool var_env params) se1, relocalize_fun (substitute_bool var_env params) se2)
   | SBBinIntOp (op, se1, se2) -> SBBinIntOp (op, relocalize_fun (substitute_int var_env params) se1, relocalize_fun (substitute_int var_env params) se2)
@@ -42,14 +37,21 @@ and substitute_bool var_env params = function
                                 relocalize_fun (substitute_bool var_env params) se1, relocalize_fun (substitute_bool var_env params) se2)
 
 
+let param var_env fname loc i = relocalize_fun @@ function
+  | SOIntExp SUnknown uid -> SIntExp (assert_int @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i)) @@ find_opt uid var_env)
+  | SOIntExp SExp se -> SIntExp se
+  | SOBoolExp SUnknown uid -> SBoolExp (assert_bool @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i)) @@ find_opt uid var_env)
+  | SOBoolExp SExp se -> SBoolExp se
+
 let rec presize_to_size var_env = function
   | NetlistConstrainedAST.PSConst se ->
       Size !!se
   | NetlistConstrainedAST.PSVar   (id, i, uid) ->
-      let se = Misc.option_get ~error:(Failure "CouldNotSizeError !!id i !@id") @@ find_opt uid var_env in
+      let se = assert_int @@ Misc.option_get ~error:(CouldNotSize (id, i)) @@ find_opt uid var_env in
       Size se
-  | NetlistConstrainedAST.PSOtherContext (name, loc, params, presize) ->
+  | NetlistConstrainedAST.PSOtherContext (fname, loc, params, presize) ->
       let Size se = presize_to_size var_env presize in
+      let params = List.mapi (param var_env fname loc) params in
       Size (substitute_int var_env params se)
 
 let rec netlist_presize_to_netlist_size var_env = function
@@ -59,25 +61,21 @@ let rec netlist_presize_to_netlist_size var_env = function
 let resize_fun f var_env e =
   size (f !&!e) !&@e @@ netlist_presize_to_netlist_size var_env !&&e
 
-let param var_env = function
-  | SOIntExp SUnknown uid -> SIntExp (Misc.option_get ~error:(Failure "CouldNotSizeError !!id i !@id") @@ find_opt uid var_env)
-  | SOIntExp SExp se -> SIntExp se
-  | SOBoolExp SUnknown _ -> failwith "Not implemented"
-  | SOBoolExp SExp se -> SBoolExp se
-
-let memparam var_env = function
-  | SUnknown uid -> (Misc.option_get ~error:(Failure "CouldNotSizeError !!id i !@id") @@ find_opt uid var_env)
+let memparam var_env fname loc i = relocalize_fun @@ function
+  | SUnknown uid -> (assert_int @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i)) @@ find_opt uid var_env)
   | SExp se -> se
 
-let rec exp var_env =
+let rec exp var_env e =
   let f = function
     | NetlistConstrainedAST.EConst c -> EConst c
     | NetlistConstrainedAST.EVar id -> EVar id
     | NetlistConstrainedAST.EReg e1 -> EReg (exp var_env e1)
-    | NetlistConstrainedAST.ECall (fname, params, args) -> ECall (fname, List.map (relocalize_fun (param var_env)) params, List.map (exp var_env) args)
-    | NetlistConstrainedAST.EMem (mem_kind, (p1, p2, p3), args) -> EMem (mem_kind, (relocalize_fun (memparam var_env) p1, relocalize_fun (memparam var_env) p2, p3), List.map (exp var_env) args)
+    | NetlistConstrainedAST.ECall (fname, params, args) -> ECall (fname, List.mapi (param var_env !!fname !&@e) params, List.map (exp var_env) args)
+    | NetlistConstrainedAST.EMem (mem_kind, (p1, p2, p3), args) ->
+        let fname = match !!mem_kind with MRom -> "rom" | MRam -> "ram" in
+        EMem (mem_kind, (memparam var_env fname !&@e 0 p1, memparam var_env fname !&@e 1 p2, p3), List.map (exp var_env) args)
   in
-  resize_fun f var_env
+  resize_fun f var_env e
 
 let rec lvalue var_env =
   let f = function
@@ -119,9 +117,14 @@ let node var_env NetlistConstrainedAST.{ node_name_loc; node_loc; node_params; n
   }
 
 let program NetlistConstrainedAST.{ p_consts; p_consts_order; p_nodes; constraints } : program =
-  let var_env = List.fold_left Constraints_solver.solve_constraint UIDEnv.empty constraints in
-  { 
-    p_consts; p_consts_order;
-    p_nodes = Env.map (node var_env) p_nodes;
-  }
-
+  try
+    let var_env = Constraints_solver.solve_constraints constraints in
+    { 
+      p_consts; p_consts_order;
+      p_nodes = Env.map (node var_env) p_nodes;
+    }
+  with
+    | CouldNotSize (id, i) ->
+        Format.eprintf "%aCould not size dimension %i of variable %s@." Location.print_location !@id i !!id; raise Errors.ErrorDetected
+    | CouldNotInfer (fname, loc, i) ->
+        Format.eprintf "%aCould not infer the value of parameter number %i of function %s@." Location.print_location loc i fname; raise Errors.ErrorDetected
