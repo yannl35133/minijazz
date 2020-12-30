@@ -41,29 +41,31 @@ let dim_value loc v =
   NDim (search_height 0 v)
 
 let supop name args dim =
-  let params = List.init dim (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))) in
+  let params = List.init dim (fun _ -> relocalize !@name (SOIntExp (SUnknown (UniqueId.get ())))) in
   ECall (relocalize !@name (!!name ^ "_" ^ string_of_int dim), params, args)
 
 let concat name loc (arg1, n1) (arg2, n2) =
+  let reloc a = relocalize loc a in
   let funname, dim, arg1, arg2 = match n1, n2 with
     | 0, 0 -> "concat_1", 1,
-        dimension (ECall (no_localize "add_dim_0", [], [arg1])) !%@arg1 (NDim 1),
-        dimension (ECall (no_localize "add_dim_0", [], [arg2])) !%@arg2 (NDim 1)
+        dimension (ECall (reloc "add_dim_0", [], [arg1])) !%@arg1 (NDim 1),
+        dimension (ECall (reloc "add_dim_0", [], [arg2])) !%@arg2 (NDim 1)
     | n1, n2 when n2 = n1 -> "concat_" ^ string_of_int n1, n1, arg1, arg2
     | n1, n2 when n2 = n1 - 1 -> "concat_" ^ string_of_int n1, n1, arg1,
-        dimension (ECall (no_localize @@ "add_dim_" ^ string_of_int n2,
-                          List.init n2 (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))), [arg2])) !%@arg2 (NDim (n2 + 1))
+        dimension (ECall (reloc @@ "add_dim_" ^ string_of_int n2,
+                          List.init n2 (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))), [arg2])) !%@arg2 (NDim (n2 + 1))
     | n1, n2 when n2 = n1 + 1 -> "concat_" ^ string_of_int n2, n2, 
-        dimension (ECall (no_localize @@ "add_dim_" ^ string_of_int n1,
-                          List.init n1 (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))), [arg1])) !%@arg1 (NDim (n1 + 1)),
+        dimension (ECall (reloc @@ "add_dim_" ^ string_of_int n1,
+                          List.init n1 (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))), [arg1])) !%@arg1 (NDim (n1 + 1)),
         arg2
     | _, _ -> failwith "abs (n2 - n1) > 1"
   in
-  let params = List.init dim (fun _ -> no_localize (SOIntExp (SUnknown (UniqueId.get ())))) in
+  let params = List.init (dim + 1) (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))) in
   let exp = ECall (relocalize !@name funname, params, [arg1; arg2]) in
   dimension exp loc (NDim dim)
 
-let slice params dim =
+let slice params loc dim =
+  let reloc a = relocalize loc a in
   let n = List.length params in
   if dim < n then
     raise Errors.TmpError;
@@ -95,10 +97,10 @@ let slice params dim =
     | StaticTypedAST.Slice (lo, hi) -> [relocalize !@lo (SOIntExp !!lo); relocalize !@hi (SOIntExp !!hi)]
   in
   let dims_remaining = List.fold_left (fun acc el -> acc + slice_dim_remaining el) 0 params in
-  let size = List.init dim (fun _ -> no_localize @@ SOIntExp (SUnknown (UniqueId.get ()))) (* One argument per input dimension *)
+  let size = List.init dim (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))) (* One argument per input dimension *)
   and name = String.concat "_" @@ List.map slice_name params
   and args = List.concat_map slice_param params in
-  NDim dims_remaining, fun e1 -> ECall (no_localize @@ "slice_" ^ name, size @ args, [e1])
+  NDim dims_remaining, fun e1 -> ECall (reloc @@ "slice_" ^ name, size @ args, [e1])
 
 
 let rec exp fun_env dimensioned e = match !!e with
@@ -174,7 +176,7 @@ let rec exp fun_env dimensioned e = match !!e with
         | NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@e1, ProdOp "slice")
         | NDim n -> n
       in
-      let dim, exp = try slice params dim with Errors.TmpError -> raise @@ Errors.SliceTooMuch (dim, List.length params, !%@e1) in
+      let dim, exp = try slice params !@e dim with Errors.TmpError -> raise @@ Errors.SliceTooMuch (dim, List.length params, !%@e1) in
       dimensioned, dimension (exp e1) !@e dim
   | StaticTypedAST.EReg e1 ->
       let dimensioned, e1 = exp fun_env dimensioned e1 in
@@ -279,7 +281,7 @@ and assert_exp fun_env dim dimensioned e =
       let dims_removed = List.fold_left (fun acc el -> acc + slice_dim_removed el) 0 params in
       let dim_int = dim_int_pre + dims_removed in
       let dimensioned, e1 = assert_exp fun_env (NDim dim_int) dimensioned e1 in
-      let dim', exp = try slice params dim_int with Errors.TmpError -> failwith "Problem in computations in backwards slice" in
+      let dim', exp = try slice params !@e dim_int with Errors.TmpError -> failwith "Problem in computations in backwards slice" in
       if dim <> dim' then failwith "Problem in computations in backwards slice";
       dimensioned, dimension (exp e1) !@e dim'
   | StaticTypedAST.EReg e1 ->

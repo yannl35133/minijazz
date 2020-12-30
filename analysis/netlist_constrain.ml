@@ -14,47 +14,52 @@ let rec eq_to_constraints c1 c2 = match c1, c2 with
   | CDProd _,  CDDim _ ->   failwith "Misdimensioned value"
 
 
-let fun_env_find fun_env s =
+let fun_env_find fun_env id =
+  let reloc a = relocalize !@id a in
   let regexp_slice = Str.regexp {|slice\(\(_\(all\|one\|to\|from\|fromto\)\)*\)|} in
   let regexp_supop = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\|concat\|add_dim\)_\([0-9]+\)|} in
-  if Env.mem s fun_env then
-    Env.find s fun_env
-  else if Str.string_match regexp_slice s 0 then begin
-    let args = List.tl @@ String.split_on_char '_' @@ Str.matched_group 1 s in
+  if Env.mem !!id fun_env then
+    Env.find !!id fun_env
+  else if Str.string_match regexp_slice !!id 0 then begin
+    let args = List.tl @@ String.split_on_char '_' @@ Str.matched_group 1 !!id in
     let dim = List.length args in
-    let nl = no_localize in
-    let dims_in = List.init dim (fun i -> PSConst (nl (SIParam i))) in
+    let dims_in = List.init dim (fun i -> PSConst (reloc (SIParam i))) in
     let rec aux idim iparam = function
-      | "all"  :: tl ->   PSConst (nl (SIParam idim)) :: aux (idim+1) iparam tl
+      | "all"  :: tl ->   PSConst (reloc (SIParam idim)) :: aux (idim+1) iparam tl
       | "one"  :: tl ->                                  aux idim (iparam+1) tl
-      | "from" :: tl ->   PSConst (nl (SIBinOp (SAdd, nl (SIBinOp (SMinus, nl (SIParam idim), nl (SIParam iparam))), nl (SInt 1)))) :: aux (idim+1) (iparam+1) tl
-      | "to"   :: tl ->   PSConst (nl (SIBinOp (SAdd, nl (SIParam iparam), nl (SInt 1)))) :: aux (idim+1) (iparam+1) tl
-      | "fromto" :: tl -> PSConst (nl (SIBinOp (SAdd, nl (SIBinOp (SMinus, nl (SIParam (iparam+1)), nl (SIParam iparam))), nl (SInt 1)))) :: aux (idim+1) (iparam+2) tl
+      | "from" :: tl ->   PSConst (reloc (SIBinOp (SAdd, reloc (SIBinOp (SMinus, reloc (SIParam idim), reloc (SIParam iparam))), reloc (SInt 1)))) :: aux (idim+1) (iparam+1) tl
+      | "to"   :: tl ->   PSConst (reloc (SIBinOp (SAdd, reloc (SIParam iparam), reloc (SInt 1)))) :: aux (idim+1) (iparam+1) tl
+      | "fromto" :: tl -> PSConst (reloc (SIBinOp (SAdd, reloc (SIBinOp (SMinus, reloc (SIParam (iparam+1)), reloc (SIParam iparam))), reloc (SInt 1)))) :: aux (idim+1) (iparam+2) tl
       | [] -> []
       | _ -> failwith "Miscounted arguments in slice"
     in
     let dims_out = CDDim (aux 0 dim args) in
     [CDDim dims_in], dims_out
-  end else if Str.string_match regexp_supop s 0 then begin
-    let op = Str.matched_group 1 s in
-    let dim = int_of_string @@ Str.matched_group 2 s in
-    let dims_in_list = List.init dim (fun i -> PSConst (no_localize (SIParam i))) in
+  end else if Str.string_match regexp_supop !!id 0 then begin
+    let op = Str.matched_group 1 !!id in
+    let dim = int_of_string @@ Str.matched_group 2 !!id in
+    let dims_in_list = List.init dim (fun i -> PSConst (reloc (SIParam i))) in
     let dims_in = CDDim dims_in_list in
-    if op = "not" then
+    if op = "concat" then begin
+      if dim < 1 then failwith "Undefined function in presizing";
+      let tail_in = List.init (dim-1) (fun i -> PSConst (reloc (SIParam (i+2)))) in
+      [CDDim (PSConst (reloc (SIParam 0)) :: tail_in); CDDim (PSConst (reloc (SIParam 1)) :: tail_in)],
+      CDDim (PSConst (reloc (SIBinOp (SAdd, reloc (SIParam 0), reloc (SIParam 1)))) :: tail_in)
+    end else if op = "not" then
       [dims_in], dims_in
     else if op = "mux" then
       [CDDim []; dims_in; dims_in], dims_in
     else if op = "add_dim" then
-      [dims_in], CDDim (PSConst (no_localize (SInt 1)) :: dims_in_list)
+      [dims_in], CDDim (PSConst (reloc (SInt 1)) :: dims_in_list)
     else
       [dims_in; dims_in], dims_in
   end else
     failwith "Undefined function in presizing"
 
-let rom_ram_size (* loc (addr_size, word_size, _) *) =
-  let addr_size = PSConst (no_localize (SIParam 0)) in
-  let word_size = PSConst (no_localize (SIParam 1)) in
-  function
+let rom_ram_size mem_kind =
+  let addr_size = PSConst (relocalize !@mem_kind (SIParam 0)) in
+  let word_size = PSConst (relocalize !@mem_kind (SIParam 1)) in
+  match !!mem_kind with
   | MRom ->
       "rom", [CDDim [addr_size]], CDDim [word_size]
   | MRam ->
@@ -90,14 +95,14 @@ let rec exp (fun_env, var_env as env) constraints e = match !%!e with
       in
       constraints, presize (EReg e1) !%@e size
   | NetlistDimensionedAST.ECall (fname, params, args) ->
-      let dims_in, dims_out = fun_env_find fun_env !!fname in
+      let dims_in, dims_out = fun_env_find fun_env fname in
       let dims_in = List.map (other_context !!fname !%@e params) dims_in in
       let dims_out = other_context !!fname !%@e params dims_out in
       let constraints, dim_args = List.fold_left_map (exp env) constraints args in
       let new_constraints = List.concat @@ List.rev_map2 eq_to_constraints dims_in @@ List.map (!&&) dim_args in
       new_constraints @ constraints, presize (ECall (fname, params, dim_args)) !%@e dims_out
   | NetlistDimensionedAST.EMem (mem_kind, (addr_size, word_size, _ as params), args) ->
-      let fname, dims_in, dims_out = rom_ram_size !!mem_kind in
+      let fname, dims_in, dims_out = rom_ram_size mem_kind in
       let re_params = [relocalize !@addr_size @@ SOIntExp !!addr_size; relocalize !@word_size @@ SOIntExp !!word_size] in
       let dims_in = List.map (other_context fname !%@e re_params) dims_in in
       let dims_out = other_context fname !%@e re_params dims_out in

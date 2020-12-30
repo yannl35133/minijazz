@@ -142,7 +142,12 @@ let exp a n =
   in aux a n
 
 let bool_list_of_dec_int (nbits, v) =
-  List.init (-nbits) (fun n -> v / (exp 10 n) mod (exp 10 (n + 1)) <> 0)
+  List.init (-nbits)
+    (fun n -> match v / (exp 10 n) mod (exp 10 (n + 1)) with
+    | 0 -> false
+    | 1 -> true
+    | _ -> invalid_arg "bool_list_of_dec_int"
+    )
 
 exception Int_too_big
 let convert_size s n =

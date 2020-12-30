@@ -216,8 +216,11 @@ let const :=
           | [b] -> VBit b
           | l -> VNDim (List.map (fun b -> VBit b) l)
       else begin
-          Errors.raise_warning_lexical (Errors.Nonbinary_base (Loc $sloc));
-          let r = Misc.bool_list_of_dec_int i in
+          let r =
+            try
+              Misc.bool_list_of_dec_int i
+            with Invalid_argument _ -> raise (Errors.Lexical_error (Errors.Nonbinary_base, Loc $sloc))
+          in
           match r with
             | [b] -> VBit b
             | l -> VNDim (List.map (fun b -> VBit b) l)
