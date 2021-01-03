@@ -1,9 +1,0 @@
-_build/
-.DS_Store
-*.byte
-*.native
-.vscode/**
-**/.merlin
-**.pdf
-.gitignore
-*.net
