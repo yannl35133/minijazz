@@ -86,40 +86,6 @@ type lvalue_desc =
 
 and lvalue = lvalue_desc localized
 
-type 'e state_expr =
-  | Estate0 of ident
-  | Estaten of ident * 'e list
-
-type state_desc =
-  | Estate0pat of ident
-  | Estatenpat of ident * ident list
-
-type state = state_desc localized
-
-let state_name st = match st.desc with
-  | Estate0pat id -> id
-  | Estatenpat (id, _) -> id
-
-type ('e, 'b) match_hdl = {
-    m_constr: constructor;
-    m_body: 'b
-  }
-
-type ('e, 'b) escape = {
-    e_cond: 'e;
-    e_reset: bool;
-    e_body: 'b;
-    e_nx_state: 'e state_expr
-  }
-
-type ('e, 'b) automaton_hdl = {
-    s_state: state;
-    s_vars: ident list;
-    s_body: 'b;
-    s_until: ('e, 'b) escape list;
-    s_unless: ('e, 'b) escape list
-  }
-
 type exp_desc =
   | EConst  of value
   | EConstr of exp state_expr

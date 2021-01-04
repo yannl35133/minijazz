@@ -25,17 +25,6 @@ let (!$$) = fun obj -> obj.s_size
 let size desc loc size =
   { s_desc = desc; s_loc = loc; s_size = size }
 
-type exp_desc =
-  | EConst  of ParserAST.value
-  | EVar    of ident
-  | EReg    of exp
-  | ECall   of ident * static_bitype_exp list * exp list
-      (* function * params * args *)
-  | EMem    of mem_kind * (static_int_exp * static_int_exp * string option) * exp list
-      (* ro * (address size * word size * input file) * args *)
-
-and exp = exp_desc sized
-
 type lvalue_desc =
   | LValDrop
   | LValId of ident
@@ -43,12 +32,31 @@ type lvalue_desc =
 
 and lvalue = lvalue_desc sized
 
-type equation_desc = {
-  eq_left:  lvalue;
-  eq_right: exp
-}
-and equation = equation_desc localized
+type exp_desc =
+  | EConst  of ParserAST.value
+  | EVar    of ident
+  | EReg    of exp
+  | ECall   of ident * static_bitype_exp list * exp list
+      (* function * params * args *)
+  | EMem    of mem_kind * (static_int_exp * static_int_exp * string option) * exp list
+(* ro * (address size * word size * input file) * args *)
+  | EMatch  of exp * (exp, decl) match_hdl list
 
+and exp = exp_desc sized
+
+and decl_desc =
+  | Dempty
+  | Deq        of lvalue * exp (* p = e *)
+  | Dand       of decl list (* eq1; ... ; eqn *)
+  | Dreset     of decl * exp (* reset eq every e *)
+  | Dautomaton of (exp, decl) automaton_hdl list
+  | Dif        of static_bool_exp * case * case
+and decl = decl_desc localized
+
+and case = {
+    block:     decl;
+    dim_env:   netlist_sized Env.t;
+  }
 
 type typed_ident_desc = {
   name: ident;
@@ -56,16 +64,6 @@ type typed_ident_desc = {
 }
 and typed_ident = typed_ident_desc localized
 
-type case = {
-  equations: equation list;
-  dim_env:   netlist_sized Env.t;
-}
-
-type block_desc =
-  | BEqs of case
-  | BIf  of static_bool_exp * block * block
-
-and block = block_desc localized
 
 type fun_env = static_type list Env.t
 
@@ -76,7 +74,7 @@ type node = {
   node_inline:    inline_status;
   node_inputs:    typed_ident list;
   node_outputs:   typed_ident list;
-  node_body:      block;
+  node_body:      decl;
   node_probes:    ident list;
 }
 
