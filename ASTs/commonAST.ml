@@ -39,7 +39,7 @@ type inline_status = Inline | NotInline
 type mem_kind_desc = MRom | MRam
 and mem_kind = mem_kind_desc localized
 
-                 type 'e state_expr =
+type 'e state_expr =
   | Estate0 of ident
   | Estaten of ident * 'e list
 

@@ -88,30 +88,27 @@ and lvalue = lvalue_desc localized
 
 type exp_desc =
   | EConst  of value
-  | EConstr of exp state_expr
   | EVar    of ident
   | EPar    of exp     (* Created purely to have good locations *)
   | EReg    of exp
-  | ESupOp of ident * exp list
-  | ESlice of slice_param list * exp
+  | ESupOp  of ident * exp list
+  | ESlice  of slice_param list * exp
   | ECall   of ident * optional_static_exp list * exp list
   (* function * params * args *)
   | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
-  | ELet    of eq * exp
-  | EMerge  of exp * (exp, eq) match_hdl list
+  | EMatch  of exp * (exp, decl) match_hdl list
 
 and exp = exp_desc localized
 
-and eq_desc =
-  | EQempty
-  | EQeq        of lvalue * exp (* p = e *)
-  | EQand       of eq list (* eq1; ... ; eqn *)
-  | EQlet       of eq * eq (* let eq in eq *)
-  | EQreset     of eq * exp (* reset eq every e *)
-  | EQautomaton of (exp, eq) automaton_hdl list
-  | EQmatch     of exp * (exp, eq) match_hdl list
+and decl_desc =
+  | Dempty
+  | Deq        of lvalue * exp (* p = e *)
+  | Dand       of decl list (* eq1; ... ; eqn *)
+  | Dreset     of decl * exp (* reset eq every e *)
+  | Dautomaton of (exp, decl) automaton_hdl list
+  | Dif        of static_exp * decl * decl
+and decl = decl_desc localized
 
-and eq = eq_desc localized
 
 type typed_ident_desc = {
   name : ident;
@@ -120,20 +117,13 @@ type typed_ident_desc = {
 and typed_ident = typed_ident_desc localized
 
 
-type block_desc =
-    | BEqs of eq list
-    | BIf  of static_exp * block * block
-
-and block = block_desc localized
-
-
 type node_desc = {
   node_name:    ident;
   node_inline:  inline_status;
   node_inputs : typed_ident list;
   node_outputs: typed_ident list;
   node_params : static_typed_ident list;
-  node_body:    block;
+  node_body:    decl;
   (* n_constraints : static_exp list; *)
   node_probes : ident list;
 }
