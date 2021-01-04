@@ -27,7 +27,7 @@ let fun_env_find fun_env id =
     let rec aux idim iparam = function
       | "all"  :: tl ->   PSConst (reloc (SIParam idim)) :: aux (idim+1) iparam tl
       | "one"  :: tl ->                                  aux idim (iparam+1) tl
-      | "from" :: tl ->   PSConst (reloc (SIBinOp (SAdd, reloc (SIBinOp (SMinus, reloc (SIParam idim), reloc (SIParam iparam))), reloc (SInt 1)))) :: aux (idim+1) (iparam+1) tl
+      | "from" :: tl ->   PSConst (reloc (SIBinOp (SAdd, reloc (SIBinOp (SMinus, reloc (SIBinOp (SMinus, reloc (SIParam idim), reloc (SInt 1))), reloc (SIParam iparam))), reloc (SInt 1)))) :: aux (idim+1) (iparam+1) tl
       | "to"   :: tl ->   PSConst (reloc (SIBinOp (SAdd, reloc (SIParam iparam), reloc (SInt 1)))) :: aux (idim+1) (iparam+1) tl
       | "fromto" :: tl -> PSConst (reloc (SIBinOp (SAdd, reloc (SIBinOp (SMinus, reloc (SIParam (iparam+1)), reloc (SIParam iparam))), reloc (SInt 1)))) :: aux (idim+1) (iparam+2) tl
       | [] -> []
