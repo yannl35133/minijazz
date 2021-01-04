@@ -52,7 +52,18 @@ let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
   "then", THEN;
   "else", ELSE;
   "inline", INLINE;
-  "probing", PROBING
+  "probing", PROBING;
+  (* "match", MATCH; *)
+  "automaton", AUTOMATON;
+  "in", IN;
+  "reset", RESET;
+  "every", EVERY;
+  "let", LET;
+  "unless", UNLESS;
+  "until", UNLESS;
+  "continue", CONTINUE;
+  "do", DO;
+  "done", DONE
 ]
 
 
@@ -80,11 +91,13 @@ let alphanum = ['A'-'Z' 'a'-'z' '_' '0'-'9']
 let alpha = ['A'-'Z' 'a'-'z' '_']
 let ascii = [' ' - '~'] # ['\\' '"']
 
+let constructor = ['A'-'Z']alphanum*
 let ident = alpha alphanum*
 
 rule token = parse
   | newline         { new_line lexbuf; token lexbuf }
   | space+          { token lexbuf }
+  | "|"             { BAR }
   | "("             { LPAREN }
   | ")"             { RPAREN }
   | "*"             { STAR }
@@ -107,8 +120,10 @@ rule token = parse
   | "^"             { CIRCUMFLEX }
   | "<="            { LEQ }
   | ">="            { GEQ }
+  | "->"            { ARROW }
   | "."             { DOT }
   | ".."            { DOTDOT }
+  | constructor as id {CONSTRUCTOR id }
   | ident as id     { try Hashtbl.find keyword_table id
                       with Not_found -> IDENT id }
   | '0' (['b' 'B'] as base)  (['0'-'1']+ as lit) as num

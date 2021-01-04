@@ -33,6 +33,8 @@ let binop_sep str = dprintf " %s@ " str
 let star_sep = binop_sep "*"
 let comma_sep = dprintf ",@ "
 let semicolon_sep = dprintf ";@ "
+let and_sep = dprintf "and@ "
+let bar_sep = dprintf "|@ "
 
 let delim prefix suffix printer =
   dprintf "@[<hv 2>%t@,%t@;<0 -2>%t@]"

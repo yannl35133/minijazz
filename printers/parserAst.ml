@@ -83,6 +83,11 @@ let print_slice_param = function
 
 let rec print_exp_desc = function
   | EConst v -> print_val v
+  | EConstr (Estate0 c) -> print_ident c
+  | EConstr (Estaten (c, es)) ->
+      dprintf "%t@ (%t)"
+        (print_ident c)
+        (print_list_naked comma_sep print_exp es)
   | EVar id  -> print_ident id
   | EPar e   -> par (print_exp e)
   | EReg e   -> dprintf "reg@,%t" (print_exp e)
@@ -124,10 +129,15 @@ let rec print_exp_desc = function
         (print_opt_sexp addr_size)
         (print_opt_sexp word_size)
         (print_list_naked comma_sep print_exp args)
+  | ELet (eq, exp) ->
+      dprintf "let %t@ =@ %t"
+        (print_eq eq)
+        (print_exp exp)
+  | EMerge _ -> assert false
 
 and print_exp exp fmt = print_exp_desc exp.desc fmt
 
-let rec print_lval_desc lval_desc =
+and print_lval_desc lval_desc =
   match lval_desc with
   | LValDrop    -> dprintf "_"
   | LValId id   -> print_ident id
@@ -135,13 +145,33 @@ let rec print_lval_desc lval_desc =
 
 and print_lval lval = print_lval_desc lval.desc
 
-let print_eq_desc eq_desc =
-  dprintf "@[<h>%t%t%t@]"
-    (print_lval eq_desc.eq_left)
-    (binop_sep "=")
-    (print_exp eq_desc.eq_right)
+and print_automaton_hdl hdl =
+  dprintf "%t -> do %t"
+    (state_name hdl.s_state |> print_ident)
+    (print_eq hdl.s_body)
 
-let print_eq eq = print_eq_desc eq.desc
+and print_eq_desc = function
+  | EQempty -> fun _ -> ()
+  | EQeq (lv, exp) ->
+      dprintf "@[<h>%t%t%t@]"
+        (print_lval lv)
+        (binop_sep "=")
+        (print_exp exp)
+  | EQand eqs ->
+      print_list_naked and_sep print_eq eqs
+  | EQlet (eq, eq') ->
+      dprintf "let %t in@ %t"
+        (print_eq eq)
+        (print_eq eq')
+  | EQreset (eq, exp) ->
+      dprintf "reset %t@ every %t"
+        (print_eq eq)
+        (print_exp exp)
+  | EQautomaton hdls ->
+      print_list_naked bar_sep print_automaton_hdl hdls
+  | EQmatch _ -> assert false
+
+and print_eq eq = print_eq_desc eq.desc
 
 let is_bit tid_desc =
   match tid_desc.typed.desc with

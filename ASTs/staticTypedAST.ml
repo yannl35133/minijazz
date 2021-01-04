@@ -1,5 +1,8 @@
 open CommonAST
 open StaticTypedPartialAST
+
+(** 3rd Ast: static expressions are typed *)
+
 (* Netlist expressions *)
 
 type netlist_type =
@@ -15,22 +18,30 @@ type slice_param =
 
 type exp_desc =
   | EConst  of ParserAST.value
+  | EConstr of exp ParserAST.state_expr
   | EVar    of ident
   | EReg    of exp
   | ESlice  of slice_param list * exp
-  | ESupOp  of ident * exp list 
+  | ESupOp  of ident * exp list
   | ECall   of ident * static_unknown_exp list * exp list
       (* function * params * args *)
   | EMem    of mem_kind * (optional_static_int_exp * optional_static_int_exp * string option) * exp list
-      (* ro * (address size * word size * input file) * args *)
+(* ro * (address size * word size * input file) * args *)
+  | ELet    of eq * exp
+  | EMerge  of exp * (exp, eq) ParserAST.match_hdl list
 
 and exp = exp_desc localized
 
-type equation_desc = {
-  eq_left:  ParserAST.lvalue;
-  eq_right: exp
-}
-and equation = equation_desc localized
+and eq_desc =
+  | EQempty
+  | EQeq        of ParserAST.lvalue * exp (* p = e *)
+  | EQand       of eq list (* eq1; ... ; eqn *)
+  | EQlet       of eq * eq (* let eq in eq *)
+  | EQreset     of eq * exp (* reset eq every e *)
+  | EQautomaton of (exp, eq) ParserAST.automaton_hdl list
+  | EQmatch     of exp * (exp, eq) ParserAST.match_hdl list
+
+and eq = eq_desc localized
 
 
 type typed_ident_desc = {
@@ -41,7 +52,7 @@ and typed_ident = typed_ident_desc localized
 
 
 type block_desc =
-  | BEqs of equation list
+  | BEqs of eq list
   | BIf  of static_bool_exp * block * block
 
 and block = block_desc localized

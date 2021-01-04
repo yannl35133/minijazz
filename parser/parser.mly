@@ -31,15 +31,18 @@ open ParserAST
 %}
 
 %token CONST INLINE WHERE END PROBING
+%token AUTOMATON IN RESET EVERY LET UNLESS UNTIL CONTINUE DO DONE
 %token ROM RAM REG MUX
 %token IF THEN ELSE
+%token ARROW "->"
 %token LANGLE "<" RANGLE ">" LBRACKET "[" RBRACKET "]" LPAREN "(" RPAREN ")"
-%token COLON ":" SEMICOL ";" COMMA "," EQUAL "=" DOT "." DOTDOT ".."
+%token COLON ":" SEMICOL ";" COMMA "," EQUAL "=" DOT "." DOTDOT ".." BAR "|"
 %token OR AND XOR NOR NAND NOT
 %token PLUS "+" MINUS "-" STAR "*" SLASH "/" CIRCUMFLEX "^"
 %token LEQ "<=" GEQ ">=" NEQ "<>"
 %token WILDCARD "_" EOF
 %token <string> IDENT
+%token <string> CONSTRUCTOR
 %token <string> STRING
 %token <int * int> INT
 %token <bool> BOOL
@@ -69,6 +72,7 @@ let snlist_optlast (x, sep) :=
 
 let localize (x) == ~=x; { localize $sloc x }
 let ident == localize(IDENT)
+let constructor == localize(CONSTRUCTOR)
 
 let program :=
   | p_consts = list(const_decl); p_nodes = list(node_decl); EOF;
@@ -122,9 +126,63 @@ let block_desc :=
   | ~=snlist_optlast (equation, ";");                           < BEqs >
   | IF; ~=static_exp; THEN; b1=block; ELSE; b2=block; END; IF;  < BIf >
 
+let state :=
+  | c = constructor; { Estate0 c }
+  | c = constructor; LPAREN; es = snlist(exp, COMMA); RPAREN; { Estaten (c, es) }
+
+let state_pat == localize(state_pat_desc)
+let state_pat_desc :=
+  | c = constructor; { Estate0pat c }
+  | c = constructor; LPAREN; l = snlist(ident, COMMA); RPAREN;
+    { Estatenpat (c, l) }
+
+let decl :=
+  | LET; v = ident; IN; d = decl; { let vs, eq = d in v :: vs, eq }
+  | DO; eq = equation; { [], eq }
+
+let emission :=
+  | eq = equation; IN; s = state; { eq, s }
+  | s = state; { localize $sloc EQempty, s }
+
+let escape :=
+  | c = exp; THEN; e = emission;
+    { { e_cond = c; e_reset = true; e_body = fst e; e_nx_state = snd e } }
+  | c = exp; CONTINUE; e = emission;
+    { { e_cond = c; e_reset = true; e_body = fst e; e_nx_state = snd e } }
+
+let escape_list := snlist(escape, ELSE)
+
+let automaton_hdl :=
+  | s_state = state_pat; ARROW; ds = decl; DONE;
+    { let s_vars, s_body = ds in
+      { s_state; s_body; s_vars; s_until = []; s_unless = [] } }
+  | sp = state_pat; ARROW; ds = decl; THEN; e = emission;
+    { { s_state = sp; s_vars = fst ds; s_body = snd ds;
+        s_until = [{ e_cond = localize $sloc (EConst(VBit true));
+                     e_reset = true; e_body = fst e;
+                     e_nx_state = snd e }];
+        s_unless = [] } }
+  | sp = state_pat; ARROW; ds = decl; CONTINUE; e = emission;
+    { let e_eqs, e_st = e in
+      { s_state = sp; s_vars = fst ds; s_body = snd ds;
+        s_until = [{ e_cond = localize $sloc (EConst(VBit true));
+                     e_reset = false; e_body = e_eqs;
+                     e_nx_state = e_st }];
+        s_unless = [] } }
+  | sp = state_pat; ARROW; ds = decl; UNTIL; es = escape_list;
+    { { s_state = sp; s_vars = fst ds; s_body = snd ds;
+        s_until = es; s_unless = [] } }
+  | sp = state_pat; ARROW; ds = decl; UNLESS; es = escape_list;
+    { { s_state = sp; s_vars = fst ds; s_body = snd ds;
+        s_until = []; s_unless = es } }
+
 let equation == localize(equation_desc)
 let equation_desc :=
-  | eq_left=lvalue; "="; eq_right=exp;                          { { eq_left; eq_right } }
+  | lv=lvalue; "="; e=exp; { EQeq (lv, e) }
+(* | lst=snlist(equation, ";"); { EQand lst } *)
+  | LET; e=equation; IN; e2=equation; { EQlet (e, e2) }
+  | RESET; eq=equation; EVERY; e=exp; { EQreset (eq, e) }
+  | AUTOMATON; lst=snlist(automaton_hdl, BAR); END; { EQautomaton lst }
 
 let lvalue == localize(lvalue_desc)
 let lvalue_desc :=

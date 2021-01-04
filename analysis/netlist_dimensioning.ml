@@ -11,7 +11,7 @@ type error_context =
   | ErSimple
   | ErRev
   | ErFun of fun_context
-  | ErOp of string * Location.location (* opname, reference expression *) 
+  | ErOp of string * Location.location (* opname, reference expression *)
 
 type prod_context =
   | ProdRev
@@ -107,6 +107,7 @@ let rec exp fun_env dimensioned e = match !!e with
   | StaticTypedAST.EConst c ->
       let dim = dim_value !@e c in
       dimensioned, dimension (EConst c) !@e dim
+  | StaticTypedAST.EConstr _ -> assert false
   | StaticTypedAST.EVar id -> begin
       try
         match Env.find !!id dimensioned with
@@ -217,13 +218,17 @@ let rec exp fun_env dimensioned e = match !!e with
       in
       dimensioned, dimension (EMem (mem_kind, (addr_size, word_size, input_file), dim_args)) !@e dims_out
 
+  | StaticTypedAST.ELet _ -> assert false
+  | StaticTypedAST.EMerge _ -> assert false
+
 and assert_exp fun_env dim dimensioned e =
   try
     let dimensioned, res = exp fun_env dimensioned e in
     if dim <> !%%res then raise @@ (* Errors. *)WrongDimension (!%%res, dim, !@e, ErSimple);
     dimensioned, res
   with CannotDimensionYet -> match !!e with
-  | StaticTypedAST.EConst _ -> failwith "Cannot fail to dimension a constant"      
+  | StaticTypedAST.EConst _ -> failwith "Cannot fail to dimension a constant"
+  | StaticTypedAST.EConstr _ -> assert false
   | StaticTypedAST.EVar id -> begin
       try
         match Env.find !!id dimensioned with
@@ -289,12 +294,13 @@ and assert_exp fun_env dim dimensioned e =
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp "reg", None)
         | NDim n -> NDim n
       in
-      let dimensioned, e1 = assert_exp fun_env dim dimensioned e1 in      
+      let dimensioned, e1 = assert_exp fun_env dim dimensioned e1 in
       dimensioned, dimension (EReg e1) !@e !%%e1
   | StaticTypedAST.ECall _
   | StaticTypedAST.EMem _ ->
-      raise CannotDimensionYet (* The dimension of the result does not give further info to dimension the arguments *)
-
+     raise CannotDimensionYet (* The dimension of the result does not give further info to dimension the arguments *)
+  | StaticTypedAST.ELet _ -> assert false
+  | StaticTypedAST.EMerge _ -> assert false
 
 let rec lvalue dimensioned lval = match !!lval with
   | ParserAST.LValDrop -> raise CannotDimensionYet
@@ -333,32 +339,35 @@ let rec assert_lvalue dim dimensioned lval = match !!lval with
       dimensioned, dimension (LValTuple dimed_l) !@lval (NProd dim)
 
 
+let eq_left eq = match !!eq with StaticTypedAST.EQeq (lv, _) -> lv | _ -> assert false
+let eq_right eq = match !!eq with StaticTypedAST.EQeq (_, e) -> e | _ -> assert false
+
 let eqs fun_env (name, loc, outputs) dimensioned eq_l =
   let rec add_vars_lvalue vars lvalue = match !!lvalue with
     | ParserAST.LValDrop -> vars
     | ParserAST.LValId id -> IdentSet.add !!id vars
     | ParserAST.LValTuple l -> List.fold_left add_vars_lvalue vars l
   in
-  let vars = List.fold_left (fun s eq -> (add_vars_lvalue s !!eq.StaticTypedAST.eq_left)) IdentSet.empty eq_l in
+  let vars = List.fold_left (fun s eq -> (add_vars_lvalue s (eq_left eq))) IdentSet.empty eq_l in
   Option.fold ~some:(fun var -> raise (UndefinedReturnVariables (var, name, loc))) ~none:() @@ IdentSet.choose_opt @@ IdentSet.diff outputs vars;
   let dimensioned = IdentSet.fold (fun el dimed -> if Env.mem el dimed then dimed else Env.add el None dimed) vars dimensioned in
 
-  let try_dimensioning dimensioned StaticTypedAST.{desc = { eq_left; eq_right }; loc} =
-    let dimensioned, r2 = (try let dimensioned, r2 = exp fun_env dimensioned eq_right in dimensioned, Some r2 with CannotDimensionYet -> dimensioned, None) in
-    dimensioned, ((try Some (lvalue dimensioned eq_left) with CannotDimensionYet -> None), r2, loc)
+  let try_dimensioning dimensioned eq =
+    let dimensioned, r2 = (try let dimensioned, r2 = exp fun_env dimensioned (eq_right eq) in dimensioned, Some r2 with CannotDimensionYet -> dimensioned, None) in
+    dimensioned, ((try Some (lvalue dimensioned (eq_left eq)) with CannotDimensionYet -> None), r2, loc)
   in
-  
+
   let rec dimension_eq (dimensioned, dim_eqs) =
     let dimensioned', dim_eqs' = Misc.fold_left_map2
-    (fun dimensioned (eq_left0, eq_right0, loc0 as eq0) (StaticTypedAST.{desc = { eq_left; eq_right }; loc = _} as eq) ->
+    (fun dimensioned (eq_left0, eq_right0, loc0 as eq0) eq ->
       match eq_left0, eq_right0 with
       | None, None -> try_dimensioning dimensioned eq
       | Some lval, None -> begin
-          try let dimed, r = assert_exp fun_env !%%lval dimensioned eq_right in dimed, (eq_left0, Some r, loc0)
+          try let dimed, r = assert_exp fun_env !%%lval dimensioned (eq_right eq) in dimed, (eq_left0, Some r, loc0)
           with CannotDimensionYet -> dimensioned, eq0
           end
       | None, Some exp -> begin
-          try let dimed, r = assert_lvalue !%%exp dimensioned eq_left in dimed, (Some r, eq_right0, loc0)
+          try let dimed, r = assert_lvalue !%%exp dimensioned (eq_left eq) in dimed, (Some r, eq_right0, loc0)
           with CannotDimensionYet -> dimensioned, eq0
           end
       | Some _, Some _ -> dimensioned, eq0
@@ -367,7 +376,7 @@ let eqs fun_env (name, loc, outputs) dimensioned eq_l =
     in
     if dimensioned <> dimensioned' then
       dimension_eq (dimensioned', dim_eqs')
-    else 
+    else
       let var = Env.choose_opt @@ Env.filter (fun _ dim -> dim = None) dimensioned' in
       match var with
       | None -> dimensioned', dim_eqs'
@@ -423,7 +432,7 @@ let node fun_env name StaticTypedAST.{ node_name_loc; node_loc; node_params; nod
 
 let program StaticTypedAST.{ p_consts; p_consts_order; p_nodes } : program =
   let fun_env = Env.map fun_env p_nodes in
-  { 
+  {
     p_consts; p_consts_order;
     p_nodes = Env.mapi (node fun_env) p_nodes;
   }
