@@ -35,6 +35,8 @@ let comma_sep = dprintf ",@ "
 let semicolon_sep = dprintf ";@ "
 let and_sep = dprintf "and@ "
 let bar_sep = dprintf "|@ "
+let newline_sep = dprintf "@ "
+let else_sep = dprintf "else@ "
 
 let delim prefix suffix printer =
   dprintf "@[<hv 2>%t@,%t@;<0 -2>%t@]"

@@ -39,19 +39,9 @@ type inline_status = Inline | NotInline
 type mem_kind_desc = MRom | MRam
 and mem_kind = mem_kind_desc localized
 
-type 'e state_expr =
-  | Estate0 of ident
-  | Estaten of ident * 'e list
-
-type state_desc =
-  | Estate0pat of ident
-  | Estatenpat of ident * ident list
-
-type state = state_desc localized
-
-let state_name st = match st.desc with
-  | Estate0pat id -> id
-  | Estatenpat (id, _) -> id
+(* may change if states can take parameters *)
+type 'e state_expr = ident
+type state = ident
 
 type ('e, 'b) match_hdl = {
     m_constr: constructor;

@@ -85,7 +85,7 @@ let compile_impl filename =
   end;
 
   let ic, lexbuf = lexbuf_from_file filename in
-  let net_name = (Filename.chop_suffix filename ".mj") ^ ".net" in
+  let _net_name = (Filename.chop_suffix filename ".mj") ^ ".net" in
   (* let net = open_out net_name in *)
   let close_all_files () =
     close_in ic;
@@ -102,12 +102,12 @@ let compile_impl filename =
     if !print_parsing_ast then
       Printers.ParserAst.print_program parsing_ast Format.std_formatter;
 
-    let static_scoped_ast = Static_scoping.program parsing_ast in
-    let static_typed_ast = Static_typer.program static_scoped_ast in
-    let dimensioned_program = Netlist_dimensioning.program static_typed_ast in
-    let constrained_program = Netlist_constrain.program dimensioned_program in
+    (* let static_scoped_ast = Static_scoping.program parsing_ast in *)
+    (* let static_typed_ast = Static_typer.program static_scoped_ast in *)
+    (* let dimensioned_program = Netlist_dimensioning.program static_typed_ast in *)
+    (* let constrained_program = Netlist_constrain.program dimensioned_program in *)
 
-    let _sized_program = Netlist_sizer.program constrained_program in
+    (* let _sized_program = Netlist_sizer.program constrained_program in *)
 
     Format.printf "done typing@.";
 

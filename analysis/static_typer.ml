@@ -157,8 +157,6 @@ let rec exp_desc ((fun_env: fun_env), env) = function
       let word_size = optional_static_int_exp env word_size in
       let args = List.map (exp (fun_env, env)) args in
       EMem (mem_kind, (addr_size, word_size, input_file), args)
-  | StaticScopedAST.ELet _ -> assert false
-  | StaticScopedAST.EMerge _ -> assert false
 
 and exp env e = relocalize !@e @@ exp_desc env !!e
 

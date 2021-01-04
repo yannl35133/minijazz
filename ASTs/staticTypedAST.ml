@@ -18,7 +18,7 @@ type slice_param =
 
 type exp_desc =
   | EConst  of ParserAST.value
-  | EConstr of exp ParserAST.state_expr
+  | EConstr of exp state_expr
   | EVar    of ident
   | EReg    of exp
   | ESlice  of slice_param list * exp
@@ -27,8 +27,6 @@ type exp_desc =
       (* function * params * args *)
   | EMem    of mem_kind * (optional_static_int_exp * optional_static_int_exp * string option) * exp list
 (* ro * (address size * word size * input file) * args *)
-  | ELet    of eq * exp
-  | EMerge  of exp * (exp, eq) ParserAST.match_hdl list
 
 and exp = exp_desc localized
 
@@ -38,8 +36,8 @@ and eq_desc =
   | EQand       of eq list (* eq1; ... ; eqn *)
   | EQlet       of eq * eq (* let eq in eq *)
   | EQreset     of eq * exp (* reset eq every e *)
-  | EQautomaton of (exp, eq) ParserAST.automaton_hdl list
-  | EQmatch     of exp * (exp, eq) ParserAST.match_hdl list
+  | EQautomaton of (exp, eq) automaton_hdl list
+  | EQmatch     of exp * (exp, eq) match_hdl list
 
 and eq = eq_desc localized
 

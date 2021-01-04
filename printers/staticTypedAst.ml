@@ -22,11 +22,7 @@ let rec print_type = function
 
 let rec print_exp_desc = function
   | EConst v -> ParserAst.print_val v
-  | EConstr (Estate0 c) -> print_ident c
-  | EConstr (Estaten (c, es)) ->
-      dprintf "%t@ (%t)"
-        (print_ident c)
-        (print_list_naked comma_sep print_exp es)
+  | EConstr c -> print_ident c
   | EVar id  -> print_ident id
   | EReg e   -> dprintf "reg@,%t" (print_exp e)
   | ESlice (params, arg) ->
@@ -67,11 +63,6 @@ let rec print_exp_desc = function
         (print_opt_int_exp addr_size)
         (print_opt_int_exp word_size)
         (print_list_naked comma_sep print_exp args)
-  | ELet (eq, exp) ->
-      dprintf "let %t@ =@ %t"
-        (print_eq eq)
-        (print_exp exp)
-  | EMerge _ -> assert false
 
 and print_exp exp = print_exp_desc exp.desc
 
@@ -84,11 +75,10 @@ and print_lval_desc lval_desc =
 and print_lval lval = print_lval_desc lval.desc
 
 and print_automaton_hdl hdl =
-  ParserAST.(
-    dprintf "%t -> do %t"
-      (state_name hdl.s_state |> print_ident)
-      (print_eq hdl.s_body)
-  )
+  dprintf "%t -> do %t"
+    (print_ident hdl.s_state)
+    (print_eq hdl.s_body)
+
 
 and print_eq_desc = function
   | EQempty -> fun _ -> ()

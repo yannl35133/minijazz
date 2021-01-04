@@ -36,9 +36,7 @@ let slice_param env = function
 
 let rec exp_desc env = function
   | ParserAST.EConst c -> EConst c
-  | ParserAST.EConstr (Estate0 id) -> EConstr (Estate0 id)
-  | ParserAST.EConstr (Estaten (id, es)) ->
-     EConstr (Estaten (id, List.map (exp env) es))
+  | ParserAST.EConstr id -> EConstr id
   | ParserAST.EVar id -> EVar id
   | ParserAST.EPar e -> exp_desc env e.desc
   | ParserAST.ESupOp (id, args) ->
@@ -54,29 +52,23 @@ let rec exp_desc env = function
      let word_size = optional_static_exp env word_size in
      let args = List.map (exp env) args in
      EMem (mem_kind, (addr_size, word_size, input_file), args)
-  | ELet _ -> assert false
-  | EMerge _ -> assert false
 
 and exp env e = relocalize !@e @@ exp_desc env !!e
 
 and eq_desc env = function
-  | ParserAST.EQempty -> EQempty
-  | ParserAST.EQeq (lv, e) -> EQeq (lv, exp env e)
-  | ParserAST.EQand es -> EQand (List.map (eq env) es)
-  | ParserAST.EQlet (e1, e2) -> EQlet (eq env e1, eq env e2)
-  | ParserAST.EQreset (e, ex) -> EQreset (eq env e, exp env ex)
-  | ParserAST.EQautomaton _ -> assert false
-  | ParserAST.EQmatch _ -> assert false
+  | ParserAST.Dempty -> EQempty
+  | ParserAST.Deq (lv, e) -> EQeq (lv, exp env e)
+  | ParserAST.Dblock es -> EQand (List.map (eq env) es)
+  | ParserAST.Dreset (e, ex) -> EQreset (eq env e, exp env ex)
+  | ParserAST.Dautomaton _ -> assert false
+  | ParserAST.Dmatch _ -> assert false
+  | Dif (_condition, _block1, _block2) -> EQempty (* TODO *)
+
 
 and eq env e = relocalize !@e (eq_desc env !!e)
 
-let rec body env e =
-  let aux = function
-    | ParserAST.BIf (condition, block1, block2) ->
-       BIf (static_exp_full env condition, body env block1, body env block2)
-    | ParserAST.BEqs eq_l -> BEqs (List.map (eq env) eq_l)
-  in
-  relocalize_fun aux e
+let body _env _e = assert false
+  (* relocalize_fun aux e *)
 
 let starput env = relocalize_fun @@ fun ParserAST.{ name; typed } ->
   let rec fun_typed : ParserAST.netlist_type -> 'a = function
@@ -106,15 +98,15 @@ let const consts_set const =
     const_total = !@const
   }
 
-let program ParserAST.{ p_consts; p_nodes } : program =
-  let consts_set = List.fold_left (fun set el -> IdentSet.add !!(!!el.ParserAST.const_left) set) IdentSet.empty p_consts in
-  { p_consts = List.fold_left
-    (fun env const_ ->
-      Env.add !!(!!const_.ParserAST.const_left) (const consts_set const_) env
-    ) Env.empty p_consts;
-    p_consts_order = List.map (fun el -> !!(!!el.ParserAST.const_left)) p_consts;
-    p_nodes = List.fold_left
-    (fun env node_ ->
-      Env.add !!ParserAST.(!!node_.node_name) (node consts_set node_) env
-    ) Env.empty p_nodes;
-  }
+let program _ (* ParserAST.{ p_consts; p_nodes } *) : program = assert false
+  (* let consts_set = List.fold_left (fun set el -> IdentSet.add !!(!!el.ParserAST.const_left) set) IdentSet.empty p_consts in
+   * { p_consts = List.fold_left
+   *   (fun env const_ ->
+   *     Env.add !!(!!const_.ParserAST.const_left) (const consts_set const_) env
+   *   ) Env.empty p_consts;
+   *   p_consts_order = List.map (fun el -> !!(!!el.ParserAST.const_left)) p_consts;
+   *   p_nodes = List.fold_left
+   *   (fun env node_ ->
+   *     Env.add !!ParserAST.(!!node_.node_name) (node consts_set node_) env
+   *   ) Env.empty p_nodes;
+   * } *)

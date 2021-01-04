@@ -54,7 +54,7 @@ let concat name loc (arg1, n1) (arg2, n2) =
     | n1, n2 when n2 = n1 - 1 -> "concat_" ^ string_of_int n1, n1, arg1,
         dimension (ECall (reloc @@ "add_dim_" ^ string_of_int n2,
                           List.init n2 (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))), [arg2])) !%@arg2 (NDim (n2 + 1))
-    | n1, n2 when n2 = n1 + 1 -> "concat_" ^ string_of_int n2, n2, 
+    | n1, n2 when n2 = n1 + 1 -> "concat_" ^ string_of_int n2, n2,
         dimension (ECall (reloc @@ "add_dim_" ^ string_of_int n1,
                           List.init n1 (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))), [arg1])) !%@arg1 (NDim (n1 + 1)),
         arg2
@@ -118,7 +118,7 @@ let rec exp fun_env dimensioned e = match !!e with
   | StaticTypedAST.ESupOp (op, args) when !!op = "concat" -> begin
       let dimensioned, dim_args = List.fold_left_map (exp fun_env) dimensioned args in
       let arg1, arg2 = match dim_args with
-        | [arg1; arg2] -> arg1, arg2 
+        | [arg1; arg2] -> arg1, arg2
         | _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 2, !!op)
       in
       let n1, n2 = match !%%arg1, !%%arg2 with
@@ -134,7 +134,7 @@ let rec exp fun_env dimensioned e = match !!e with
   | StaticTypedAST.ESupOp (op, args) when !!op = "add_dim" -> begin
       let dimensioned, dim_args = List.fold_left_map (exp fun_env) dimensioned args in
       let arg = match dim_args with
-        | [arg] -> arg 
+        | [arg] -> arg
         | _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 1, !!op)
       in
       let dim = match !%%arg with
@@ -142,7 +142,7 @@ let rec exp fun_env dimensioned e = match !!e with
         | NDim n -> n
       in
       dimensioned, dimension (supop op (dim_args) dim) !@e (NDim (dim+1))
-      end 
+      end
   | StaticTypedAST.ESupOp (op, args) ->
       let special_arg, args =
         if !!op = "mux" then
@@ -169,7 +169,7 @@ let rec exp fun_env dimensioned e = match !!e with
         with (* Errors. *)WrongDimension (n1, n2, loc1, ErSimple) -> raise @@ (* Errors. *)WrongDimension (n1, n2, loc1, ErOp (!!op, !%@dim_ex))
       in
       let dimensioned, dim_special_arg = List.fold_left_map (f 0) dimensioned special_arg in
-      let dimensioned, dim_args = List.fold_left_map (f dim) dimensioned args in      
+      let dimensioned, dim_args = List.fold_left_map (f dim) dimensioned args in
       dimensioned, dimension (supop op (dim_special_arg @ dim_args) dim) !@e (NDim dim)
   | StaticTypedAST.ESlice (params, e1) ->
       let dimensioned, e1 = exp fun_env dimensioned e1 in
@@ -217,9 +217,6 @@ let rec exp fun_env dimensioned e = match !!e with
         with Not_found -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, List.length dims_in, fname)
       in
       dimensioned, dimension (EMem (mem_kind, (addr_size, word_size, input_file), dim_args)) !@e dims_out
-
-  | StaticTypedAST.ELet _ -> assert false
-  | StaticTypedAST.EMerge _ -> assert false
 
 and assert_exp fun_env dim dimensioned e =
   try
@@ -299,8 +296,6 @@ and assert_exp fun_env dim dimensioned e =
   | StaticTypedAST.ECall _
   | StaticTypedAST.EMem _ ->
      raise CannotDimensionYet (* The dimension of the result does not give further info to dimension the arguments *)
-  | StaticTypedAST.ELet _ -> assert false
-  | StaticTypedAST.EMerge _ -> assert false
 
 let rec lvalue dimensioned lval = match !!lval with
   | ParserAST.LValDrop -> raise CannotDimensionYet
@@ -385,7 +380,7 @@ let eqs fun_env (name, loc, outputs) dimensioned eq_l =
           dimension_eq (Env.add one (Some (NDim 0)) dimensioned', dim_eqs')
   in
   let dimensioned, dim_eqs = dimension_eq @@ List.fold_left_map try_dimensioning dimensioned eq_l in
-  let _dimensioned = Env.map (Misc.option_get ~error:(Failure "There remained undimensioned variables")) dimensioned in 
+  let _dimensioned = Env.map (Misc.option_get ~error:(Failure "There remained undimensioned variables")) dimensioned in
   let dim_eqs = List.map (fun (eq_left, eq_right, loc) -> match eq_left, eq_right with
     | Some lval, Some exp ->
         if !%%lval <> !%%exp then
@@ -416,7 +411,7 @@ let fun_env StaticTypedAST.{ node_inputs; node_outputs; _ } =
   match List.map (fun input -> dimension_of_netlist_type !!(!!input.StaticTypedAST.typed)) node_outputs with
   | [out] -> out
   | l -> NProd l
-  
+
 
 let node fun_env name StaticTypedAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
   let dimensioned = Env.empty in

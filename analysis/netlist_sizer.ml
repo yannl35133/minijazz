@@ -5,7 +5,7 @@ open NetlistSizedAST
 
 module UIDEnv = Constraints_solver.UIDEnv
 type union_find = Constraints_solver.union_find
-let rec find_opt = Constraints_solver.find_opt
+let find_opt = Constraints_solver.find_opt
 
 exception CouldNotSize of ident * int
 exception CouldNotInfer of ident_desc * Location.location * int
@@ -86,25 +86,26 @@ let rec lvalue var_env =
   resize_fun f var_env
 
 
-let eqs var_env NetlistConstrainedAST.{ equations; dim_env } =
-  let sized_equations = List.map (fun NetlistConstrainedAST.{ desc = { eq_left; eq_right }; loc } ->
-    relocalize loc { eq_left = lvalue var_env eq_left; eq_right = exp var_env eq_right }) equations in
+let eqs _var_env _ (* NetlistConstrainedAST.{ equations; dim_env }*) = assert false
+  (* let sized_equations = List.map (fun NetlistConstrainedAST.{ desc = { eq_left; eq_right }; loc } ->
+   *   relocalize loc { eq_left = lvalue var_env eq_left; eq_right = exp var_env eq_right }) equations in
+   *
+   * let size_env = Env.map (netlist_presize_to_netlist_size var_env) dim_env in
+   * { equations = sized_equations; dim_env = size_env } *)
 
-  let size_env = Env.map (netlist_presize_to_netlist_size var_env) dim_env in
-  { equations = sized_equations; dim_env = size_env }
 
 
-
-let rec body var_env e = relocalize_fun (function
-  | NetlistConstrainedAST.BIf (condition, block1, block2) -> BIf (condition, body var_env block1, body var_env block2)
-  | NetlistConstrainedAST.BEqs case -> BEqs (eqs var_env case)
-  ) e
+let body _var_env _e = assert false
+  (* relocalize_fun (function
+   * | NetlistConstrainedAST.BIf (condition, block1, block2) -> BIf (condition, body var_env block1, body var_env block2)
+   * | NetlistConstrainedAST.BEqs case -> BEqs (eqs var_env case)
+   * ) e *)
 
 
 let starput var_env NetlistConstrainedAST.{desc = { name; presize }; loc } =
   relocalize loc { name; size = relocalize_fun (netlist_presize_to_netlist_size var_env) presize }
 
- 
+
 
 let node var_env NetlistConstrainedAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
   let node_inputs  = List.map (starput var_env) node_inputs in
@@ -119,7 +120,7 @@ let node var_env NetlistConstrainedAST.{ node_name_loc; node_loc; node_params; n
 let program NetlistConstrainedAST.{ p_consts; p_consts_order; p_nodes; constraints } : program =
   try
     let var_env = Constraints_solver.solve_constraints constraints in
-    { 
+    {
       p_consts; p_consts_order;
       p_nodes = Env.map (node var_env) p_nodes;
     }

@@ -25,7 +25,7 @@ let rec print_sexp_desc = function
   | SIdent id -> print_ident id
   | SPar se   -> par (print_sexp se)
   | SUnOp (sunop, se) ->
-      dprintf "%t %t" 
+      dprintf "%t %t"
         (print_sunop sunop)
         (print_sexp se)
   | SBinOp (sop, se1, se2) ->
@@ -83,11 +83,7 @@ let print_slice_param = function
 
 let rec print_exp_desc = function
   | EConst v -> print_val v
-  | EConstr (Estate0 c) -> print_ident c
-  | EConstr (Estaten (c, es)) ->
-      dprintf "%t@ (%t)"
-        (print_ident c)
-        (print_list_naked comma_sep print_exp es)
+  | EConstr c -> print_ident c
   | EVar id  -> print_ident id
   | EPar e   -> par (print_exp e)
   | EReg e   -> dprintf "reg@,%t" (print_exp e)
@@ -129,11 +125,6 @@ let rec print_exp_desc = function
         (print_opt_sexp addr_size)
         (print_opt_sexp word_size)
         (print_list_naked comma_sep print_exp args)
-  | ELet (eq, exp) ->
-      dprintf "let %t@ =@ %t"
-        (print_eq eq)
-        (print_exp exp)
-  | EMerge _ -> assert false
 
 and print_exp exp fmt = print_exp_desc exp.desc fmt
 
@@ -146,32 +137,46 @@ and print_lval_desc lval_desc =
 and print_lval lval = print_lval_desc lval.desc
 
 and print_automaton_hdl hdl =
-  dprintf "%t -> do %t"
-    (state_name hdl.s_state |> print_ident)
-    (print_eq hdl.s_body)
+  let kw, lst = if hdl.s_unless <> []
+                then "unless", hdl.s_unless
+                else "until", hdl.s_until in
+  dprintf "| %t -> @[<v>do %t %s %t@]"
+    (print_ident hdl.s_state)
+    (print_decl hdl.s_body)
+    kw
+    (print_list_naked else_sep print_escape lst)
 
-and print_eq_desc = function
-  | EQempty -> fun _ -> ()
-  | EQeq (lv, exp) ->
+
+and print_escape esc =
+  dprintf "@[%t kw %t in %t@]"
+    (print_exp esc.e_cond)
+    (print_decl esc.e_body)
+    (print_ident esc.e_nx_state)
+
+and print_decl_desc = function
+  | Dempty -> fun _ -> ()
+  | Deq (lv, exp) ->
       dprintf "@[<h>%t%t%t@]"
         (print_lval lv)
         (binop_sep "=")
         (print_exp exp)
-  | EQand eqs ->
-      print_list_naked and_sep print_eq eqs
-  | EQlet (eq, eq') ->
-      dprintf "let %t in@ %t"
-        (print_eq eq)
-        (print_eq eq')
-  | EQreset (eq, exp) ->
+  | Dblock eqs ->
+      print_list_naked and_sep print_decl eqs
+  | Dreset (eq, exp) ->
       dprintf "reset %t@ every %t"
-        (print_eq eq)
+        (print_decl eq)
         (print_exp exp)
-  | EQautomaton hdls ->
-      print_list_naked bar_sep print_automaton_hdl hdls
-  | EQmatch _ -> assert false
+  | Dautomaton hdls ->
+     dprintf "automaton@ @[<v>%t@]@ end"
+      (print_list_naked newline_sep print_automaton_hdl hdls)
+  | Dmatch _ -> assert false
+  | Dif (se, b1, b2) ->
+     dprintf "@[if@ %t@ then@]@;<1 2>@[<v>%t@]@ else@;<1 2>@[<v>%t@]@ end if"
+        (print_sexp se)
+        (print_decl b1)
+        (print_decl b2)
 
-and print_eq eq = print_eq_desc eq.desc
+and print_decl eq = print_decl_desc eq.desc
 
 let is_bit tid_desc =
   match tid_desc.typed.desc with
@@ -189,17 +194,6 @@ let print_tid_desc tid_desc =
 
 let print_tid tid = print_tid_desc tid.desc
 
-let rec print_block_desc block_desc =
-  match block_desc with
-  | BEqs l -> print_list_naked semicolon_sep print_eq l
-  | BIf (se, b1, b2) ->
-      dprintf "@[if@ %t@ then@]@;<1 2>@[<v>%t@]@ else@;<1 2>@[<v>%t@]@ end if"
-        (print_sexp se)
-        (print_block b1)
-        (print_block b2)
-
-and print_block block = print_block_desc block.desc
-
 let print_node_desc node_desc =
   dprintf "@[<v 2>@[<2>%t%t%t@,%t%t%t@;<1 -2>@]where@ %t@]@ end where"
     (print_inline_status node_desc.node_inline)
@@ -208,8 +202,7 @@ let print_node_desc node_desc =
     (print_list par comma_sep print_tid node_desc.node_inputs)
     (binop_sep "=")
     (print_list par comma_sep print_tid node_desc.node_outputs)
-    (print_block node_desc.node_body)
-
+    (print_decl node_desc.node_body)
 
 let print_node node = print_node_desc node.desc
 

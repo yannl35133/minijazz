@@ -88,6 +88,7 @@ and lvalue = lvalue_desc localized
 
 type exp_desc =
   | EConst  of value
+  | EConstr of ident
   | EVar    of ident
   | EPar    of exp     (* Created purely to have good locations *)
   | EReg    of exp
@@ -96,17 +97,17 @@ type exp_desc =
   | ECall   of ident * optional_static_exp list * exp list
   (* function * params * args *)
   | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
-  | EMatch  of exp * (exp, decl) match_hdl list
-
 and exp = exp_desc localized
 
 and decl_desc =
   | Dempty
   | Deq        of lvalue * exp (* p = e *)
-  | Dand       of decl list (* eq1; ... ; eqn *)
+  | Dblock     of decl list (* eq1; ... ; eqn *)
   | Dreset     of decl * exp (* reset eq every e *)
   | Dautomaton of (exp, decl) automaton_hdl list
+  | Dmatch     of exp * (exp, decl) match_hdl list
   | Dif        of static_exp * decl * decl
+
 and decl = decl_desc localized
 
 
@@ -135,7 +136,16 @@ type const_desc = {
 }
 and const = const_desc localized
 
+(* list of defined enum types
+   can't be produced by input program *)
+type enum = {
+    enum_name: ident;
+    enum_pats: constructor list;
+    enum_loc: Location.location (* ? *)
+  }
+
 type program = {
-  p_consts: const list;
-  p_nodes : node list;
-}
+    p_enum : enum list;
+    p_consts: const list;
+    p_nodes : node list;
+  }

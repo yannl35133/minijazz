@@ -47,7 +47,7 @@ and exp = exp_desc sized
 and decl_desc =
   | Dempty
   | Deq        of lvalue * exp (* p = e *)
-  | Dand       of decl list (* eq1; ... ; eqn *)
+  | Dblock     of decl list (* eq1; ... ; eqn *)
   | Dreset     of decl * exp (* reset eq every e *)
   | Dautomaton of (exp, decl) automaton_hdl list
   | Dif        of static_bool_exp * case * case

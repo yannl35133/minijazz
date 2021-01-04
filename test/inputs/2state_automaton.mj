@@ -1,0 +1,8 @@
+main (clk) = o where
+  front_edge = clk & not(reg(clk));
+  down_edge = not(clk) & reg(clk);
+  automaton
+  | St1 -> do o = 0 until down_edge then St2
+  | St2 -> do o = 1 until front_edge then St1
+  end
+end where

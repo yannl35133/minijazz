@@ -76,7 +76,7 @@ let constructor == localize(CONSTRUCTOR)
 
 let program :=
   | p_consts = list(const_decl); p_nodes = list(node_decl); EOF;
-      { { p_consts; p_nodes } }
+      { { p_consts; p_nodes; p_enum = [] } }
 
 let const_decl == localize(const_decl_desc)
 let const_decl_desc :=
@@ -88,7 +88,8 @@ let node_decl_desc :=
   ~=node_inline; node_name=ident; ~=node_params;
     "("; node_inputs=slist(typed_ident, ","); ")"; "="; ~=node_outputs;
   WHERE; node_body=block; node_probes=probe_decls; END; WHERE; ";"?;
-      { { node_inline; node_name; node_params; node_inputs; node_outputs; node_body; node_probes } }
+    { { node_inline; node_name; node_params;
+        node_inputs; node_outputs; node_body; node_probes } }
 
 let node_inline :=
   |         { NotInline }
@@ -120,29 +121,19 @@ let node_param_desc :=
   | st_name=ident; ":"; st_type_name=ident;
       { { st_name; st_type_name } }
 
-
-let block == localize(block_desc)
-let block_desc :=
-  | ~=snlist_optlast (equation, ";");                           < BEqs >
-  | IF; ~=static_exp; THEN; b1=block; ELSE; b2=block; END; IF;  < BIf >
-
 let state :=
-  | c = constructor; { Estate0 c }
-  | c = constructor; LPAREN; es = snlist(exp, COMMA); RPAREN; { Estaten (c, es) }
+  | c = constructor; { c }
 
-let state_pat == localize(state_pat_desc)
-let state_pat_desc :=
-  | c = constructor; { Estate0pat c }
-  | c = constructor; LPAREN; l = snlist(ident, COMMA); RPAREN;
-    { Estatenpat (c, l) }
+let state_pat :=
+  | c = constructor; { c }
 
 let decl :=
   | LET; v = ident; IN; d = decl; { let vs, eq = d in v :: vs, eq }
-  | DO; eq = equation; { [], eq }
+  | DO; eq = declaration; { [], eq }
 
 let emission :=
-  | eq = equation; IN; s = state; { eq, s }
-  | s = state; { localize $sloc EQempty, s }
+  | eq = declaration; IN; s = state; { eq, s }
+  | s = state; { localize $sloc Dempty, s }
 
 let escape :=
   | c = exp; THEN; e = emission;
@@ -153,36 +144,41 @@ let escape :=
 let escape_list := snlist(escape, ELSE)
 
 let automaton_hdl :=
-  | s_state = state_pat; ARROW; ds = decl; DONE;
+  | BAR; s_state = state_pat; ARROW; ds = decl; DONE;
     { let s_vars, s_body = ds in
       { s_state; s_body; s_vars; s_until = []; s_unless = [] } }
-  | sp = state_pat; ARROW; ds = decl; THEN; e = emission;
+  | BAR; sp = state_pat; ARROW; ds = decl; THEN; e = emission;
     { { s_state = sp; s_vars = fst ds; s_body = snd ds;
         s_until = [{ e_cond = localize $sloc (EConst(VBit true));
                      e_reset = true; e_body = fst e;
                      e_nx_state = snd e }];
         s_unless = [] } }
-  | sp = state_pat; ARROW; ds = decl; CONTINUE; e = emission;
+  | BAR; sp = state_pat; ARROW; ds = decl; CONTINUE; e = emission;
     { let e_eqs, e_st = e in
       { s_state = sp; s_vars = fst ds; s_body = snd ds;
         s_until = [{ e_cond = localize $sloc (EConst(VBit true));
                      e_reset = false; e_body = e_eqs;
                      e_nx_state = e_st }];
         s_unless = [] } }
-  | sp = state_pat; ARROW; ds = decl; UNTIL; es = escape_list;
+  | BAR; sp = state_pat; ARROW; ds = decl; UNTIL; es = escape_list;
     { { s_state = sp; s_vars = fst ds; s_body = snd ds;
         s_until = es; s_unless = [] } }
-  | sp = state_pat; ARROW; ds = decl; UNLESS; es = escape_list;
+  | BAR; sp = state_pat; ARROW; ds = decl; UNLESS; es = escape_list;
     { { s_state = sp; s_vars = fst ds; s_body = snd ds;
         s_until = []; s_unless = es } }
 
-let equation == localize(equation_desc)
-let equation_desc :=
-  | lv=lvalue; "="; e=exp; { EQeq (lv, e) }
-(* | lst=snlist(equation, ";"); { EQand lst } *)
-  | LET; e=equation; IN; e2=equation; { EQlet (e, e2) }
-  | RESET; eq=equation; EVERY; e=exp; { EQreset (eq, e) }
-  | AUTOMATON; lst=snlist(automaton_hdl, BAR); END; { EQautomaton lst }
+let declaration == localize(declaration_desc)
+let declaration_desc :=
+  | lv=lvalue; "="; e=exp; { Deq (lv, e) }
+  | RESET; eq=declaration; EVERY; e=exp; { Dreset (eq, e) }
+  | AUTOMATON; lst=nonempty_list(automaton_hdl); END; { Dautomaton lst }
+  | IF; c=static_exp; THEN; b1=block;
+    ELSE; b2=block; END; IF; { Dif (c, b1, b2) }
+
+let block == localize(block_desc)
+let block_desc :=
+  | { Dempty }
+  | lst=snlist_optlast(declaration, ";"); { Dblock lst }
 
 let lvalue == localize(lvalue_desc)
 let lvalue_desc :=
