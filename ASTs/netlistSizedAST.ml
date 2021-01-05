@@ -34,13 +34,13 @@ and lvalue = lvalue_desc sized
 
 type exp_desc =
   | EConst  of ParserAST.value
+  | EConstr of ident
   | EVar    of ident
   | EReg    of exp
   | ECall   of ident * static_bitype_exp list * exp list
       (* function * params * args *)
   | EMem    of mem_kind * (static_int_exp * static_int_exp * string option) * exp list
 (* ro * (address size * word size * input file) * args *)
-  | EMatch  of exp * (exp, decl) match_hdl list
 
 and exp = exp_desc sized
 
@@ -50,6 +50,7 @@ and decl_desc =
   | Dblock     of decl list (* eq1; ... ; eqn *)
   | Dreset     of decl * exp (* reset eq every e *)
   | Dautomaton of (exp, decl) automaton_hdl list
+  | Dmatch     of exp * (exp, decl) match_hdl list
   | Dif        of static_bool_exp * case * case
 and decl = decl_desc localized
 
@@ -79,7 +80,8 @@ type node = {
 }
 
 type program = {
-  p_consts: StaticTypedPartialAST.const Env.t;
-  p_consts_order: ident_desc list;
-  p_nodes:  node  Env.t;
-}
+    p_enum : enum list;
+    p_consts: StaticTypedPartialAST.const Env.t;
+    p_consts_order: ident_desc list;
+    p_nodes:  node  Env.t;
+  }

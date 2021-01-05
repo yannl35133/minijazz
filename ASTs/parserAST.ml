@@ -136,14 +136,6 @@ type const_desc = {
 }
 and const = const_desc localized
 
-(* list of defined enum types
-   can't be produced by input program *)
-type enum = {
-    enum_name: ident;
-    enum_pats: constructor list;
-    enum_loc: Location.location (* ? *)
-  }
-
 type program = {
     p_enum : enum list;
     p_consts: const list;

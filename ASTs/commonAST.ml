@@ -34,6 +34,15 @@ let no_localize x = {
 type constructor = constructor_desc localized
 type ident = ident_desc localized
 
+
+(* list of defined enum types
+   can't be produced by input program *)
+type enum = {
+    enum_name: ident;
+    enum_pats: constructor list;
+    enum_loc: Location.location (* ? *)
+  }
+
 type inline_status = Inline | NotInline
 
 type mem_kind_desc = MRom | MRam
