@@ -153,6 +153,11 @@ and print_escape esc =
     (print_decl esc.e_body)
     (print_ident esc.e_nx_state)
 
+and print_match_hdl hdl =
+  dprintf "| %t -> @[<v>%t@]"
+    (print_ident hdl.m_constr)
+    (print_decl hdl.m_body)
+
 and print_decl_desc = function
   | Dempty -> fun _ -> ()
   | Deq (lv, exp) ->
@@ -169,7 +174,10 @@ and print_decl_desc = function
   | Dautomaton hdls ->
      dprintf "automaton@ @[<v>%t@]@ end"
       (print_list_naked newline_sep print_automaton_hdl hdls)
-  | Dmatch _ -> assert false
+  | Dmatch (e, hdls) ->
+     dprintf "match %t with@ @[<v>%t@]@ end"
+       (print_exp e)
+       (print_list_naked newline_sep print_match_hdl hdls)
   | Dif (se, b1, b2) ->
      dprintf "@[if@ %t@ then@]@;<1 2>@[<v>%t@]@ else@;<1 2>@[<v>%t@]@ end if"
         (print_sexp se)
