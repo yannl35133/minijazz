@@ -18,3 +18,5 @@ let get =
 let compare = Int.compare
 
 let print fmt uid = Format.fprintf fmt "%d" uid
+
+let to_string = string_of_int

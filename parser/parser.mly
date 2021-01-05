@@ -76,7 +76,7 @@ let constructor == localize(CONSTRUCTOR)
 
 let program :=
   | p_consts = list(const_decl); p_nodes = list(node_decl); EOF;
-      { { p_consts; p_nodes; p_enum = [] } }
+      { { p_consts; p_nodes; p_enums = [] } }
 
 let const_decl == localize(const_decl_desc)
 let const_decl_desc :=

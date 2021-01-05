@@ -80,7 +80,7 @@ type node = {
 }
 
 type program = {
-    p_enum : enum list;
+    p_enums : enum list;
     p_consts: StaticTypedPartialAST.const Env.t;
     p_consts_order: ident_desc list;
     p_nodes:  node  Env.t;

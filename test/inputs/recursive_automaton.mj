@@ -1,13 +1,15 @@
-main (clk) = o where
+main (clk, press) = o where
   front_edge = clk & not(reg(clk));
   down_edge = not(clk) & reg(clk);
   automaton
-  | St1 -> do
+  | St1 -> do (* in state 1 output is 1 iff press *)
+    o = x;
     automaton
-    | Good -> do x = 1 continue Bad
-    | Bad -> do x = 0 until down_edge then Good
+    | SubSt1 -> do x = 1 until press then SubSt2 else down_edge then St2
+    | SubSt2 -> do x = 0 until press then SubSt1 else down_edge then St3
     end
-    until down_edge then St2
-  | St2 -> do o = 1 until front_edge then St1
+    done
+  | St2 -> do o = 1 until front_edge continue St1
+  | St3 -> do o = 0 until front_edge continue St1
   end
 end where

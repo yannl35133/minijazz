@@ -12,3 +12,5 @@ val get : unit -> t
 val compare : t -> t -> int
 
 val print : Format.formatter -> t -> unit
+
+val to_string : t -> string

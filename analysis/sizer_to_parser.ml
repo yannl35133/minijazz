@@ -194,6 +194,6 @@ let cvt_const id desc lst: ParserAST.const list =
   relocalize desc.const_total c :: lst
 
 let program p: ParserAST.program =
-  { p_enum = p.p_enum;
+  { p_enums = p.p_enums;
     p_consts = Env.fold cvt_const p.p_consts [];
     p_nodes = Env.fold cvt_node p.p_nodes [] }

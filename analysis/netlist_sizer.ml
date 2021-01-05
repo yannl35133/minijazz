@@ -121,7 +121,7 @@ let program NetlistConstrainedAST.{ p_consts; p_consts_order; p_nodes; constrain
   try
     let var_env = Constraints_solver.solve_constraints constraints in
     {
-      p_enum = [];
+      p_enums = [];
       p_consts; p_consts_order;
       p_nodes = Env.map (node var_env) p_nodes;
     }

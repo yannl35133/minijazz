@@ -137,7 +137,7 @@ type const_desc = {
 and const = const_desc localized
 
 type program = {
-    p_enum : enum list;
+    p_enums : enum list;
     p_consts: const list;
     p_nodes : node list;
   }
