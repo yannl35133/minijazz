@@ -28,10 +28,24 @@
 open CommonAST
 open ParserAST
 
+let const_of_int loc i =
+  let r =
+    if fst i > 0 then
+      Misc.bool_list_of_int i
+    else
+      try
+        Misc.bool_list_of_dec_int i
+      with Invalid_argument _ -> raise (Errors.Lexical_error (Errors.Nonbinary_base, loc))
+  in
+  match r with
+      | [b] -> VBit b
+      | l -> VNDim (List.map (fun b -> VBit b) l)
+
+
 %}
 
 %token CONST INLINE WHERE END PROBING
-%token AUTOMATON IN RESET EVERY LET UNLESS UNTIL CONTINUE DO DONE
+%token TYPE MATCH WITH AUTOMATON LOCAL RESET EVERY /* LET IN */ UNLESS UNTIL CONTINUE RESTART /* DO DONE */
 %token ROM RAM REG MUX
 %token IF THEN ELSE
 %token ARROW "->"
@@ -50,6 +64,7 @@ open ParserAST
 %left LEQ GEQ EQUAL NEQ LANGLE RANGLE
 %left DOT
 %left OR NOR PLUS MINUS
+%nonassoc RESTART CONTINUE
 %left NAND XOR AND
 %left STAR SLASH
 %right NOT REG
@@ -74,117 +89,36 @@ let localize (x) == ~=x; { localize $sloc x }
 let ident == localize(IDENT)
 let constructor == localize(CONSTRUCTOR)
 
-let program :=
-  | p_consts = list(const_decl); p_nodes = list(node_decl); EOF;
-      { { p_consts; p_nodes; p_enum = [] } }
+// Enumerated type
 
-let const_decl == localize(const_decl_desc)
-let const_decl_desc :=
-  | CONST; const_left=ident; "="; const_right=static_exp; ";"?;
-      { { const_left; const_right } }
+let enum_constructor :=
+  | BAR; constructor
 
-let node_decl == localize(node_decl_desc)
-let node_decl_desc :=
-  ~=node_inline; node_name=ident; ~=node_params;
-    "("; node_inputs=slist(typed_ident, ","); ")"; "="; ~=node_outputs;
-  WHERE; node_body=block; node_probes=probe_decls; END; WHERE; ";"?;
-    { { node_inline; node_name; node_params;
-        node_inputs; node_outputs; node_body; node_probes } }
+let enum :=
+  | TYPE; enum_name=ident; "="; enum_constructors=enum_constructor*;   { { enum_name; enum_constructors; enum_loc = Loc $sloc } }
 
-let node_inline :=
-  |         { NotInline }
-  | INLINE; { Inline }
+// Static expressions
 
-let node_outputs :=
-  | ~=typed_ident;      { [typed_ident] }
-  | tuple(typed_ident)
+let static_value ==
+  | ~=BOOL;     < SBool >
+  | i=INT;      { SInt (snd i) }
 
-let typed_ident == localize(typed_ident_desc)
-let typed_ident_desc :=
-  | name=ident; { { name; typed = localize $sloc (TNDim []) } }
-  | name=ident; ":"; type_ident=sntuple(opt_static_exp, "[", "]")+;
-    { { name; typed = localize $loc(type_ident) (TNDim (List.flatten type_ident)) } }
 
-let opt_static_exp == localize(optional_static_exp_desc)
-let optional_static_exp_desc :=
-  | WILDCARD;                 { SUnknown (UniqueId.get ()) }
-  | ~=simple_static_exp_desc; < SExp >
+let int_op ==
+  | "+";  { SAdd }      | "-";  { SMinus }
+  | "*";  { SMult }     | "/";  { SDiv }
+  | "^";  { SPower }
+let int_bool_op ==
+  | "=";  { SEq }       | "<>"; { SNeq }
+  | "<";  { SLt }       | "<="; { SLeq }
+  | ">";  { SGt }       | ">="; { SGeq }
+let bool_op ==
+  | OR;   { SOr }       | AND;  { SAnd }
 
-let node_params :=
-  | (* empty *)           { [] }
-  | stuple(node_param, "<", ">")
-
-let node_param == localize(node_param_desc)
-let node_param_desc :=
-  | st_name=ident;
-      { { st_name; st_type_name = localize $sloc "int" } }
-  | st_name=ident; ":"; st_type_name=ident;
-      { { st_name; st_type_name } }
-
-let state :=
-  | c = constructor; { c }
-
-let state_pat :=
-  | c = constructor; { c }
-
-let decl :=
-  | LET; v = ident; IN; d = decl; { let vs, eq = d in v :: vs, eq }
-  | DO; eq = declaration; { [], eq }
-
-let emission :=
-  | eq = declaration; IN; s = state; { eq, s }
-  | s = state; { localize $sloc Dempty, s }
-
-let escape :=
-  | c = exp; THEN; e = emission;
-    { { e_cond = c; e_reset = true; e_body = fst e; e_nx_state = snd e } }
-  | c = exp; CONTINUE; e = emission;
-    { { e_cond = c; e_reset = true; e_body = fst e; e_nx_state = snd e } }
-
-let escape_list := snlist(escape, ELSE)
-
-let automaton_hdl :=
-  | BAR; s_state = state_pat; ARROW; ds = decl; DONE;
-    { let s_vars, s_body = ds in
-      { s_state; s_body; s_vars; s_until = []; s_unless = [] } }
-  | BAR; sp = state_pat; ARROW; ds = decl; THEN; e = emission;
-    { { s_state = sp; s_vars = fst ds; s_body = snd ds;
-        s_until = [{ e_cond = localize $sloc (EConst(VBit true));
-                     e_reset = true; e_body = fst e;
-                     e_nx_state = snd e }];
-        s_unless = [] } }
-  | BAR; sp = state_pat; ARROW; ds = decl; CONTINUE; e = emission;
-    { let e_eqs, e_st = e in
-      { s_state = sp; s_vars = fst ds; s_body = snd ds;
-        s_until = [{ e_cond = localize $sloc (EConst(VBit true));
-                     e_reset = false; e_body = e_eqs;
-                     e_nx_state = e_st }];
-        s_unless = [] } }
-  | BAR; sp = state_pat; ARROW; ds = decl; UNTIL; es = escape_list;
-    { { s_state = sp; s_vars = fst ds; s_body = snd ds;
-        s_until = es; s_unless = [] } }
-  | BAR; sp = state_pat; ARROW; ds = decl; UNLESS; es = escape_list;
-    { { s_state = sp; s_vars = fst ds; s_body = snd ds;
-        s_until = []; s_unless = es } }
-
-let declaration == localize(declaration_desc)
-let declaration_desc :=
-  | lv=lvalue; "="; e=exp; { Deq (lv, e) }
-  | RESET; eq=declaration; EVERY; e=exp; { Dreset (eq, e) }
-  | AUTOMATON; lst=nonempty_list(automaton_hdl); END; { Dautomaton lst }
-  | IF; c=static_exp; THEN; b1=block;
-    ELSE; b2=block; END; IF; { Dif (c, b1, b2) }
-
-let block == localize(block_desc)
-let block_desc :=
-  | { Dempty }
-  | lst=snlist_optlast(declaration, ";"); { Dblock lst }
-
-let lvalue == localize(lvalue_desc)
-let lvalue_desc :=
-  | WILDCARD;         { LValDrop }
-  | ~=ident;          < LValId >
-  | ~=tuple(lvalue);  < LValTuple >
+let int_unop ==
+  | "-";  { SNeg }
+let bool_unop ==
+  | NOT;  { SNot }
 
 let simple_static_exp == localize(simple_static_exp_desc)
 let simple_static_exp_desc :=
@@ -205,53 +139,39 @@ let static_exp_desc :=
   | se1=static_exp; op=int_bool_op; se2=static_exp;             { SBinOp (op, se1, se2) }
   | se1=static_exp; op=bool_op;     se2=static_exp;             { SBinOp (op, se1, se2) }
 
-let static_value ==
-  | ~=BOOL;     < SBool >
-  | i=INT;      { SInt (snd i) }
+let opt_static_exp == localize(optional_static_exp_desc)
+let optional_static_exp_desc :=
+  | WILDCARD;                 { SUnknown (UIDUnknownStatic.get ()) }
+  | ~=simple_static_exp_desc; < SExp >
 
-let int_op ==
-  | "+";  { SAdd }      | "-";  { SMinus }
-  | "*";  { SMult }     | "/";  { SDiv }
-  | "^";  { SPower }
-let int_bool_op ==
-  | "=";  { SEq }       | "<>"; { SNeq }
-  | "<";  { SLt }       | "<="; { SLeq }
-  | ">";  { SGt }       | ">="; { SGeq }
-let bool_op ==
-  | OR;   { SOr }       | AND;  { SAnd }
+let static_typed_ident == localize(static_typed_ident_desc)
+let static_typed_ident_desc :=
+  | sti_name=ident;
+      { { sti_name; sti_type = localize $sloc "int" } }
+  | sti_name=ident; ":"; sti_type=ident;
+      { { sti_name; sti_type } }
 
-let int_unop ==
-  | "-";  { SNeg }
-let bool_unop ==
-  | NOT;  { SNot }
+// Netlist expressions
 
+let value :=
+  | b=BOOL;     { VBit b }
+  | i=INT;      { const_of_int (Loc $sloc) i }
+  | "["; "]";   { VNDim [] }
 
-let simple_exp == localize(simple_exp_desc)
-let exp        == localize(exp_desc)
-let simple_exp_desc :=
-  | ~=ident;                                                                  < EVar >
-  | "("; ~=exp; ")";                                                          < EPar >
-let exp_desc :=
-  | simple_exp_desc
-  | ~=const;                                                                  < EConst >
-  | REG; ~=exp;                                                               < EReg >
-  | ~=ident; ~=call_params; ~=tuple(exp);                                     < ECall >
-  | e1=exp; ~=op; e2=exp;                                                     { ESupOp (op, [e1; e2]) }
-  | _m=MUX; e=tuple(exp);                                                     { ESupOp (localize $loc(_m) "mux", e) }
-  | _n=NOT; e=exp;                                                            { ESupOp (localize $loc(_n) "not", [e])}
-  | _b="["; e=exp; "]";                                                       { ESupOp (localize $loc(_b) "add_dim", [e])}
-  | e1=exp; _c="."; e2=exp;                                                   { ESupOp (localize $loc(_c) "concat", [e1; e2]) }
-  | e1=simple_exp; slice=sntuple(slice_arg, "[", "]")+;                       { ESlice (List.flatten slice, e1) }
-  | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESlice (List.map (fun e -> SliceOne e) (List.flatten idx), e1) }
-  | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
-      word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);
-                                                                              { EMem  (ro, (addr_size, word_size, input_file), a) }
-
-let slice_arg :=
+let slice_param :=
   |                    "..";                                                  { SliceAll }
   | lo=opt_static_exp; "..";                                                  { SliceFrom lo }
   |                    ".."; hi=opt_static_exp;                               { SliceTo hi }
   | lo=opt_static_exp; ".."; hi=opt_static_exp;                               { Slice (lo, hi) }
+
+
+let call_params :=
+  | (* empty *)   { [] }
+  | stuple(opt_static_exp, "<", ">")
+
+let input_file :=
+  | ","; STRING
+
 
 let op == localize(_op)
 let _op ==
@@ -260,41 +180,129 @@ let _op ==
   | "^";  { "xor" }   | XOR;  { "xor" }
   | NAND; { "nand" }  | NOR;  { "nor" }
 
-let const :=
-  | b=BOOL;     { VBit b }
-  | i=INT;
-    {
-      if fst i > 0 then
-        let r = Misc.bool_list_of_int i in
-        match r with
-          | [b] -> VBit b
-          | l -> VNDim (List.map (fun b -> VBit b) l)
-      else begin
-          let r =
-            try
-              Misc.bool_list_of_dec_int i
-            with Invalid_argument _ -> raise (Errors.Lexical_error (Errors.Nonbinary_base, Loc $sloc))
-          in
-          match r with
-            | [b] -> VBit b
-            | l -> VNDim (List.map (fun b -> VBit b) l)
-      end
-    }
-  | "["; "]";   { VNDim [] }
+let simple_exp == localize(simple_exp_desc)
+let exp        == localize(exp_desc)
+let simple_exp_desc :=
+  | ~=ident;                                                                  < EVar >
+  | "("; ~=exp; ")";                                                          < EPar >
+let exp_desc :=
+  | simple_exp_desc
+  | ~=value;                                                                  < EConst >
+  | CONTINUE; ~=exp;                                                          < EContinue >
+  | RESTART; ~=exp;                                                           < ERestart >
+  | REG; ~=exp;                                                               < EReg >
+  | ~=ident; ~=call_params; ~=tuple(exp);                                     < ECall >
+  | e1=exp; ~=op; e2=exp;                                                     { ESupOp (op, [e1; e2]) }
+  | _m=MUX; e=tuple(exp);                                                     { ESupOp (localize $loc(_m) "mux", e) }
+  | _n=NOT; e=exp;                                                            { ESupOp (localize $loc(_n) "not", [e])}
+  | _b="["; e=exp; "]";                                                       { ESupOp (localize $loc(_b) "add_dim", [e])}
+  | e1=exp; _c="."; e2=exp;                                                   { ESupOp (localize $loc(_c) "concat", [e1; e2]) }
+  | e1=simple_exp; slice=sntuple(slice_param, "[", "]")+;                     { ESlice (List.flatten slice, e1) }
+  | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESlice (List.map (fun e -> SliceOne e) (List.flatten idx), e1) }
+  | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
+      word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);    { EMem  (ro, (addr_size, word_size, input_file), a) }
+
+
+let lvalue == localize(lvalue_desc)
+let lvalue_desc :=
+  | WILDCARD;         { LValDrop }
+  | ~=ident;          < LValId >
+  | ~=tuple(lvalue);  < LValTuple >
+
+let typed_ident == localize(typed_ident_desc)
+let typed_ident_desc :=
+  | ti_name=ident; { { ti_name; ti_type = localize $sloc (TNDim []) } }
+  | ti_name=ident; ":"; type_ident=sntuple(opt_static_exp, "[", "]")+;
+    { { ti_name; ti_type = localize $loc(type_ident) (TNDim (List.flatten type_ident)) } }
+
+
+// Automaton and state expressions
+
+let state :=
+  | c = constructor; { c }
+
+let match_handler :=
+  | BAR; m_state=state; ARROW; m_body=decl*;
+        { { m_state; m_body } }
+
+let matcher :=
+  | MATCH; e=exp; WITH; m_handlers=match_handler*; END;
+        { e, { m_handlers } }
+
+let escape :=
+  | c = exp; THEN; e = exp;   { c, e }
+
+let escape_list :=
+  |                                                 { [], [] }
+  | UNTIL;  l=snlist(escape, ELSE); r=escape_list;  { l @ fst r, snd r }
+  | UNLESS; l=snlist(escape, ELSE); r=escape_list;  { fst r, l @ snd r }
+
+let automaton_handler :=
+  // | BAR; a_state = state; ARROW; a_body = decl*; DONE;
+  //     { { a_state; a_body; a_weak_transition = []; a_strong_transition = [] } }
+  | BAR; a_state = state; ARROW; a_body = decl*; THEN; e = exp;
+      { { a_state; a_body; a_strong_transition = [];
+          a_weak_transition = [localize $sloc (EConst (VBit true)), e] } }
+  | BAR; a_state = state; ARROW; a_body = decl*; es = escape_list;
+      { { a_state; a_body;
+          a_weak_transition = fst es; a_strong_transition = snd es } }
+
+let automaton :=
+  | AUTOMATON; a_handlers=automaton_handler+; END;    { { a_handlers } }
+
+let decl == localize(decl_desc)
+let decl_desc :=
+  | lv=lvalue; "="; e=exp; ";";             { Deq (lv, e) }
+  | LOCAL; lv=lvalue; "="; e=exp; ";";      { Dlocaleq (lv, e) }
+  | RESET; eqs=decl*; EVERY; cond=exp;";";  { Dreset (cond, eqs) }
+  | ~=automaton;                            < Dautomaton >
+  | ~=matcher;                              < Dmatch >
+  | IF; c=static_exp; THEN; b1=decl*;
+    ELSE; b2=decl*; END; IF;              { Dif (c, b1, b2) }
+
+
+
+
+// Declarations (of equations and automata)
+
+let node_inline :=
+  |         { NotInline }
+  | INLINE; { Inline }
+
+let node_params :=
+  | (* empty *)           { [] }
+  | stuple(static_typed_ident, "<", ">")
+
+let node_outputs :=
+  | ~=typed_ident;      { [typed_ident] }
+  | tuple(typed_ident)
 
 let rom_or_ram == localize(_rom_or_ram)
 let _rom_or_ram :=
-  | ROM;        { MRom }
-  | RAM;        { MRam }
-
-let input_file :=
-  | ","; STRING
-
-let call_params :=
-  | (* empty *)   { [] }
-  | stuple(opt_static_exp, "<", ">")
+  | ROM;    { MRom }
+  | RAM;    { MRam }
 
 probe_decls:
   | /*empty*/ { [] }
   | PROBING l=snlist(ident, ",") { l }
+
+
+
+let node :=
+  ~=node_inline; node_name=ident; ~=node_params;
+    "("; node_inputs=slist(typed_ident, ","); ")"; "="; ~=node_outputs;
+  WHERE; node_body=decl*; node_probes=probe_decls; END; WHERE; ";"?;
+    { { node_inline; node_name; node_params;
+        node_inputs; node_outputs; node_body;
+        node_probes; node_loc = Loc $sloc } }
+
+let const :=
+  | CONST; const_left=ident; "="; const_right=static_exp; ";"?;
+      { { const_left; const_right; const_loc = Loc $sloc } }
+
+let program :=
+  | p_enum = enum*; p_consts = const*; p_nodes = node*; EOF;
+      { { p_enum; p_consts; p_nodes } }
+
+
 %%

@@ -1,28 +1,24 @@
 open CommonAST
 open StaticTypedPartialAST
 
+(** 4th AST: expressions are assigned dimensions / state status *)
+
+type size = optional_static_int_exp
+
 (* Netlist expressions *)
 
 type netlist_dimension =
   | NProd of netlist_dimension list
   | NDim of int
 
-type 'a dimensioned =
-  {
-    dim_desc: 'a;
-    dim_loc: Location.location;
-    dim_nb: netlist_dimension
-  }
+type global_type = netlist_dimension CommonAST.bitype
 
-let (!%!) = fun obj -> obj.dim_desc
-let (!%%) = fun obj -> obj.dim_nb
-let (!%@) = fun obj -> obj.dim_loc
+type 'a dimensioned = ('a, netlist_dimension) bityped
 
-let dimension desc loc dim =
-  { dim_desc = desc; dim_loc = loc; dim_nb = dim }
+let dimension: 'a -> 'b -> 'c -> 'a dimensioned = bitype
 
 type exp_desc =
-  | EConst  of ParserAST.value
+  | EConst  of value
   | EVar    of ident
   | EReg    of exp
   | ECall   of ident * static_unknown_exp list * exp list
@@ -32,52 +28,26 @@ type exp_desc =
 
 and exp = exp_desc dimensioned
 
-type lvalue_desc =
-  | LValDrop
-  | LValId of ident
-  | LValTuple of lvalue list
+type bitype_exp = exp StaticTypedPartialAST.bitype_exp
 
-and lvalue = lvalue_desc dimensioned
+type lvalue = netlist_dimension StaticTypedPartialAST.lvalue
 
-type equation_desc = {
-  eq_left:  lvalue;
-  eq_right: exp
-}
-and equation = equation_desc localized
+type typed_ident = size CommonAST.typed_ident
 
 
-type typed_ident_desc = {
-  name:  ident;
-  typed: StaticTypedAST.netlist_type localized;
-  dim: netlist_dimension
-}
-and typed_ident = typed_ident_desc localized
+type decl_desc =
+  | Deq        of lvalue * bitype_exp (* p = e *)
+  | Dlocaleq   of lvalue * bitype_exp (* local p = e *)
+  | Dreset     of exp * decl list (* reset eq every e *)
+  | Dautomaton of ((exp * state_transition_exp) list, decl) automaton
+  | Dmatch     of state_exp * decl matcher
+  | Dif        of static_bool_exp * decl list * decl list
 
-type case = {
-  equations: equation list;
-}
+and decl = decl_desc localized
 
-type block_desc =
-  | BEqs of case
-  | BIf  of static_bool_exp * block * block
-
-and block = block_desc localized
 
 type fun_env = static_type list Env.t
 
-type node = {
-  node_name_loc:  Location.location;
-  node_loc:       Location.location;
-  node_params:    static_typed_ident list;
-  node_inline:    inline_status;
-  node_inputs:    typed_ident list;
-  node_outputs:   typed_ident list;
-  node_body:      block;
-  node_probes:    ident list;
-}
-
-type program = {
-  p_consts: StaticTypedPartialAST.const Env.t;
-  p_consts_order: ident_desc list;
-  p_nodes:  node  Env.t;
-}
+type node = (static_type, size, decl) CommonAST.node
+type const = static_bitype_exp CommonAST.const
+type program = (static_type, static_bitype_exp, size, decl) CommonAST.program

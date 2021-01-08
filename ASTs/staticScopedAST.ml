@@ -16,27 +16,20 @@ type static_exp_desc = (* Removed SPar *)
 
 and static_exp = static_exp_desc localized
 
-type optional_static_exp_desc =
-  | SExp of static_exp_desc
-  | SUnknown of UniqueId.t
-and optional_static_exp = optional_static_exp_desc localized
+type optional_static_exp = static_exp_desc static_exp_option localized
+
+type static_type = ident (* ideally, "bool" or "int "*)
 
 (* Netlist expressions *)
+type size = optional_static_exp
 
-type netlist_type =
-  | TNDim of optional_static_exp list
-  | TProd of netlist_type list
+type netlist_type = size CommonAST.netlist_type
 
-type slice_param =
-  | SliceAll
-  | SliceOne of  optional_static_exp
-  | SliceFrom of optional_static_exp
-  | SliceTo of   optional_static_exp
-  | Slice of    (optional_static_exp * optional_static_exp)
+type slice_param = size CommonAST.slice_param
 
 type exp_desc = (* Removed EPar *)
-  | EConst  of ParserAST.value
-  | EConstr of exp state_expr
+  | EConst  of value
+  | EConstr of constructor
   | EVar    of ident
   | EReg    of exp
   | ESlice  of slice_param list * exp
@@ -44,55 +37,23 @@ type exp_desc = (* Removed EPar *)
   | ECall   of ident * optional_static_exp list * exp list
       (* function * params * args *)
   | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
-(* ro * (address size * word size * input file) * args *)
-
+      (* ro * (address size * word size * input file) * args *)
 
 and exp = exp_desc localized
 
-and eq_desc =
-  | EQempty
-  | EQeq        of ParserAST.lvalue * exp (* p = e *)
-  | EQand       of eq list (* eq1; ... ; eqn *)
-  | EQlet       of eq * eq (* let eq in eq *)
-  | EQreset     of eq * exp (* reset eq every e *)
-  | EQautomaton of (exp, eq) automaton_hdl list
-  | EQmatch     of exp * (exp, eq) match_hdl list
+type typed_ident = size CommonAST.typed_ident
 
-and eq = eq_desc localized
+type decl_desc =
+  | Deq        of ParserAST.lvalue * exp (* p = e *)
+  | Dlocaleq   of ParserAST.lvalue * exp (* local p = e *)
+  | Dreset     of exp * decl list (* reset eq every e *)
+  | Dautomaton of ((exp * exp) list, decl) automaton
+  | Dmatch     of exp * decl matcher
+  | Dif        of static_exp * decl list * decl list
 
-type typed_ident_desc = {
-    name:  ident;
-    typed: netlist_type localized;
-  }
-
-and typed_ident = typed_ident_desc localized
+and decl = decl_desc localized
 
 
-type block_desc =
-  | BEqs of eq list
-  | BIf  of static_exp * block * block
-
-and block = block_desc localized
-
-type node = {
-    node_name_loc:  Location.location;
-    node_loc:       Location.location;
-    node_params:    ParserAST.static_typed_ident list;
-    node_inline:    inline_status;
-    node_inputs:    typed_ident list;
-    node_outputs:   typed_ident list;
-    node_body:      block;
-    node_probes:    ident list;
-  }
-
-type const = {
-    const_decl:   static_exp;
-    const_ident: Location.location;
-    const_total: Location.location;
-  }
-
-type program = {
-    p_consts: const Env.t;
-    p_consts_order: ident_desc list;
-    p_nodes:  node  Env.t;
-  }
+type node = (static_type, size, decl) CommonAST.node
+type const = static_exp CommonAST.const
+type program = (static_type, static_exp, size, decl) CommonAST.program

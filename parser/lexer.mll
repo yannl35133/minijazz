@@ -53,17 +53,21 @@ let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
   "else", ELSE;
   "inline", INLINE;
   "probing", PROBING;
-  (* "match", MATCH; *)
+  "type", TYPE;
+  "match", MATCH;
+  "with", WITH;
   "automaton", AUTOMATON;
-  "in", IN;
+  "local", LOCAL;
   "reset", RESET;
   "every", EVERY;
-  "let", LET;
+  (* "let", LET;
+  "in", IN; *)
   "unless", UNLESS;
   "until", UNLESS;
   "continue", CONTINUE;
-  "do", DO;
-  "done", DONE
+  "restart", RESTART;
+  (* "do", DO;
+  "done", DONE *)
 ]
 
 

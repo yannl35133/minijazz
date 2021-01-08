@@ -1,87 +1,52 @@
 open CommonAST
 open StaticTypedPartialAST
 
+(** Final analysis AST : netlist expression dimensions are assigned values (expressions of parameters) *)
+
 (* Netlist expressions *)
 
 type size =
   | Size of static_int_exp_desc
 
 
-type netlist_sized =
-  | TProd of netlist_sized list
-  | TDim of size list
+type netlist_size = size CommonAST.netlist_type
 
-type 'a sized =
-  {
-    s_desc: 'a;
-    s_loc: Location.location;
-    s_size: netlist_sized
-  }
+type global_size = size CommonAST.global_type
 
-let (!$!) = fun obj -> obj.s_desc
-let (!$@) = fun obj -> obj.s_loc
-let (!$$) = fun obj -> obj.s_size
+type 'a sized = ('a, netlist_size) bityped
 
-let size desc loc size =
-  { s_desc = desc; s_loc = loc; s_size = size }
-
-type lvalue_desc =
-  | LValDrop
-  | LValId of ident
-  | LValTuple of lvalue list
-
-and lvalue = lvalue_desc sized
+let size: 'a -> 'b -> 'c -> 'a sized = bitype
 
 type exp_desc =
-  | EConst  of ParserAST.value
-  | EConstr of ident
+  | EConst  of value
   | EVar    of ident
   | EReg    of exp
   | ECall   of ident * static_bitype_exp list * exp list
       (* function * params * args *)
   | EMem    of mem_kind * (static_int_exp * static_int_exp * string option) * exp list
-(* ro * (address size * word size * input file) * args *)
+      (* ro * (address size * word size * input file) * args *)
 
 and exp = exp_desc sized
 
-and decl_desc =
-  | Dempty
-  | Deq        of lvalue * exp (* p = e *)
-  | Dblock     of decl list (* eq1; ... ; eqn *)
-  | Dreset     of decl * exp (* reset eq every e *)
-  | Dautomaton of (exp, decl) automaton_hdl list
-  | Dmatch     of exp * (exp, decl) match_hdl list
-  | Dif        of static_bool_exp * case * case
+type bitype_exp = exp StaticTypedPartialAST.bitype_exp
+
+type lvalue = netlist_size StaticTypedPartialAST.lvalue
+
+type typed_ident = size CommonAST.typed_ident
+
+type decl_desc =
+  | Deq        of lvalue * bitype_exp (* p = e *)
+  | Dlocaleq   of lvalue * bitype_exp (* local p = e *)
+  | Dreset     of exp * decl list (* reset eq every e *)
+  | Dautomaton of ((exp * state_transition_exp) list, decl) automaton
+  | Dmatch     of state_exp * decl matcher
+  | Dif        of static_bool_exp * decl list * decl list (*netlist_size Env.t ??*)
+
 and decl = decl_desc localized
-
-and case = {
-    block:     decl;
-    dim_env:   netlist_sized Env.t;
-  }
-
-type typed_ident_desc = {
-  name: ident;
-  size: netlist_sized localized
-}
-and typed_ident = typed_ident_desc localized
 
 
 type fun_env = static_type list Env.t
 
-type node = {
-  node_name_loc:  Location.location;
-  node_loc:       Location.location;
-  node_params:    static_typed_ident list;
-  node_inline:    inline_status;
-  node_inputs:    typed_ident list;
-  node_outputs:   typed_ident list;
-  node_body:      decl;
-  node_probes:    ident list;
-}
-
-type program = {
-    p_enum : enum list;
-    p_consts: StaticTypedPartialAST.const Env.t;
-    p_consts_order: ident_desc list;
-    p_nodes:  node  Env.t;
-  }
+type node = (static_type, size, decl) CommonAST.node
+type const = static_bitype_exp CommonAST.const
+type program = (static_type, static_bitype_exp, size, decl) CommonAST.program

@@ -41,9 +41,6 @@ and static_bool_exp_desc =
 and static_int_exp  = static_int_exp_desc  localized
 and static_bool_exp = static_bool_exp_desc localized
 
-type 'a static_exp_option =
-  | SExp of 'a
-  | SUnknown of UniqueId.t
 
 type static_unknown_exp_desc =
   | SOIntExp  of static_int_exp_desc  static_exp_option
@@ -64,8 +61,32 @@ type static_typed_ident_desc = {
 }
 and static_typed_ident = static_typed_ident_desc localized
 
-type const = {
-  const_decl:  static_bitype_exp;
-  const_ident: Location.location;
-  const_total: Location.location;
-}
+
+(* State expressions *)
+
+type state_exp_desc =
+  | EConstr of constructor
+  (* | ECall   of ident * static_unknown_exp list * exp list *)
+    (* function * params * args *)
+
+and state_exp = state_exp_desc state_typed
+
+and state_transition_exp_desc =
+  | EContinue of state_exp
+  | ERestart of state_exp
+  (* | ECall   of ident * static_unknown_exp list * exp list *)
+    (* function * params * args *)
+
+and state_transition_exp = state_transition_exp_desc state_typed
+
+type 'exp bitype_exp =
+  | Exp of 'exp
+  | StateExp of state_exp
+  | StateTransitionExp of state_transition_exp
+
+type 'exp lvalue_desc =
+  | LValDrop
+  | LValId of ident
+  | LValTuple of 'exp lvalue list
+
+and 'netlist_type lvalue = ('netlist_type lvalue_desc, 'netlist_type) bityped

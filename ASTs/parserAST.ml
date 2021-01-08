@@ -23,9 +23,23 @@
 (*                                                                     *)
 (***********************************************************************)
 
-open CommonAST
 
 (** Parsing Ast is produced by lexer/parser *)
+
+open CommonAST
+
+(* Overwrite definitions for post-scoped ASTs *)
+type ident = ident_desc localized
+type constructor = constructor_desc localized
+
+(* list of defined enum types
+   can't be produced by input program *)
+type enum = {
+  enum_name: ident;
+  enum_constructors: constructor list;
+  enum_loc: Location.location (* ? *)
+}
+
 
 (* Static expressions *)
 
@@ -48,48 +62,30 @@ type static_exp_desc =
 
 and static_exp = static_exp_desc localized
 
-type optional_static_exp_desc =
-  | SExp of static_exp_desc
-  | SUnknown of UniqueId.t
-and optional_static_exp = optional_static_exp_desc localized
+type optional_static_exp = static_exp_desc static_exp_option localized
 
 type static_typed_ident_desc = {
-  st_name:      ident;
-  st_type_name: ident; (* ideally, "int" or "bool" *)
+  sti_name: ident;
+  sti_type: ident; (* ideally, ident is "int" or "bool" *)
 }
-and static_typed_ident = static_typed_ident_desc localized
-
+type static_typed_ident = static_typed_ident_desc localized
 
 (* Netlist expressions *)
 
 type netlist_type =
   | TNDim of optional_static_exp list
   | TProd of netlist_type list
+  | TState of enum
+  | TStateTransition of enum * transition
 
-
-
-type value =
-  | VNDim of value list
-  | VBit of bool
-
-type slice_param =
-  | SliceAll
-  | SliceOne of  optional_static_exp
-  | SliceFrom of optional_static_exp
-  | SliceTo of   optional_static_exp
-  | Slice of    (optional_static_exp * optional_static_exp)
-
-type lvalue_desc =
-  | LValDrop
-  | LValId of ident
-  | LValTuple of lvalue list
-
-and lvalue = lvalue_desc localized
+type slice_param = optional_static_exp CommonAST.slice_param
 
 type exp_desc =
   | EConst  of value
-  | EConstr of ident
+  | EConstr of constructor
   | EVar    of ident
+  | EContinue of exp
+  | ERestart of exp
   | EPar    of exp     (* Created purely to have good locations *)
   | EReg    of exp
   | ESupOp  of ident * exp list
@@ -99,45 +95,78 @@ type exp_desc =
   | EMem    of mem_kind * (optional_static_exp * optional_static_exp * string option) * exp list
 and exp = exp_desc localized
 
+
+type lvalue_desc =
+  | LValDrop
+  | LValId of ident
+  | LValTuple of lvalue list
+
+and lvalue = lvalue_desc localized
+
+type typed_ident_desc = {
+  ti_name: ident;
+  ti_type: netlist_type localized;
+  (* ti_loc:  Location.location *)
+}
+and typed_ident = typed_ident_desc localized
+
+(* may change if states can take parameters *)
+(* type 'e state_expr = ident *)
+type state = constructor
+
+type match_handler = {
+  m_state: state;
+  m_body: decl list;
+}
+
+and matcher = {
+  m_handlers: match_handler list;
+}
+
+
+and automaton_handler = {
+  a_state: state;
+  a_body: decl list;
+  a_weak_transition: (exp * exp) list;
+  a_strong_transition: (exp * exp) list;
+}
+
+and automaton = {
+  a_handlers: automaton_handler list
+}
+
 and decl_desc =
-  | Dempty
   | Deq        of lvalue * exp (* p = e *)
-  | Dblock     of decl list (* eq1; ... ; eqn *)
-  | Dreset     of decl * exp (* reset eq every e *)
-  | Dautomaton of (exp, decl) automaton_hdl list
-  | Dmatch     of exp * (exp, decl) match_hdl list
-  | Dif        of static_exp * decl * decl
+  | Dlocaleq   of lvalue * exp (* local p = e *)
+  | Dreset     of exp * decl list (* reset eq every e *)
+  | Dautomaton of automaton
+  | Dmatch     of (exp * matcher)
+  | Dif        of static_exp * decl list * decl list
 
 and decl = decl_desc localized
 
 
-type typed_ident_desc = {
-  name : ident;
-  typed : netlist_type localized;
-}
-and typed_ident = typed_ident_desc localized
 
-
-type node_desc = {
+type node = {
   node_name:    ident;
+  node_loc:     Location.location;
   node_inline:  inline_status;
   node_inputs : typed_ident list;
   node_outputs: typed_ident list;
   node_params : static_typed_ident list;
-  node_body:    decl;
+  node_body:    decl list;
   (* n_constraints : static_exp list; *)
   node_probes : ident list;
 }
-and node = node_desc localized
 
-type const_desc = {
+type const = {
   const_left: ident;
   const_right: static_exp;
+  const_loc: Location.location
 }
-and const = const_desc localized
 
 type program = {
-    p_enum : enum list;
-    p_consts: const list;
-    p_nodes : node list;
-  }
+  p_enum:   enum list;
+  p_consts: const list;
+  p_nodes : node list;
+}
