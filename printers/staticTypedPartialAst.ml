@@ -29,10 +29,10 @@ let print_bool_unop unop =
 
 let rec print_int_exp_desc = function
   | SInt n     -> dprintf "%i" n
-  | SIParam i  -> dprintf "#%i" i
+  | SIParam i  -> dprintf "%s" i.id_desc
   | SIConst id -> print_ident id
   | SIUnOp (sunop, se) ->
-      dprintf "%t %t" 
+      dprintf "%t %t"
         (print_int_unop sunop)
         (print_int_exp se)
   | SIBinOp (sop, se1, se2) ->
@@ -48,10 +48,10 @@ let rec print_int_exp_desc = function
 
 and print_bool_exp_desc = function
   | SBool b    -> dprint_bool b
-  | SBParam i  -> dprintf "#%i" i
+  | SBParam i  -> dprintf "%s" i.id_desc
   | SBConst id -> print_ident id
   | SBUnOp (sunop, se) ->
-      dprintf "%t %t" 
+      dprintf "%t %t"
         (print_bool_unop sunop)
         (print_bool_exp se)
   | SBBinOp (sop, se1, se2) ->
@@ -75,7 +75,7 @@ and print_bool_exp se = print_bool_exp_desc se.desc
 
 let print_unknown_exp_desc = function
   | SOIntExp  SUnknown uid | SOBoolExp SUnknown uid ->
-      dprintf "?%a" UniqueId.print uid
+      dprintf "?%a" UIDUnknownStatic.print uid
   | SOIntExp  SExp se -> print_int_exp_desc se
   | SOBoolExp SExp se -> print_bool_exp_desc se
 let print_unknown_exp se = print_unknown_exp_desc se.desc
@@ -87,25 +87,45 @@ let print_bitype_exp se = print_bitype_exp_desc se.desc
 
 let print_opt_int_exp_desc = function
   | SUnknown uid ->
-      dprintf "?%a" UniqueId.print uid
+      dprintf "?%a" UIDUnknownStatic.print uid
   | SExp se -> print_int_exp_desc se
 
 let print_opt_int_exp se = print_opt_int_exp_desc se.desc
 
+let print_static_type static_type =
+  dprintf "%s" (static_type_to_string static_type)
 
+let print_static_typed_ident = print_static_typed_ident print_static_type
 
-let print_stid_desc stid_desc =
-  dprintf "%t: %s"
-    (print_ident stid_desc.st_name)
-    (static_type_to_string !!(stid_desc.st_type))
+(* State expressions *)
 
-let print_stid stid = print_stid_desc stid.desc
+let print_state_exp_desc = function
+  | EConstr id -> print_constructor id
+let print_state_exp s = print_state_exp_desc s.s_desc
+
+let print_state_transition_exp_desc = function
+  | EContinue s -> dprintf "continue %t" (print_state_exp s)
+  | ERestart s -> dprintf "restart %t" (print_state_exp s)
+let print_state_transition_exp s = print_state_transition_exp_desc s.st_desc
+
+let print_tritype_exp print_exp = function
+  | Exp e -> print_exp e
+  | StateExp s -> print_state_exp s
+  | StateTransitionExp st -> print_state_transition_exp st
 
 (* Netlist expressions *)
 
-let print_const (const_name, const) =
-  dprintf "@[<hv 2>const %s%t%t@]"
-    const_name
-    (binop_sep "=")
-    (print_bitype_exp const.const_decl)
+let rec print_lvalue_desc print_netlist_type lval_desc =
+  match lval_desc with
+  | LValDrop    -> dprintf "_"
+  | LValId id   -> print_ident id
+  | LValTuple l -> print_list par comma_sep (print_lvalue print_netlist_type) l
+
+and print_lvalue print_netlist_type lval =
+  par (dprintf "%t: %t"
+    (print_lvalue_desc print_netlist_type !?!lval)
+    (print_netlist_type !??lval))
+
+
+let print_const = print_const print_bitype_exp
 

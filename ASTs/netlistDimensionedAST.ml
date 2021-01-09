@@ -11,24 +11,34 @@ type netlist_dimension =
   | NProd of netlist_dimension list
   | NDim of int
 
-type global_type = netlist_dimension CommonAST.bitype
+type global_type = netlist_dimension CommonAST.tritype
 
-type 'a dimensioned = ('a, netlist_dimension) bityped
+type 'a dimensioned =
+  {
+    dim_desc: 'a;
+    dim_loc: Location.location;
+    dim_nb: netlist_dimension
+  }
 
-let dimension: 'a -> 'b -> 'c -> 'a dimensioned = bitype
+let (!%!) = fun obj -> obj.dim_desc
+let (!%%) = fun obj -> obj.dim_nb
+let (!%@) = fun obj -> obj.dim_loc
+
+let dimension desc loc dim =
+  { dim_desc = desc; dim_loc = loc; dim_nb = dim }
 
 type exp_desc =
   | EConst  of value
   | EVar    of ident
   | EReg    of exp
-  | ECall   of ident * static_unknown_exp list * exp list
+  | ECall   of funname * static_unknown_exp list * exp list
       (* function * params * args *)
   | EMem    of mem_kind * (optional_static_int_exp * optional_static_int_exp * string option) * exp list
       (* ro * (address size * word size * input file) * args *)
 
 and exp = exp_desc dimensioned
 
-type bitype_exp = exp StaticTypedPartialAST.bitype_exp
+type tritype_exp = exp StaticTypedPartialAST.tritype_exp
 
 type lvalue = netlist_dimension StaticTypedPartialAST.lvalue
 
@@ -36,8 +46,8 @@ type typed_ident = size CommonAST.typed_ident
 
 
 type decl_desc =
-  | Deq        of lvalue * bitype_exp (* p = e *)
-  | Dlocaleq   of lvalue * bitype_exp (* local p = e *)
+  | Deq        of lvalue * tritype_exp (* p = e *)
+  | Dlocaleq   of lvalue * tritype_exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
   | Dautomaton of ((exp * state_transition_exp) list, decl) automaton
   | Dmatch     of state_exp * decl matcher

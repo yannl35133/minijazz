@@ -18,22 +18,31 @@ type netlist_presize = presize CommonAST.netlist_type
 
 type global_presize = presize CommonAST.global_type
 
-type 'a presized = ('a, netlist_presize) bityped
+type 'a presized = {
+  ps_desc: 'a;
+  ps_loc: Location.location;
+  ps_size: netlist_presize
+}
 
-let presize: 'a -> 'b -> 'c -> 'a presized = bitype
+let (!&!) = fun obj -> obj.ps_desc
+let (!&@) = fun obj -> obj.ps_loc
+let (!&&) = fun obj -> obj.ps_size
+
+let presize desc loc size =
+  { ps_desc = desc; ps_loc = loc; ps_size = size }
 
 type exp_desc =
   | EConst  of value
   | EVar    of ident
   | EReg    of exp
-  | ECall   of ident * static_unknown_exp list * exp list
+  | ECall   of funname * static_unknown_exp list * exp list
       (* function * params * args *)
   | EMem    of mem_kind * (optional_static_int_exp * optional_static_int_exp * string option) * exp list
       (* ro * (address size * word size * input file) * args *)
 
 and exp = exp_desc presized
 
-type bitype_exp = exp StaticTypedPartialAST.bitype_exp
+type tritype_exp = exp StaticTypedPartialAST.tritype_exp
 
 type lvalue = netlist_presize StaticTypedPartialAST.lvalue
 
@@ -41,8 +50,8 @@ type typed_ident = presize CommonAST.typed_ident
 
 
 type decl_desc =
-  | Deq        of lvalue * bitype_exp (* p = e *)
-  | Dlocaleq   of lvalue * bitype_exp (* local p = e *)
+  | Deq        of lvalue * tritype_exp (* p = e *)
+  | Dlocaleq   of lvalue * tritype_exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
   | Dautomaton of ((exp * state_transition_exp) list, decl) automaton
   | Dmatch     of state_exp * decl matcher

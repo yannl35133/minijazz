@@ -8,6 +8,7 @@ module UIDIdent = UniqueId.Make ()
 module UIDConstructor = UniqueId.Make ()
 module UIDUnknownStatic = UniqueId.Make ()
 
+module FunEnv = Map.Make (String)
 module Env = Map.Make (UIDIdent)
 module ConstructSet = Set.Make (UIDConstructor)
 module ConstructEnv = Map.Make (UIDConstructor)
@@ -64,6 +65,7 @@ let re_identify {desc; loc} uid = {
 
 (* These types only apply after scoping, but are defined here nonetheless *)
 type ident = (ident_desc, UIDIdent.t) identified
+type parameter = (ident_desc, int) identified
 type constructor = (constructor_desc, UIDConstructor.t) identified
 
 type enum = {
@@ -79,11 +81,11 @@ type 'static_exp_desc static_exp_option =
   | SExp of 'static_exp_desc
   | SUnknown of UIDUnknownStatic.t
 
-type 'sttype static_typed_ident_desc = {
+type 'sttype static_typed_ident = {
   sti_name: ident;
-  sti_type: 'sttype;
+  sti_type: 'sttype localized;
+  sti_loc:  Location.location;
 }
-and 'sttype static_typed_ident = 'sttype static_typed_ident_desc localized
 
 (* Netlist / state types *)
 
@@ -97,7 +99,7 @@ type state_type =
 type state_transition_type =
   | StateTransition of enum * transition
 
-type 'netlist_type bitype =
+type 'netlist_type tritype =
   | BNetlist of 'netlist_type
   | BState of state_type
   | BStateTransition of state_transition_type
@@ -106,41 +108,38 @@ type 'size netlist_type =
   | TNDim of 'size list
   | TProd of 'size netlist_type list
 
-type 'size global_type = 'size netlist_type bitype
+type 'size global_type = 'size netlist_type tritype
 
 
-type 'a state_typed =
-  {
-    s_desc: 'a;
-    s_loc:  Location.location;
-    s_type: state_type
-  }
+type 'a state_typed = {
+  s_desc: 'a;
+  s_loc:  Location.location;
+  s_type: state_type
+}
 
 let state_type desc loc ty =
   { s_desc = desc; s_loc = loc; s_type = ty }
 
-type 'a state_transition_typed =
-  {
-    st_desc: 'a;
-    st_loc:  Location.location;
-    st_type: state_transition_type
-  }
+type 'a state_transition_typed = {
+  st_desc: 'a;
+  st_loc:  Location.location;
+  st_type: state_transition_type
+}
 
 let state_transition_type desc loc ty =
   { st_desc = desc; st_loc = loc; st_type = ty }
 
-type ('a, 'netlist_type) bityped =
-  {
-    b_desc: 'a;
-    b_loc:  Location.location;
-    b_type: 'netlist_type bitype
-  }
+type ('a, 'netlist_type) trityped = {
+  b_desc: 'a;
+  b_loc:  Location.location;
+  b_type: 'netlist_type tritype
+}
 
-let (!$!) = fun obj -> obj.b_desc
-let (!$@) = fun obj -> obj.b_loc
-let (!$$) = fun obj -> obj.b_type
+let (!?!) = fun obj -> obj.b_desc
+let (!?@) = fun obj -> obj.b_loc
+let (!??) = fun obj -> obj.b_type
 
-let bitype desc loc ty =
+let tritype desc loc ty =
   { b_desc = desc; b_loc = loc; b_type = ty }
 
 (* Netlist expressions *)
@@ -148,6 +147,8 @@ let bitype desc loc ty =
 type value =
   | VNDim of value list
   | VBit of bool
+
+type funname = ident_desc localized
 
 type 'size slice_param =
   | SliceAll
@@ -157,34 +158,38 @@ type 'size slice_param =
   | Slice of    ('size * 'size)
 
 
-type 'size typed_ident_desc = {
+type 'size typed_ident = {
   ti_name: ident;
   ti_type: 'size global_type localized;
+  ti_loc:  Location.location
 }
-and 'size typed_ident = 'size typed_ident_desc localized
 
 type state = constructor
 
 type 'decl match_handler = {
   m_state: state;
+  m_hloc: Location.location;
   m_body: 'decl list
 }
 
 type 'decl matcher = {
   m_state_type: enum;
+  m_loc: Location.location;
   m_handlers: 'decl match_handler ConstructEnv.t
 }
 
 
 type ('state_transition_exp, 'decl) automaton_handler = {
-  ah_state: state;
-  ah_body: 'decl list;
-  ah_weak_transition: 'state_transition_exp;
-  ah_strong_transition: 'state_transition_exp;
+  a_state: state;
+  a_hloc: Location.location;
+  a_body: 'decl list;
+  a_weak_transition: 'state_transition_exp;
+  a_strong_transition: 'state_transition_exp;
 }
 
 type ('state_transition_exp, 'decl) automaton = {
   a_state_type: enum;
+  a_loc: Location.location;
   a_fst_state: state;
   a_handlers: ('state_transition_exp, 'decl) automaton_handler ConstructEnv.t
 }
@@ -201,7 +206,7 @@ type 'static_exp const = {
 }
 
 type ('static_type, 'size, 'decl) node = {
-  node_name:    ident;
+  node_name:    funname;
   node_loc:     Location.location;
   node_params:  'static_type static_typed_ident list;
   node_inline:  inline_status;
@@ -212,7 +217,7 @@ type ('static_type, 'size, 'decl) node = {
 }
 
 type ('static_type, 'static_exp, 'size, 'decl) program = {
-  p_enum:   enum list;
+  p_enums:   enum list;
   p_consts: 'static_exp const Env.t;
   p_consts_order: ident list;
   p_nodes:  ('static_type, 'size, 'decl) node Env.t;

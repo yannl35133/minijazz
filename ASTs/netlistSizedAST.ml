@@ -13,30 +13,30 @@ type netlist_size = size CommonAST.netlist_type
 
 type global_size = size CommonAST.global_type
 
-type 'a sized = ('a, netlist_size) bityped
+type 'a sized = ('a, netlist_size) trityped
 
-let size: 'a -> 'b -> 'c -> 'a sized = bitype
+let size: 'a -> 'b -> 'c -> 'a sized = tritype
 
 type exp_desc =
   | EConst  of value
   | EVar    of ident
   | EReg    of exp
-  | ECall   of ident * static_bitype_exp list * exp list
+  | ECall   of funname * static_bitype_exp list * exp list
       (* function * params * args *)
   | EMem    of mem_kind * (static_int_exp * static_int_exp * string option) * exp list
       (* ro * (address size * word size * input file) * args *)
 
 and exp = exp_desc sized
 
-type bitype_exp = exp StaticTypedPartialAST.bitype_exp
+type tritype_exp = exp StaticTypedPartialAST.tritype_exp
 
 type lvalue = netlist_size StaticTypedPartialAST.lvalue
 
 type typed_ident = size CommonAST.typed_ident
 
 type decl_desc =
-  | Deq        of lvalue * bitype_exp (* p = e *)
-  | Dlocaleq   of lvalue * bitype_exp (* local p = e *)
+  | Deq        of lvalue * tritype_exp (* p = e *)
+  | Dlocaleq   of lvalue * tritype_exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
   | Dautomaton of ((exp * state_transition_exp) list, decl) automaton
   | Dmatch     of state_exp * decl matcher

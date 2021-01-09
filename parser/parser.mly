@@ -144,12 +144,11 @@ let optional_static_exp_desc :=
   | WILDCARD;                 { SUnknown (UIDUnknownStatic.get ()) }
   | ~=simple_static_exp_desc; < SExp >
 
-let static_typed_ident == localize(static_typed_ident_desc)
-let static_typed_ident_desc :=
+let static_typed_ident :=
   | sti_name=ident;
-      { { sti_name; sti_type = localize $sloc "int" } }
+      { { sti_name; sti_type = localize $sloc "int"; sti_loc = Loc $sloc } }
   | sti_name=ident; ":"; sti_type=ident;
-      { { sti_name; sti_type } }
+      { { sti_name; sti_type; sti_loc = Loc $sloc } }
 
 // Netlist expressions
 
@@ -209,11 +208,10 @@ let lvalue_desc :=
   | ~=ident;          < LValId >
   | ~=tuple(lvalue);  < LValTuple >
 
-let typed_ident == localize(typed_ident_desc)
-let typed_ident_desc :=
-  | ti_name=ident; { { ti_name; ti_type = localize $sloc (TNDim []) } }
+let typed_ident :=
+  | ti_name=ident; { { ti_name; ti_loc = Loc $sloc; ti_type = localize $sloc (TNDim []) } }
   | ti_name=ident; ":"; type_ident=sntuple(opt_static_exp, "[", "]")+;
-    { { ti_name; ti_type = localize $loc(type_ident) (TNDim (List.flatten type_ident)) } }
+    { { ti_name; ti_loc = Loc $sloc; ti_type = localize $loc(type_ident) (TNDim (List.flatten type_ident)) } }
 
 
 // Automaton and state expressions
@@ -223,11 +221,11 @@ let state :=
 
 let match_handler :=
   | BAR; m_state=state; ARROW; m_body=decl*;
-        { { m_state; m_body } }
+        { { m_state; m_body; m_hloc = Loc $sloc } }
 
 let matcher :=
   | MATCH; e=exp; WITH; m_handlers=match_handler*; END;
-        { e, { m_handlers } }
+        { e, { m_handlers; m_loc = Loc $sloc } }
 
 let escape :=
   | c = exp; THEN; e = exp;   { c, e }
@@ -241,14 +239,14 @@ let automaton_handler :=
   // | BAR; a_state = state; ARROW; a_body = decl*; DONE;
   //     { { a_state; a_body; a_weak_transition = []; a_strong_transition = [] } }
   | BAR; a_state = state; ARROW; a_body = decl*; THEN; e = exp;
-      { { a_state; a_body; a_strong_transition = [];
+      { { a_state; a_body; a_hloc = Loc $sloc; a_strong_transition = [];
           a_weak_transition = [localize $sloc (EConst (VBit true)), e] } }
   | BAR; a_state = state; ARROW; a_body = decl*; es = escape_list;
-      { { a_state; a_body;
+      { { a_state; a_body; a_hloc = Loc $sloc;
           a_weak_transition = fst es; a_strong_transition = snd es } }
 
 let automaton :=
-  | AUTOMATON; a_handlers=automaton_handler+; END;    { { a_handlers } }
+  | AUTOMATON; a_handlers=automaton_handler+; END;    { { a_handlers; a_loc = Loc $sloc; } }
 
 let decl == localize(decl_desc)
 let decl_desc :=
@@ -257,8 +255,8 @@ let decl_desc :=
   | RESET; eqs=decl*; EVERY; cond=exp;";";  { Dreset (cond, eqs) }
   | ~=automaton;                            < Dautomaton >
   | ~=matcher;                              < Dmatch >
-  | IF; c=static_exp; THEN; b1=decl*;
-    ELSE; b2=decl*; END; IF;              { Dif (c, b1, b2) }
+  | IF; c=static_exp; THEN; b1=localize(decl*);
+    ELSE; b2=localize(decl*); END; IF;      { Dif (c, b1, b2) }
 
 
 
@@ -301,8 +299,8 @@ let const :=
       { { const_left; const_right; const_loc = Loc $sloc } }
 
 let program :=
-  | p_enum = enum*; p_consts = const*; p_nodes = node*; EOF;
-      { { p_enum; p_consts; p_nodes } }
+  | p_enums = enum*; p_consts = const*; p_nodes = node*; EOF;
+      { { p_enums; p_consts; p_nodes } }
 
 
 %%

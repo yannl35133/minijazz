@@ -64,11 +64,11 @@ and static_exp = static_exp_desc localized
 
 type optional_static_exp = static_exp_desc static_exp_option localized
 
-type static_typed_ident_desc = {
+type static_typed_ident = {
   sti_name: ident;
   sti_type: ident; (* ideally, ident is "int" or "bool" *)
+  sti_loc:  Location.location;
 }
-type static_typed_ident = static_typed_ident_desc localized
 
 (* Netlist expressions *)
 
@@ -103,12 +103,11 @@ type lvalue_desc =
 
 and lvalue = lvalue_desc localized
 
-type typed_ident_desc = {
+type typed_ident = {
   ti_name: ident;
   ti_type: netlist_type localized;
-  (* ti_loc:  Location.location *)
+  ti_loc:  Location.location
 }
-and typed_ident = typed_ident_desc localized
 
 (* may change if states can take parameters *)
 (* type 'e state_expr = ident *)
@@ -116,23 +115,27 @@ type state = constructor
 
 type match_handler = {
   m_state: state;
+  m_hloc: Location.location;
   m_body: decl list;
 }
 
 and matcher = {
   m_handlers: match_handler list;
+  m_loc: Location.location;
 }
 
 
 and automaton_handler = {
   a_state: state;
+  a_hloc: Location.location;
   a_body: decl list;
   a_weak_transition: (exp * exp) list;
   a_strong_transition: (exp * exp) list;
 }
 
 and automaton = {
-  a_handlers: automaton_handler list
+  a_handlers: automaton_handler list;
+  a_loc: Location.location;
 }
 
 and decl_desc =
@@ -141,7 +144,7 @@ and decl_desc =
   | Dreset     of exp * decl list (* reset eq every e *)
   | Dautomaton of automaton
   | Dmatch     of (exp * matcher)
-  | Dif        of static_exp * decl list * decl list
+  | Dif        of static_exp * decl list localized * decl list localized
 
 and decl = decl_desc localized
 
@@ -166,7 +169,7 @@ type const = {
 }
 
 type program = {
-  p_enum:   enum list;
+  p_enums:  enum list;
   p_consts: const list;
-  p_nodes : node list;
+  p_nodes:  node list;
 }

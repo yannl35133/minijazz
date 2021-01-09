@@ -23,7 +23,7 @@ type bool_unop = SNot
 
 type static_int_exp_desc =
   | SInt    of int
-  | SIParam of int
+  | SIParam of parameter
   | SIConst of ident
   | SIUnOp  of        int_unop * static_int_exp
   | SIBinOp of          int_op * static_int_exp * static_int_exp
@@ -31,7 +31,7 @@ type static_int_exp_desc =
 
 and static_bool_exp_desc =
   | SBool   of bool
-  | SBParam of int
+  | SBParam of parameter
   | SBConst of ident
   | SBUnOp  of       bool_unop * static_bool_exp
   | SBBinOp of         bool_op * static_bool_exp * static_bool_exp
@@ -55,18 +55,14 @@ and static_bitype_exp = static_bitype_exp_desc localized
 type optional_static_int_exp_desc = static_int_exp_desc static_exp_option
 and optional_static_int_exp = optional_static_int_exp_desc localized
 
-type static_typed_ident_desc = {
-  st_name: ident;
-  st_type: static_type localized;
-}
-and static_typed_ident = static_typed_ident_desc localized
+type static_typed_ident = static_type CommonAST.static_typed_ident
 
 
 (* State expressions *)
 
 type state_exp_desc =
   | EConstr of constructor
-  (* | ECall   of ident * static_unknown_exp list * exp list *)
+  (* | ECall   of funname * static_unknown_exp list * exp list *)
     (* function * params * args *)
 
 and state_exp = state_exp_desc state_typed
@@ -74,19 +70,19 @@ and state_exp = state_exp_desc state_typed
 and state_transition_exp_desc =
   | EContinue of state_exp
   | ERestart of state_exp
-  (* | ECall   of ident * static_unknown_exp list * exp list *)
+  (* | ECall   of funname * static_unknown_exp list * exp list *)
     (* function * params * args *)
 
-and state_transition_exp = state_transition_exp_desc state_typed
+and state_transition_exp = state_transition_exp_desc state_transition_typed
 
-type 'exp bitype_exp =
+type 'exp tritype_exp =
   | Exp of 'exp
   | StateExp of state_exp
   | StateTransitionExp of state_transition_exp
 
-type 'exp lvalue_desc =
+type 'netlist_type lvalue_desc =
   | LValDrop
   | LValId of ident
-  | LValTuple of 'exp lvalue list
+  | LValTuple of 'netlist_type lvalue list
 
-and 'netlist_type lvalue = ('netlist_type lvalue_desc, 'netlist_type) bityped
+and 'netlist_type lvalue = ('netlist_type lvalue_desc, 'netlist_type) trityped

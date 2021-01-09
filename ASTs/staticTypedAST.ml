@@ -16,8 +16,8 @@ type exp_desc =
   | EVar    of ident
   | EReg    of exp
   | ESlice  of slice_param list * exp
-  | ESupOp  of ident * exp list
-  | ECall   of ident * static_unknown_exp list * exp list
+  | ESupOp  of funname * exp list
+  | ECall   of funname * static_unknown_exp list * exp list
       (* function * params * args *)
   | EMem    of mem_kind * (optional_static_int_exp * optional_static_int_exp * string option) * exp list
       (* ro * (address size * word size * input file) * args *)
@@ -37,7 +37,7 @@ type decl_desc =
 and decl = decl_desc localized
 
 
-type fun_env = static_type list Env.t
+type fun_env = static_type list FunEnv.t
 
 type node = (static_type, size, decl) CommonAST.node
 type const = static_bitype_exp CommonAST.const
