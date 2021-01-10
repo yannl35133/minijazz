@@ -14,6 +14,7 @@ type netlist_size = size CommonAST.netlist_type
 type global_size = size CommonAST.global_type
 
 type 'a sized = ('a, netlist_size) trityped
+type 'a global_sized = ('a, size) CommonAST.global_typed
 
 let size: 'a -> 'b -> 'c -> 'a sized = tritype
 
@@ -47,6 +48,6 @@ and decl = decl_desc localized
 
 type fun_env = static_type list Env.t
 
-type node = (static_type, size, decl) CommonAST.node
+type node = (static_type, size, decl, ident global_sized) CommonAST.node
 type const = static_bitype_exp CommonAST.const
-type program = (static_type, static_bitype_exp, size, decl) CommonAST.program
+type program = (static_type, static_bitype_exp, size, decl, ident global_sized) CommonAST.program

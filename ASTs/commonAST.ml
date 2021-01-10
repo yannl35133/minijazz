@@ -134,6 +134,8 @@ type ('a, 'netlist_type) trityped = {
   b_type: 'netlist_type tritype
 }
 
+type ('a, 'size) global_typed = ('a, 'size netlist_type) trityped
+
 let (!?!) = fun obj -> obj.b_desc
 let (!?@) = fun obj -> obj.b_loc
 let (!??) = fun obj -> obj.b_type
@@ -204,7 +206,7 @@ type 'static_exp const = {
   const_loc:  Location.location;
 }
 
-type ('static_type, 'size, 'decl) node = {
+type ('static_type, 'size, 'decl, 'var_info) node = {
   node_name:    funname;
   node_loc:     Location.location;
   node_params:  'static_type static_typed_ident list;
@@ -212,13 +214,13 @@ type ('static_type, 'size, 'decl) node = {
   node_inputs:  'size typed_ident list;
   node_outputs: 'size typed_ident list;
   node_body:    'decl list;
-  node_variables: IdentSet.t
+  node_variables: 'var_info Env.t
   (* node_probes:  ident list; *)
 }
 
-type ('static_type, 'static_exp, 'size, 'decl) program = {
+type ('static_type, 'static_exp, 'size, 'decl, 'var_info) program = {
   p_enums:   enum ConstructEnv.t;
   p_consts: 'static_exp const Env.t;
   p_consts_order: UIDIdent.t list;
-  p_nodes:  ('static_type, 'size, 'decl) node FunEnv.t;
+  p_nodes:  ('static_type, 'size, 'decl, 'var_info) node FunEnv.t;
 }

@@ -13,6 +13,8 @@ type netlist_dimension =
 
 type global_type = netlist_dimension CommonAST.tritype
 
+type 'a global_typed = ('a, netlist_dimension) CommonAST.trityped
+
 type 'a dimensioned =
   {
     dim_desc: 'a;
@@ -59,6 +61,6 @@ and decl = decl_desc localized
 
 type fun_env = (netlist_dimension list * netlist_dimension) FunEnv.t
 
-type node = (static_type, size, decl) CommonAST.node
+type node = (static_type, size, decl, ident global_typed) CommonAST.node
 type const = static_bitype_exp CommonAST.const
-type program = (static_type, static_bitype_exp, size, decl) CommonAST.program
+type program = (static_type, static_bitype_exp, size, decl, ident global_typed) CommonAST.program

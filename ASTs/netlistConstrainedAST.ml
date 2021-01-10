@@ -10,13 +10,15 @@ type presize =
   | PSConst of static_int_exp
   | PSOtherContext of ident_desc * Location.location * static_unknown_exp list * presize
 
-type size_constraint_equality =
-  presize * presize
+type constraints =
+  (presize * presize) list
 
 
 type netlist_presize = presize CommonAST.netlist_type
 
 type global_presize = presize CommonAST.global_type
+
+type 'a global_presized = ('a, presize) CommonAST.global_typed
 
 type 'a presized = {
   ps_desc: 'a;
@@ -62,8 +64,8 @@ and decl = decl_desc localized
 
 type fun_env = static_type list Env.t
 
-type node = (static_type, presize, decl) CommonAST.node
+type node = (static_type, presize, decl, ident global_presized) CommonAST.node
 type const = static_bitype_exp CommonAST.const
-type preprogram = (static_type, static_bitype_exp, presize, decl) CommonAST.program
+type preprogram = (static_type, static_bitype_exp, presize, decl, ident global_presized) CommonAST.program
 
-type program = preprogram * size_constraint_equality list
+type program = preprogram * constraints

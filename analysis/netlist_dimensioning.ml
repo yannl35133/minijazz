@@ -485,7 +485,8 @@ let body fun_env (name, loc) dimensioned b =
     let (dimensioned', b') = block_one fun_env dimensioned b in
     match b' with
     | Ok a ->
-        a
+        let dimensioned = Env.map (Misc.option_get ~error:(Failure "We can dimension everything, but not all variables are dimensioned?")) dimensioned' in
+        dimensioned, a
     | Error _ when dimensioned <> dimensioned' ->
         one (dimensioned', b)
     | Error Some id ->
@@ -520,14 +521,18 @@ let fun_env { node_inputs; node_outputs; _ } =
 
 
 let node fun_env ({ node_inputs; node_outputs; node_body; node_variables; node_name; node_loc; _ } as node) : node =
-  let dimensioned = IdentSet.fold (fun el env -> Env.add el None env) node_variables Env.empty in
+  let dimensioned = Env.map (fun _ -> None) node_variables in
   let dimensioned = List.fold_left starput dimensioned node_inputs in
   let dimensioned = List.fold_left starput dimensioned node_outputs in
+
+  let node_variables0, node_body = body fun_env (node_name, node_loc) dimensioned node_body in
+  let node_variables = Env.mapi (fun key ti -> let id = Env.find key node_variables in tritype id !*@id ti) node_variables0 in
 
   { node with
     node_inputs;
     node_outputs;
-    node_body = body fun_env (node_name, node_loc) dimensioned node_body;
+    node_body;
+    node_variables
   }
 
 let program { p_enums; p_consts; p_consts_order; p_nodes } : program =

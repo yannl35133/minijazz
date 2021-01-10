@@ -65,6 +65,6 @@ type decl_desc =
 and decl = decl_desc localized
 
 
-type node = (static_type, size, decl) CommonAST.node
+type node = (static_type, size, decl, ident) CommonAST.node
 type const = static_exp CommonAST.const
-type program = (static_type, static_exp, size, decl) CommonAST.program
+type program = (static_type, static_exp, size, decl, ident) CommonAST.program

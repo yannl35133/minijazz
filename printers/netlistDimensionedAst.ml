@@ -75,5 +75,5 @@ let rec print_decl_desc = function
 
 and print_decl eq = print_decl_desc eq.desc
 
-let print_node = print_node (print_static_type, print_size, print_decl)
-let print_program = print_program (print_static_type, print_bitype_exp, print_size, print_decl)
+let print_node n = print_node (print_static_type, print_size, print_decl) n
+let print_program p = print_program (print_static_type, print_bitype_exp, print_size, print_decl) p

@@ -76,6 +76,8 @@ let rec lvalue vars_uids = relocalize_fun @@ function
   | ParserAST.LValId id ->   LValId (re_identify id (StringEnv.find !!id vars_uids))
 
 
+let merge_uids_sets : ident Env.t -> ident Env.t -> ident Env.t = Env.union (fun _ a b -> if a <> b then failwith "Non-unique uid" else Some a)
+
 (**
 [add_vars_lvalue] adds var/uid couples to [vars_uids].
 If [var] is already in [vars_uids], raise [VariableAlreadyDeclared].
@@ -91,7 +93,8 @@ let rec add_vars_lvalue already_declared (uids_set, vars_uids) lvalue = match !!
         | Some _ -> raise @@ VariableAlreadyDeclared (!!id, !@id))
         vars_uids
       in
-      IdentSet.add (StringEnv.find !!id vars_uid) uids_set, vars_uid
+      let uid = StringEnv.find !!id vars_uid in
+      Env.add uid (re_identify id uid) uids_set, vars_uid
 
 let rec same_vars_blocks already_declared (uids_set, vars_uids) = function
   | [] ->   (uids_set, vars_uids)
@@ -149,7 +152,7 @@ and matcher (_, enum_constrs, _, _, _, _ as env) ParserAST.{ m_handlers; m_loc }
     raise (Errors.WrongType (!*!(pb.enum_name), !*!(enum_type.enum_name), loc))
   with Not_found -> ();
   let m_handlers = List.fold_left (fun env handler -> ConstructEnv.add !**(handler.m_state) handler env) ConstructEnv.empty handlers in
-  let uids_set = List.fold_left IdentSet.union IdentSet.empty uids_sets in
+  let uids_set = List.fold_left merge_uids_sets Env.empty uids_sets in
   uids_set, { m_state_type = enum_type; m_loc; m_handlers }
 
 and automaton_handler (constrs_uids, enum_constrs, const_uids, fun_set, params_order, vars_uids)
@@ -169,7 +172,7 @@ and automaton_handler (constrs_uids, enum_constrs, const_uids, fun_set, params_o
   in
   let a_weak_transition = List.map (fun (e1, e2) -> exp exp_env e1, exp exp_env e2) a_weak_transition in
   let a_strong_transition = List.map (fun (e1, e2) -> exp exp_env e1, exp exp_env e2) a_strong_transition in
-  let uids_set = List.fold_left IdentSet.union uids_set uids_sets in
+  let uids_set = List.fold_left merge_uids_sets uids_set uids_sets in
   uids_set, { a_state; a_hloc; a_body; a_weak_transition; a_strong_transition }
 
 and automaton (_, enum_constrs, _, _, _, _ as env) ParserAST.{ a_handlers; a_loc } =
@@ -182,10 +185,10 @@ and automaton (_, enum_constrs, _, _, _, _ as env) ParserAST.{ a_handlers; a_loc
     raise (Errors.WrongType (!*!(pb.enum_name), !*!(enum_type.enum_name), loc))
   with Not_found -> ();
   let a_handlers = List.fold_left (fun env handler -> ConstructEnv.add !**(handler.a_state) handler env) ConstructEnv.empty handlers in
-  let uids_set = List.fold_left IdentSet.union IdentSet.empty uids_sets in
+  let uids_set = List.fold_left merge_uids_sets Env.empty uids_sets in
   uids_set, { a_state_type = enum_type; a_fst_state = fst_handler.a_state; a_loc; a_handlers }
 
-and decl (constrs_uids, _, const_uids, fun_set, params_order, (uids_set, vars_uids) as env) : ParserAST.decl -> IdentSet.t * decl =
+and decl (constrs_uids, _, const_uids, fun_set, params_order, (uids_set, vars_uids) as env) : ParserAST.decl -> ident Env.t * decl =
   let static_env = const_uids, params_order in
   let exp_env = constrs_uids, fun_set, vars_uids, static_env in
   (fun f a -> let (b, c) = f !!a in b, relocalize !@a c) @@ function
@@ -197,7 +200,7 @@ and decl (constrs_uids, _, const_uids, fun_set, params_order, (uids_set, vars_ui
   | ParserAST.Dif (condition, block1, block2) ->
       let uids_set1, block1 = block env !!block1 in
       let uids_set2, block2 = block env !!block2 in
-      IdentSet.union uids_set1 uids_set2, Dif (static_exp_full static_env condition, block1, block2)
+      merge_uids_sets uids_set1 uids_set2, Dif (static_exp_full static_env condition, block1, block2)
   | ParserAST.Dmatch (switch, matcher0) ->
       let uids_set, matcher0 = matcher env matcher0 in
       uids_set, Dmatch (exp exp_env switch, matcher0)
@@ -212,7 +215,7 @@ and block (constrs_uids, enum_constrs, const_uids, fun_set, params_order, vars_u
       vars_uids lst
   in
   let uids_sets, b = List.split @@ List.map (decl (constrs_uids, enum_constrs, const_uids, fun_set, params_order, (uids_set, with_local_vars))) lst in
-  List.fold_left IdentSet.union uids_set uids_sets, b
+  List.fold_left merge_uids_sets uids_set uids_sets, b
 
 let body (constrs_uids, enum_constrs, const_uids, fun_set, params_order, input_vars, output_vars) lst =
   let merge_idents_uid key a b =
@@ -230,7 +233,7 @@ let body (constrs_uids, enum_constrs, const_uids, fun_set, params_order, input_v
     |> List.map (fun { ti_name; _ } -> (!*!ti_name, !**ti_name))
     |> List.to_seq |> StringEnv.of_seq
   in
-  let uids_set, vars_uids = add_vars_block (StringEnv.merge merge_idents_uid input_vars output_vars) (IdentSet.empty, StringEnv.empty) !!lst in
+  let uids_set, vars_uids = add_vars_block (StringEnv.merge merge_idents_uid input_vars output_vars) (Env.empty, StringEnv.empty) !!lst in
   try
     let pb, _ = StringEnv.choose @@ StringEnv.filter (fun el _ -> not @@ StringEnv.mem el vars_uids) output_vars in
     raise (MissingVariable (pb, !@lst))
