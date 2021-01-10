@@ -131,21 +131,6 @@ and automaton fun_env ({ a_handlers; _} as auto) =
 
 and block var_env = List.map (decl var_env)
 
-let eqs _var_env _ (* NetlistConstrainedAST.{ equations; dim_env }*) = assert false (* TODO *)
-  (* let sized_equations = List.map (fun NetlistConstrainedAST.{ desc = { eq_left; eq_right }; loc } ->
-   *   relocalize loc { eq_left = lvalue var_env eq_left; eq_right = exp var_env eq_right }) equations in
-   *
-   * let size_env = Env.map (netlist_presize_to_netlist_size var_env) dim_env in
-   * { equations = sized_equations; dim_env = size_env } *)
-
-
-
-let body _var_env _e = assert false (* TODO *)
-  (* relocalize_fun (function
-   * | NetlistConstrainedAST.BIf (condition, block1, block2) -> BIf (condition, body var_env block1, body var_env block2)
-   * | NetlistConstrainedAST.BEqs case -> BEqs (eqs var_env case)
-   * ) e *)
-
 
 let starput var_env ({ ti_type; _ } as ti) =
   { ti with ti_type = relocalize_fun (global_presize_to_global_size var_env) ti_type }
@@ -158,7 +143,7 @@ let node var_env ({ node_inputs; node_outputs; node_body; node_variables; _ } as
   { node with
     node_inputs;
     node_outputs;
-    node_body = body var_env node_body;
+    node_body = block var_env node_body;
     node_variables
   }
 

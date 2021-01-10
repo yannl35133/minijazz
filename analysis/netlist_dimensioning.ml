@@ -161,11 +161,14 @@ let rec exp (fun_env: fun_env) dimensioned e = match !!e with
         try
           let d, res = exp fun_env d arg in
           d, Ok res
-        with CannotDimensionYet id -> d, Error (CannotDimensionYet id)
+        with CannotDimensionYet id -> d, Error id
       in
       let dimensioned, test_dim_args = List.fold_left_map f dimensioned args in
       let dim_ex = List.find_opt Result.is_ok test_dim_args in
-      let dim_ex = Result.get_ok @@ Misc.option_get ~error:(Result.get_error @@ List.hd test_dim_args) dim_ex in
+      let dim_ex = match dim_ex with
+      | None -> raise @@ CannotDimensionYet (Result.get_error @@ List.hd test_dim_args)
+      | Some dim_ex -> Result.get_ok dim_ex
+      in
       let dim = match !%%dim_ex with
         | NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@dim_ex, ProdOp !!op)
         | NDim n -> n

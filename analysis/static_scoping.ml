@@ -223,7 +223,11 @@ let body (constrs_uids, enum_constrs, const_uids, fun_set, params_order, input_v
     | Some _, Some _ -> raise (InputOutput (key, !@lst)) (* If we could unite them beforehand, this wouldn't be excluded *)
     | Some a, None -> Some a
     | None, Some b -> Some b
-    | None, None -> None (* What ? *)
+    | None, None -> failwith "merge error"
+  in
+  let input_set = input_vars
+    |> List.map (fun { ti_name; _ } -> (!**ti_name, ti_name))
+    |> List.to_seq |> Env.of_seq
   in
   let input_vars = input_vars
     |> List.map (fun { ti_name; _ } -> (!*!ti_name, !**ti_name))
@@ -233,7 +237,8 @@ let body (constrs_uids, enum_constrs, const_uids, fun_set, params_order, input_v
     |> List.map (fun { ti_name; _ } -> (!*!ti_name, !**ti_name))
     |> List.to_seq |> StringEnv.of_seq
   in
-  let uids_set, vars_uids = add_vars_block (StringEnv.merge merge_idents_uid input_vars output_vars) (Env.empty, StringEnv.empty) !!lst in
+  let inouts_vars = StringEnv.merge merge_idents_uid input_vars output_vars in
+  let uids_set, vars_uids = add_vars_block inouts_vars (input_set, input_vars) !!lst in
   try
     let pb, _ = StringEnv.choose @@ StringEnv.filter (fun el _ -> not @@ StringEnv.mem el vars_uids) output_vars in
     raise (MissingVariable (pb, !@lst))
@@ -303,12 +308,16 @@ let enum (enum_env, enum_constrs, constrs_uids) ParserAST.{ enum_name; enum_cons
 
 
 let program ParserAST.{ p_enums; p_consts; p_nodes } : program =
-  let (enum_env, enum_constrs, constrs_uids) = List.fold_left enum (StringEnv.empty, ConstructEnv.empty, StringEnv.empty) p_enums in
-  let (consts_uids, p_consts), p_consts_order = List.fold_left_map const (StringEnv.empty, Env.empty) p_consts in
-  let fun_set = List.fold_left (fun set ParserAST.{ node_name; _ } -> StringSet.add !!node_name set) StringSet.empty p_nodes in
-  let p_nodes = List.fold_left (
-    fun env (ParserAST.{ node_name; _ } as node0) ->
-      FunEnv.add !!node_name (node (enum_env, enum_constrs, constrs_uids, consts_uids, fun_set) node0) env
-    ) FunEnv.empty p_nodes
-  in
-  { p_enums = enum_constrs; p_consts; p_consts_order; p_nodes }
+  try
+    let (enum_env, enum_constrs, constrs_uids) = List.fold_left enum (StringEnv.empty, ConstructEnv.empty, StringEnv.empty) p_enums in
+    let (consts_uids, p_consts), p_consts_order = List.fold_left_map const (StringEnv.empty, Env.empty) p_consts in
+    let fun_set = List.fold_left (fun set ParserAST.{ node_name; _ } -> StringSet.add !!node_name set) StringSet.empty p_nodes in
+    let p_nodes = List.fold_left (
+      fun env (ParserAST.{ node_name; _ } as node0) ->
+        FunEnv.add !!node_name (node (enum_env, enum_constrs, constrs_uids, consts_uids, fun_set) node0) env
+      ) FunEnv.empty p_nodes
+    in
+    { p_enums = enum_constrs; p_consts; p_consts_order; p_nodes }
+  with
+  | Errors.Scope_error (id, loc) ->
+      Format.eprintf "%aVariable %s is not declared@." Location.print_location loc id; raise Errors.ErrorDetected
