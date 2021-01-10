@@ -13,6 +13,15 @@ let rec eq_to_constraints c1 c2 = match c1, c2 with
   | TNDim _,  TProd _
   | TProd _,  TNDim _ ->   failwith "Misdimensioned value"
 
+let global_eq_to_constraints (c1: global_presize) c2 = match c1, c2 with
+  | BNetlist t1, BNetlist t2 -> eq_to_constraints t1 t2
+  | _ -> failwith "Mix between states and netlists"
+
+let tritype_of_exp = function
+  | Exp e -> BNetlist !&&e
+  | StateExp e -> BState e.s_type
+  | StateTransitionExp e -> BStateTransition e.st_type
+
 
 let fun_env_find fun_env id =
   let reloc a = relocalize !@id a in
@@ -155,10 +164,14 @@ let rec lvalue var_env lval = match !?!lval with
 let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = match !!d with
   | Deq (lval, e) ->
       let constraints, e' = tritype_exp env constraints e in
-      constraints, relocalize !@d @@ Deq (lvalue var_env lval, e')
+      let lval' = lvalue var_env lval in
+      let new_constraints = global_eq_to_constraints !??lval' (tritype_of_exp e') in
+      new_constraints @ constraints, relocalize !@d @@ Deq (lval', e')
   | Dlocaleq (lval, e) ->
       let constraints, e' = tritype_exp env constraints e in
-      constraints, relocalize !@d @@ Dlocaleq (lvalue var_env lval, e')
+      let lval' = lvalue var_env lval in
+      let new_constraints = global_eq_to_constraints !??lval' (tritype_of_exp e') in
+      new_constraints @ constraints, relocalize !@d @@ Dlocaleq (lval', e')
   | Dif (c, b1, b2) ->
       let constraints, b1' = block env constraints b1 in
       let constraints, b2' = block env constraints b2 in
