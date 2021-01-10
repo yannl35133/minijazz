@@ -18,7 +18,7 @@ and static_exp = static_exp_desc localized
 
 type optional_static_exp = static_exp_desc static_exp_option localized
 
-type static_type = ident_desc localized (* ideally, "bool" or "int "*)
+type static_type = ident_desc (* ideally, "bool" or "int "*)
 type static_typed_ident = static_type CommonAST.static_typed_ident
 
 
@@ -55,8 +55,8 @@ and lvalue = lvalue_desc localized
 type typed_ident = size CommonAST.typed_ident
 
 type decl_desc =
-  | Deq        of ParserAST.lvalue * exp (* p = e *)
-  | Dlocaleq   of ParserAST.lvalue * exp (* local p = e *)
+  | Deq        of lvalue * exp (* p = e *)
+  | Dlocaleq   of lvalue * exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
   | Dautomaton of ((exp * exp) list, decl) automaton
   | Dmatch     of exp * decl matcher

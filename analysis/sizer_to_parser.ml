@@ -5,6 +5,12 @@ open CommonAST
 open StaticTypedPartialAST
 open NetlistSizedAST
 
+let cvt_ident id = relocalize !*@id !*!id
+let cvt_enum { enum_name; enum_constructors_names; enum_constructors = _; enum_loc } =
+  ParserAST.{ enum_name = cvt_ident enum_name; enum_loc;
+    enum_constructors = List.map cvt_ident enum_constructors_names }
+
+
 (* convert static operators *)
 
 let cvt_int_op : int_op -> ParserAST.sop = function
@@ -37,8 +43,8 @@ let cvt_bool_unop : bool_unop -> ParserAST.sunop = function
 let rec cvt_static_bool_exp_desc e: ParserAST.static_exp_desc =
   match e with
   | SBool b -> SBool b
-  | SBParam _ -> assert false
-  | SBConst id -> SIdent id
+  | SBParam id -> SIdent (relocalize !*@id !*!id)
+  | SBConst id -> SIdent (relocalize !*@id !*!id)
   | SBUnOp (op, se) -> SUnOp (cvt_bool_unop op, cvt_static_bool_exp se)
   | SBBinOp (op, s1, s2) ->
      let s1 = cvt_static_bool_exp s1 in
@@ -59,8 +65,8 @@ and cvt_static_bool_exp e: ParserAST.static_exp =
 and cvt_static_int_exp_desc e: ParserAST.static_exp_desc =
   match e with
   | SInt i -> SInt i
-  | SIParam i -> SInt i
-  | SIConst v -> SIdent v
+  | SIParam id -> SIdent (relocalize !*@id !*!id)
+  | SIConst id -> SIdent (relocalize !*@id !*!id)
   | SIUnOp (op, e) -> SUnOp (cvt_int_unop op, cvt_static_int_exp e)
   | SIBinOp (op, s1, s2) ->
      let s1 = cvt_static_int_exp s1 in
@@ -75,7 +81,7 @@ and cvt_static_int_exp e: ParserAST.static_exp =
   relocalize e.loc @@ cvt_static_int_exp_desc e.desc
 
 let cvt_opt_static_int_exp e: ParserAST.optional_static_exp =
-  relocalize e.loc @@ ParserAST.SExp (cvt_static_int_exp_desc e.desc)
+  relocalize e.loc @@ SExp (cvt_static_int_exp_desc e.desc)
 
 let cvt_static_bitype_exp_desc e: ParserAST.static_exp_desc =
   match e with
@@ -86,7 +92,7 @@ let cvt_static_bitype_exp e: ParserAST.static_exp =
   relocalize !@e @@ cvt_static_bitype_exp_desc e.desc
 
 let cvt_opt_static_bitype_exp e: ParserAST.optional_static_exp =
-  relocalize e.loc @@ ParserAST.SExp (cvt_static_bitype_exp_desc e.desc)
+  relocalize e.loc @@ SExp (cvt_static_bitype_exp_desc e.desc)
 
 (* convert types *)
 
@@ -94,25 +100,26 @@ let unfold_size = function Size se -> se
 
 let rec cvt_netlist_size sz : ParserAST.netlist_type = match sz with
   | TProd nsz -> TProd (List.map cvt_netlist_size nsz)
-  | TDim lst ->
+  | TNDim lst ->
      let aux x =
-       let opt = ParserAST.SExp (cvt_static_int_exp_desc (unfold_size x)) in
+       let opt = SExp (cvt_static_int_exp_desc (unfold_size x)) in
        no_localize opt in
      TNDim (List.map aux lst)
 
-let cvt_static_typed_ident t : ParserAST.static_typed_ident =
-  let desc = t.desc in
-  let ty = static_type_to_string desc.st_type.desc in
-  relocalize t.loc
-    ParserAST.{ st_name = desc.st_name;
-                st_type_name = relocalize desc.st_type.loc ty }
+let cvt_global_type = function
+  | BNetlist t -> cvt_netlist_size t
+  | BState State enum -> TState (cvt_enum enum)
+  | BStateTransition StateTransition (enum, transition) -> TStateTransition (cvt_enum enum, transition)
 
-let cvt_typed_ident (t:typed_ident) : ParserAST.typed_ident =
-  let desc = t.desc in
-  let netlist_typed = cvt_netlist_size desc.size.desc in
-  relocalize t.loc
-    ParserAST.{ name = desc.name;
-                typed = relocalize desc.size.loc netlist_typed }
+let cvt_static_typed_ident { sti_name; sti_type; sti_loc } : ParserAST.static_typed_ident =
+  let sti_name = cvt_ident sti_name in
+  let sti_type = relocalize_fun static_type_to_string sti_type in
+  ParserAST.{ sti_name; sti_type; sti_loc }
+
+let cvt_typed_ident { ti_name; ti_type; ti_loc } : ParserAST.typed_ident =
+  let ti_type = relocalize_fun cvt_global_type ti_type in
+  ParserAST.{ ti_name = cvt_ident ti_name;
+              ti_type; ti_loc }
 
 (* remove size from lvalue *)
 
@@ -177,15 +184,16 @@ and cvt_decl (d:decl) = relocalize !@d @@ cvt_decl_desc !!d
 (* convert nodes *)
 
 let cvt_node name desc lst: ParserAST.node list =
-  let n: ParserAST.node_desc =
-    { node_name    = relocalize desc.node_name_loc name;
+  let n: ParserAST.node =
+    { node_name    = desc.node_name;
+      node_loc     = desc.node_loc;
       node_inline  = desc.node_inline;
       node_inputs  = List.map cvt_typed_ident desc.node_inputs;
       node_outputs = List.map cvt_typed_ident desc.node_outputs;
       node_params  = List.map cvt_static_typed_ident desc.node_params;
       node_body    = cvt_decl desc.node_body;
-      node_probes  = desc.node_probes } in
-  relocalize desc.node_loc n :: lst
+      node_probes  = List.map cvt_ident desc.node_probes } in
+  n :: lst
 
 let cvt_const id desc lst: ParserAST.const list =
   let c: ParserAST.const_desc =

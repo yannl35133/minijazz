@@ -75,10 +75,10 @@ let print_static_opt printer = function
   | SExp se_desc -> printer se_desc
   | SUnknown _   -> dprint_nop
 
-let print_static_typed_ident printer stid_desc =
+let print_static_typed_ident printer { sti_name; sti_type; _ } =
   dprintf "%t: %t"
-    (print_ident stid_desc.sti_name)
-    (printer stid_desc.sti_type)
+    (print_ident_desc !*!sti_name)
+    (printer !!sti_type)
 
 
 (* Netlist / state types *)
@@ -89,12 +89,11 @@ let print_transition = function
 
 let print_bitype print_netlist_type = function
   | BNetlist ti -> print_netlist_type ti
-  | BState State enum ->
+  | BState enum ->
       print_enum_type enum
-  | BStateTransition StateTransition (enum, transition) ->
-      dprintf "%t : %t"
+  | BStateTransition enum ->
+      dprintf "%t transition"
         (print_enum_type enum)
-        (print_transition transition)
 
 let rec print_netlist_type printer = function
   | TNDim size_lst ->
@@ -206,19 +205,33 @@ let print_node (print_static_type, print_size, print_decl)
     (print_list par comma_sep (print_typed_ident print_size) node_outputs)
     (print_block print_decl node_body)
 
-let print_program (print_static_type, print_static_exp, print_size, print_decl) prog =
-  let consts_list = List.map (fun nam -> Env.find !**nam prog.p_consts) prog.p_consts_order in
-  let nodes_list = List.map snd @@ List.of_seq @@ Env.to_seq prog.p_nodes in
-
+let print_program (print_static_type, print_static_exp, print_size, print_decl) { p_enums; p_consts; p_nodes; _ } =
+  let p_enums = p_enums
+    |> ConstructEnv.to_seq
+    |> List.of_seq
+    |> List.map snd
+    |> List.sort_uniq (fun a b -> UIDIdent.compare a.enum_name.id_uid b.enum_name.id_uid)
+  in
+  let p_consts = p_consts (* Warning: may become out of order *)
+    |> Env.to_seq
+    |> List.of_seq
+    |> List.map snd
+    |> List.sort_uniq (fun a b -> UIDIdent.compare a.const_name.id_uid b.const_name.id_uid)
+  in
+  let p_nodes = p_nodes
+  |> FunEnv.to_seq
+  |> List.of_seq
+  |> List.map snd
+  in
   dprintf "@[<v>%t%t%t%t%t@]@."
-    (print_list_naked dprint_newline print_full_enum prog.p_enums)
-    ( match prog.p_enums, consts_list with
+    (print_list_naked dprint_newline print_full_enum p_enums)
+    ( match p_enums, p_consts with
       | [], _ | _, [] -> dprint_nop
       | _             -> dprint_newline
     )
-    (print_list_naked dprint_newline (print_const print_static_exp) consts_list)
-    ( match consts_list, nodes_list with
+    (print_list_naked dprint_newline (print_const print_static_exp) p_consts)
+    ( match p_consts, p_nodes with
       | [], _ | _, [] -> dprint_nop
       | _             -> dprint_newline
     )
-    (print_list_naked dprint_newline (print_node (print_static_type, print_size, print_decl)) nodes_list)
+    (print_list_naked dprint_newline (print_node (print_static_type, print_size, print_decl)) p_nodes)

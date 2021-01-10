@@ -75,8 +75,11 @@ type static_typed_ident = {
 type netlist_type =
   | TNDim of optional_static_exp list
   | TProd of netlist_type list
-  | TState of enum
-  | TStateTransition of enum * transition
+
+type global_type =
+  | BNetlist of netlist_type
+  | BState of ident (* ideally, ident is one of the defined enums *)
+  | BStateTransition of ident
 
 type slice_param = optional_static_exp CommonAST.slice_param
 
@@ -105,7 +108,7 @@ and lvalue = lvalue_desc localized
 
 type typed_ident = {
   ti_name: ident;
-  ti_type: netlist_type localized;
+  ti_type: global_type localized;
   ti_loc:  Location.location
 }
 
@@ -157,7 +160,7 @@ type node = {
   node_inputs : typed_ident list;
   node_outputs: typed_ident list;
   node_params : static_typed_ident list;
-  node_body:    decl list;
+  node_body:    decl list localized;
   (* n_constraints : static_exp list; *)
   node_probes : ident list;
 }

@@ -15,7 +15,6 @@ let print_netlist_type = print_netlist_type print_size
 
 let rec print_exp_desc = function
   | EConst v ->  print_val v
-  | EConstr c -> print_constructor c
   | EVar id  ->  print_ident id
   | EReg e   ->  dprintf "reg@ %t" (print_exp e)
   | ESlice (params, arg) ->
@@ -61,18 +60,24 @@ and print_exp exp = print_exp_desc exp.desc
 
 let print_typed_ident = print_typed_ident print_size
 
+let rec print_lvalue_desc (lval_desc: StaticScopedAST.lvalue_desc) =
+  match lval_desc with
+  | LValDrop    -> dprintf "_"
+  | LValId id   -> print_ident id
+  | LValTuple l -> print_list par comma_sep print_lvalue l
 
+and print_lvalue lval = print_lvalue_desc !!lval
 
 let rec print_decl_desc = function
   | Deq (lv, exp) ->
       dprintf "@[<h>%t%t%t@]%t"
-        (ParserAst.print_lvalue lv)
+        (print_lvalue lv)
         (binop_sep "=")
         (print_exp exp)
         (semicolon_sep)
   | Dlocaleq (lv, exp) ->
       dprintf "@[<h>local %t%t%t@]%t"
-        (ParserAst.print_lvalue lv)
+        (print_lvalue lv)
         (binop_sep "=")
         (print_exp exp)
         (semicolon_sep)
@@ -83,10 +88,10 @@ let rec print_decl_desc = function
         (semicolon_sep)
   | Dautomaton auto ->
      dprintf "@[<v2>automaton@ %t@]@ end"
-      (print_automaton (print_exp, print_exp, print_decl) auto)
+      (print_automaton (print_exp, print_state_transition_exp, print_decl) auto)
   | Dmatch (e, matcher) ->
     dprintf "@[<v2>match %t with@ %t@]@ end"
-      (print_exp e)
+      (print_state_exp e)
       (print_matcher print_decl matcher)
   | Dif (se, b1, b2) ->
      dprintf "@[if@ %t@ then@]@;<1 2>@[<v>%t@]@ else@;<1 2>@[<v>%t@]@ end if"

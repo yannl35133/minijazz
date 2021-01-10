@@ -9,6 +9,7 @@ module UIDConstructor = UniqueId.Make ()
 module UIDUnknownStatic = UniqueId.Make ()
 
 module FunEnv = Map.Make (String)
+module IdentSet = Set.Make (UIDIdent)
 module Env = Map.Make (UIDIdent)
 module ConstructSet = Set.Make (UIDConstructor)
 module ConstructEnv = Map.Make (UIDConstructor)
@@ -82,7 +83,7 @@ type 'static_exp_desc static_exp_option =
   | SUnknown of UIDUnknownStatic.t
 
 type 'sttype static_typed_ident = {
-  sti_name: ident;
+  sti_name: parameter;
   sti_type: 'sttype localized;
   sti_loc:  Location.location;
 }
@@ -93,11 +94,9 @@ type transition =
   | Continue
   | Reset
 
-type state_type =
-  | State of enum
+type state_type = enum
 
-type state_transition_type =
-  | StateTransition of enum * transition
+type state_transition_type = enum
 
 type 'netlist_type tritype =
   | BNetlist of 'netlist_type
@@ -213,12 +212,13 @@ type ('static_type, 'size, 'decl) node = {
   node_inputs:  'size typed_ident list;
   node_outputs: 'size typed_ident list;
   node_body:    'decl list;
-  node_probes:  ident list;
+  node_variables: IdentSet.t
+  (* node_probes:  ident list; *)
 }
 
 type ('static_type, 'static_exp, 'size, 'decl) program = {
-  p_enums:   enum list;
+  p_enums:   enum ConstructEnv.t;
   p_consts: 'static_exp const Env.t;
-  p_consts_order: ident list;
-  p_nodes:  ('static_type, 'size, 'decl) node Env.t;
+  p_consts_order: UIDIdent.t list;
+  p_nodes:  ('static_type, 'size, 'decl) node FunEnv.t;
 }

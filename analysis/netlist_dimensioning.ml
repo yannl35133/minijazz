@@ -21,27 +21,32 @@ exception UnexpectedProd of (Location.location * prod_context) (* Obtained produ
 exception ImpossibleProd of (Location.location * prod_context * fun_context option) (* Expected product, obtained expression which returns dimension *)
 exception ImpossibleDimension of (netlist_dimension * Location.location)
 exception WrongDimension of (netlist_dimension * netlist_dimension * Location.location * error_context)
+exception WrongType of (netlist_dimension tritype * netlist_dimension tritype * Location.location * error_context)
+exception UnexpectedState of state_type * Location.location
+exception UnexpectedStateTransition of state_type * Location.location
 exception UndefinedReturnVariables of (string * string * Location.location)
 
 let rec print_netlist_dimension fmt = function
   | NDim n -> Format.fprintf fmt "%d" n
   | NProd l -> Format.fprintf fmt "@[<hv2>%a@]" (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt " * ") print_netlist_dimension) l
 
+let new_unknown_parameter () =
+  SOIntExp (SUnknown (UIDUnknownStatic.get ()))
 
 let dim_value loc v =
   let rec assert_height depth = function
-    | ParserAST.VNDim l -> List.iter (assert_height (depth - 1)) l
-    | ParserAST.VBit _ -> if depth <> 0 then raise (Errors.NonConstantDimension loc)
+    | VNDim l -> List.iter (assert_height (depth - 1)) l
+    | VBit _ -> if depth <> 0 then raise (Errors.NonConstantDimension loc)
   in
   let rec search_height depth = function
-    | ParserAST.VNDim (hd :: tl) -> let r = search_height (succ depth) hd in List.iter (assert_height r) tl; succ r
-    | ParserAST.VNDim [] -> if depth > 0 then raise (Errors.ZeroWideBusMulti (depth, loc)) else 1
-    | ParserAST.VBit _ -> 0
+    | VNDim (hd :: tl) -> let r = search_height (succ depth) hd in List.iter (assert_height r) tl; succ r
+    | VNDim [] -> if depth > 0 then raise (Errors.ZeroWideBusMulti (depth, loc)) else 1
+    | VBit _ -> 0
   in
   NDim (search_height 0 v)
 
 let supop name args dim =
-  let params = List.init dim (fun _ -> relocalize !@name (SOIntExp (SUnknown (UniqueId.get ())))) in
+  let params = List.init dim (fun _ -> relocalize !@name (new_unknown_parameter ())) in
   ECall (relocalize !@name (!!name ^ "_" ^ string_of_int dim), params, args)
 
 let concat name loc (arg1, n1) (arg2, n2) =
@@ -53,14 +58,14 @@ let concat name loc (arg1, n1) (arg2, n2) =
     | n1, n2 when n2 = n1 -> "concat_" ^ string_of_int n1, n1, arg1, arg2
     | n1, n2 when n2 = n1 - 1 -> "concat_" ^ string_of_int n1, n1, arg1,
         dimension (ECall (reloc @@ "add_dim_" ^ string_of_int n2,
-                          List.init n2 (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))), [arg2])) !%@arg2 (NDim (n2 + 1))
+                          List.init n2 (fun _ -> reloc (new_unknown_parameter ())), [arg2])) !%@arg2 (NDim (n2 + 1))
     | n1, n2 when n2 = n1 + 1 -> "concat_" ^ string_of_int n2, n2,
         dimension (ECall (reloc @@ "add_dim_" ^ string_of_int n1,
-                          List.init n1 (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))), [arg1])) !%@arg1 (NDim (n1 + 1)),
+                          List.init n1 (fun _ -> reloc (new_unknown_parameter ())), [arg1])) !%@arg1 (NDim (n1 + 1)),
         arg2
     | _, _ -> failwith "abs (n2 - n1) > 1"
   in
-  let params = List.init (dim + 1) (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))) in
+  let params = List.init (dim + 1) (fun _ -> reloc (new_unknown_parameter ())) in
   let exp = ECall (relocalize !@name funname, params, [arg1; arg2]) in
   dimension exp loc (NDim dim)
 
@@ -71,33 +76,33 @@ let slice params loc dim =
     raise Errors.TmpError;
   let params =
     if dim > n then
-      params @ List.init (dim - n) (fun _ -> StaticTypedAST.SliceAll)
+      params @ List.init (dim - n) (fun _ -> SliceAll)
     else
       params
   in
   let slice_dim_remaining = function
-    | StaticTypedAST.SliceAll ->       1
-    | StaticTypedAST.SliceOne _ ->     0
-    | StaticTypedAST.SliceFrom _ ->    1
-    | StaticTypedAST.SliceTo _ ->      1
-    | StaticTypedAST.Slice _ ->        1
+    | SliceAll ->       1
+    | SliceOne _ ->     0
+    | SliceFrom _ ->    1
+    | SliceTo _ ->      1
+    | Slice _ ->        1
   in
   let slice_name = function
-    | StaticTypedAST.SliceAll ->       "all"
-    | StaticTypedAST.SliceOne _ ->     "one"
-    | StaticTypedAST.SliceFrom _ ->    "from"
-    | StaticTypedAST.SliceTo _ ->      "to"
-    | StaticTypedAST.Slice _ ->        "fromto"
+    | SliceAll ->       "all"
+    | SliceOne _ ->     "one"
+    | SliceFrom _ ->    "from"
+    | SliceTo _ ->      "to"
+    | Slice _ ->        "fromto"
   in
   let slice_param = function
-    | StaticTypedAST.SliceAll ->       []
-    | StaticTypedAST.SliceOne x ->     [relocalize !@x  (SOIntExp !!x) ]
-    | StaticTypedAST.SliceFrom lo ->   [relocalize !@lo (SOIntExp !!lo)]
-    | StaticTypedAST.SliceTo hi ->     [relocalize !@hi (SOIntExp !!hi)]
-    | StaticTypedAST.Slice (lo, hi) -> [relocalize !@lo (SOIntExp !!lo); relocalize !@hi (SOIntExp !!hi)]
+    | SliceAll ->       []
+    | SliceOne x ->     [relocalize !@x  (SOIntExp !!x) ]
+    | SliceFrom lo ->   [relocalize !@lo (SOIntExp !!lo)]
+    | SliceTo hi ->     [relocalize !@hi (SOIntExp !!hi)]
+    | Slice (lo, hi) -> [relocalize !@lo (SOIntExp !!lo); relocalize !@hi (SOIntExp !!hi)]
   in
   let dims_remaining = List.fold_left (fun acc el -> acc + slice_dim_remaining el) 0 params in
-  let size = List.init dim (fun _ -> reloc (SOIntExp (SUnknown (UniqueId.get ())))) (* One argument per input dimension *)
+  let size = List.init dim (fun _ -> reloc (new_unknown_parameter ())) (* One argument per input dimension *)
   and name = String.concat "_" @@ List.map slice_name params
   and args = List.concat_map slice_param params in
   NDim dims_remaining, fun e1 -> ECall (reloc @@ "slice_" ^ name, size @ args, [e1])
@@ -107,13 +112,14 @@ let rec exp fun_env dimensioned e = match !!e with
   | StaticTypedAST.EConst c ->
       let dim = dim_value !@e c in
       dimensioned, dimension (EConst c) !@e dim
-  | StaticTypedAST.EConstr _ -> assert false
   | StaticTypedAST.EVar id -> begin
       try
-        match Env.find !!id dimensioned with
+        match Env.find !**id dimensioned with
         | None -> raise CannotDimensionYet
-        | Some dim -> dimensioned, dimension (EVar id) !@e dim
-      with Not_found -> raise (Errors.Scope_error (!!id, !@id))
+        | Some BNetlist dim -> dimensioned, dimension (EVar id) !@e dim
+        | Some BState s -> raise (UnexpectedState (s, !*@id))
+        | Some BStateTransition s -> raise (UnexpectedState (s, !*@id))
+      with Not_found -> raise (Errors.Scope_error (!*!id, !*@id))
       end
   | StaticTypedAST.ESupOp (op, args) when !!op = "concat" -> begin
       let dimensioned, dim_args = List.fold_left_map (exp fun_env) dimensioned args in
@@ -187,7 +193,7 @@ let rec exp fun_env dimensioned e = match !!e with
       in
       dimensioned, dimension (EReg e1) !@e dim
   | StaticTypedAST.ECall (fname, params, args) ->
-      let dims_in, dims_out = Misc.option_get ~error:(Errors.Scope_error (!!fname, !@fname)) @@ Env.find_opt !!fname fun_env in
+      let dims_in, dims_out = Misc.option_get ~error:(Errors.Scope_error (!!fname, !@fname)) @@ FunEnv.find_opt !!fname fun_env in
       let dimensioned, dim_args =
         let f dimensioned dim arg =
           try
@@ -203,7 +209,7 @@ let rec exp fun_env dimensioned e = match !!e with
       dimensioned, dimension (ECall (fname, params, dim_args)) !@e dims_out
   | StaticTypedAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
       let fname = match !!mem_kind with MRom -> "rom" | MRam -> "ram" in
-      let dims_in, dims_out = Misc.option_get (Env.find_opt fname fun_env) in
+      let dims_in, dims_out = Misc.option_get (FunEnv.find_opt fname fun_env) in
       let dimensioned, dim_args =
         let f dimensioned dim arg =
           try
@@ -225,17 +231,18 @@ and assert_exp fun_env dim dimensioned e =
     dimensioned, res
   with CannotDimensionYet -> match !!e with
   | StaticTypedAST.EConst _ -> failwith "Cannot fail to dimension a constant"
-  | StaticTypedAST.EConstr _ -> assert false
   | StaticTypedAST.EVar id -> begin
       try
-        match Env.find !!id dimensioned with
-        | Some dim' when dim <> dim' ->
+        match Env.find !**id dimensioned with
+        | Some BState s -> raise (UnexpectedState (s, !*@id))
+        | Some BStateTransition s -> raise (UnexpectedState (s, !*@id))
+        | Some BNetlist dim' when dim <> dim' ->
             raise @@ (* Errors. *)WrongDimension (dim', dim, !@e, ErSimple)
         | None ->
-            Env.add !!id (Some dim) dimensioned, dimension (EVar id) !@e dim
-        | Some dim' ->
+            Env.add !**id (Some (BNetlist dim)) dimensioned, dimension (EVar id) !@e dim
+        | Some BNetlist dim' ->
             dimensioned, dimension (EVar id) !@e dim'
-      with Not_found -> raise (Errors.Scope_error (!!id, !@id))
+      with Not_found -> raise (Errors.Scope_error (!*!id, !*@id))
       end
   | StaticTypedAST.ESupOp (op, _) when !!op = "concat" -> begin
       match dim with
@@ -274,11 +281,11 @@ and assert_exp fun_env dim dimensioned e =
         | NDim n -> n
       in
       let slice_dim_removed = function
-        | StaticTypedAST.SliceAll ->       0
-        | StaticTypedAST.SliceOne _ ->     1
-        | StaticTypedAST.SliceFrom _ ->    0
-        | StaticTypedAST.SliceTo _ ->      0
-        | StaticTypedAST.Slice _ ->        0
+        | SliceAll ->       0
+        | SliceOne _ ->     1
+        | SliceFrom _ ->    0
+        | SliceTo _ ->      0
+        | Slice _ ->        0
       in
       let dims_removed = List.fold_left (fun acc el -> acc + slice_dim_removed el) 0 params in
       let dim_int = dim_int_pre + dims_removed in
@@ -297,51 +304,60 @@ and assert_exp fun_env dim dimensioned e =
   | StaticTypedAST.EMem _ ->
      raise CannotDimensionYet (* The dimension of the result does not give further info to dimension the arguments *)
 
-let rec lvalue dimensioned lval = match !!lval with
-  | ParserAST.LValDrop -> raise CannotDimensionYet
-  | ParserAST.LValId id -> begin
+let rec lvalue dimensioned (lval: StaticScopedAST.lvalue) = match !!lval with
+  | LValDrop -> raise CannotDimensionYet
+  | LValId id -> begin
       try
-        match Env.find !!id dimensioned with
+        match Env.find !**id dimensioned with
         | None -> raise CannotDimensionYet
-        | Some dim -> dimension (LValId id) !@lval dim
+        | Some dim -> tritype (LValId id) !@lval dim
       with Not_found -> failwith "Variable not properly added"
       end
-  | ParserAST.LValTuple l ->
+  | LValTuple l ->
       let dim_l = List.map (lvalue dimensioned) l in
-      let dim = List.map (!%%) dim_l in
-      dimension (LValTuple dim_l) !@lval (NProd dim)
+      let extract dim = match !??dim with
+      | BNetlist n -> n
+      | _ -> failwith "Not implemented mixed state / netlist tuples"
+      in
+      let dim = List.map extract dim_l in
+      tritype (LValTuple dim_l) !@lval (BNetlist (NProd dim))
 
-let rec assert_lvalue dim dimensioned lval = match !!lval with
-  | ParserAST.LValDrop -> dimensioned, dimension LValDrop !@lval dim
-  | ParserAST.LValId id -> begin
+let rec assert_lvalue dim dimensioned (lval: StaticScopedAST.lvalue) = match !!lval with
+  | LValDrop -> dimensioned, tritype LValDrop !@lval dim
+  | LValId id -> begin
       try
-        match Env.find !!id dimensioned with
+        match Env.find !**id dimensioned with
         | Some dim' when dim <> dim' ->
-            raise @@ (* Errors. *)WrongDimension (dim', dim, !@lval, ErRev)
+            raise @@ (* Errors. *)WrongType (dim', dim, !@lval, ErRev)
         | None ->
-            Env.add !!id (Some dim) dimensioned, dimension (LValId id) !@lval dim
+            Env.add !**id (Some dim) dimensioned, tritype (LValId id) !@lval dim
         | Some dim' ->
-            dimensioned, dimension (LValId id) !@lval dim'
+            dimensioned, tritype (LValId id) !@lval dim'
       with Not_found -> failwith "Variable not properly added"
       end
-  | ParserAST.LValTuple l ->
+  | LValTuple l ->
       let dim_l = match dim with
-        | NProd dim_l -> dim_l
-        | NDim _ -> raise @@ (* Errors. *)ImpossibleProd (!@lval, ProdRev, None)
+        | BNetlist NProd dim_l -> List.map (fun d -> BNetlist d) dim_l
+        | BNetlist NDim _ -> raise @@ (* Errors. *)ImpossibleProd (!@lval, ProdRev, None)
+        | _ -> failwith "Not implemented mixed state / netlist tuples"
       in
       let dimensioned, dimed_l = Misc.fold_left_map2 (fun dimensioned dim lval -> assert_lvalue dim dimensioned lval) dimensioned dim_l l in
-      let dim = List.map (!%%) dimed_l in
-      dimensioned, dimension (LValTuple dimed_l) !@lval (NProd dim)
+      let extract dim = match !??dim with
+      | BNetlist n -> n
+      | _ -> failwith "Not implemented mixed state / netlist tuples"
+      in
+      let dim = List.map extract dimed_l in
+      dimensioned, tritype (LValTuple dimed_l) !@lval (BNetlist (NProd dim))
 
 
-let eq_left eq = match !!eq with StaticTypedAST.EQeq (lv, _) -> lv | _ -> assert false
-let eq_right eq = match !!eq with StaticTypedAST.EQeq (_, e) -> e | _ -> assert false
+let eq_left eq = match !!eq with StaticTypedAST.EQeq (lv, _) -> lv | _ -> assert false (* TODO *)
+let eq_right eq = match !!eq with StaticTypedAST.EQeq (_, e) -> e | _ -> assert false (* TODO *)
 
 let eqs fun_env (name, loc, outputs) dimensioned eq_l =
   let rec add_vars_lvalue vars lvalue = match !!lvalue with
-    | ParserAST.LValDrop -> vars
-    | ParserAST.LValId id -> IdentSet.add !!id vars
-    | ParserAST.LValTuple l -> List.fold_left add_vars_lvalue vars l
+    | LValDrop -> vars
+    | LValId id -> IdentSet.add !!id vars
+    | LValTuple l -> List.fold_left add_vars_lvalue vars l
   in
   let vars = List.fold_left (fun s eq -> (add_vars_lvalue s (eq_left eq))) IdentSet.empty eq_l in
   Option.fold ~some:(fun var -> raise (UndefinedReturnVariables (var, name, loc))) ~none:() @@ IdentSet.choose_opt @@ IdentSet.diff outputs vars;
@@ -402,9 +418,8 @@ let rec dimension_of_netlist_type = function
   | StaticTypedAST.TProd l -> NProd (List.map dimension_of_netlist_type l)
   | StaticTypedAST.TNDim l -> NDim (List.length l)
 
-let starput dimensioned StaticTypedAST.{desc = { name; typed }; loc } =
-  Env.add !!name (Some (dimension_of_netlist_type !!typed)) dimensioned,
-  relocalize loc { name; typed; dim = dimension_of_netlist_type !!typed }
+let starput dimensioned { ti_name; ti_type; _ } =
+  Env.add !**ti_name (Some (!!ti_type)) dimensioned
 
 let fun_env StaticTypedAST.{ node_inputs; node_outputs; _ } =
   List.map (fun input -> dimension_of_netlist_type !!(!!input.StaticTypedAST.typed) ) node_inputs,
@@ -413,21 +428,20 @@ let fun_env StaticTypedAST.{ node_inputs; node_outputs; _ } =
   | l -> NProd l
 
 
-let node fun_env name StaticTypedAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
-  let dimensioned = Env.empty in
-  let dimensioned, node_inputs  = List.fold_left_map starput dimensioned node_inputs in
-  let dimensioned, node_outputs = List.fold_left_map starput dimensioned node_outputs in
-  let output_set = List.fold_left (fun s el -> IdentSet.add !!(!!el.name) s) IdentSet.empty node_outputs in
-  {
+let node fun_env name ({ node_inputs; node_outputs; node_body; node_variables; _ } as node) : node =
+  let dimensioned = IdentSet.fold (fun el env -> Env.add el None env) node_variables Env.empty in
+  let dimensioned = List.fold_left starput dimensioned node_inputs in
+  let dimensioned = List.fold_left starput dimensioned node_outputs in
+
+  { node with
     node_inputs;
     node_outputs;
     node_body = body fun_env (name, output_set) dimensioned node_body;
-    node_name_loc; node_loc; node_inline; node_params; node_probes
   }
 
-let program StaticTypedAST.{ p_consts; p_consts_order; p_nodes } : program =
+let program StaticTypedAST.{ p_enums; p_consts; p_consts_order; p_nodes } : program =
   let fun_env = Env.map fun_env p_nodes in
   {
-    p_consts; p_consts_order;
+    p_enums; p_consts; p_consts_order;
     p_nodes = Env.mapi (node fun_env) p_nodes;
   }

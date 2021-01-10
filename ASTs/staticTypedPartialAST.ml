@@ -8,7 +8,7 @@ let static_type_to_string = function
   | TInt -> "int"
   | TBool -> "bool"
 
-let static_type_of_string id = relocalize !@id @@
+let static_type_of_string id =
   match !!id with
     | "int" -> TInt
     | "bool" -> TBool
@@ -69,7 +69,7 @@ and state_exp = state_exp_desc state_typed
 
 and state_transition_exp_desc =
   | EContinue of state_exp
-  | ERestart of state_exp
+  | ERestart  of state_exp
   (* | ECall   of funname * static_unknown_exp list * exp list *)
     (* function * params * args *)
 

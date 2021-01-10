@@ -86,7 +86,7 @@ let rec lvalue var_env =
   resize_fun f var_env
 
 
-let eqs _var_env _ (* NetlistConstrainedAST.{ equations; dim_env }*) = assert false
+let eqs _var_env _ (* NetlistConstrainedAST.{ equations; dim_env }*) = assert false (* TODO *)
   (* let sized_equations = List.map (fun NetlistConstrainedAST.{ desc = { eq_left; eq_right }; loc } ->
    *   relocalize loc { eq_left = lvalue var_env eq_left; eq_right = exp var_env eq_right }) equations in
    *
@@ -95,7 +95,7 @@ let eqs _var_env _ (* NetlistConstrainedAST.{ equations; dim_env }*) = assert fa
 
 
 
-let body _var_env _e = assert false
+let body _var_env _e = assert false (* TODO *)
   (* relocalize_fun (function
    * | NetlistConstrainedAST.BIf (condition, block1, block2) -> BIf (condition, body var_env block1, body var_env block2)
    * | NetlistConstrainedAST.BEqs case -> BEqs (eqs var_env case)

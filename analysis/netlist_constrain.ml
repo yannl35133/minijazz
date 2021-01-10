@@ -4,22 +4,22 @@ open NetlistDimensionedAST
 open NetlistConstrainedAST
 
 let rec other_context fname loc ctxt = function
-  | CDProd l -> CDProd (List.map (other_context fname loc ctxt) l)
-  | CDDim l -> CDDim (List.map (fun p -> PSOtherContext (fname, loc, ctxt, p)) l)
+  | TProd l -> TProd (List.map (other_context fname loc ctxt) l)
+  | TNDim l -> TNDim (List.map (fun p -> PSOtherContext (fname, loc, ctxt, p)) l)
 
 let rec eq_to_constraints c1 c2 = match c1, c2 with
-  | CDProd l1, CDProd l2 -> List.flatten @@ List.rev_map2 eq_to_constraints l1 l2
-  | CDDim l1,  CDDim l2 ->  List.combine l1 l2
-  | CDDim _,   CDProd _
-  | CDProd _,  CDDim _ ->   failwith "Misdimensioned value"
+  | TProd l1, TProd l2 -> List.flatten @@ List.rev_map2 eq_to_constraints l1 l2
+  | TNDim l1, TNDim l2 ->  List.combine l1 l2
+  | TNDim _,  TProd _
+  | TProd _,  TNDim _ ->   failwith "Misdimensioned value"
 
 
 let fun_env_find fun_env id =
   let reloc a = relocalize !@id a in
   let regexp_slice = Str.regexp {|slice\(\(_\(all\|one\|to\|from\|fromto\)\)*\)|} in
   let regexp_supop = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\|concat\|add_dim\)_\([0-9]+\)|} in
-  if Env.mem !!id fun_env then
-    Env.find !!id fun_env
+  if FunEnv.mem !!id fun_env then
+    FunEnv.find !!id fun_env
   else if Str.string_match regexp_slice !!id 0 then begin
     let args = List.tl @@ String.split_on_char '_' @@ Str.matched_group 1 !!id in
     let dim = List.length args in
@@ -33,24 +33,24 @@ let fun_env_find fun_env id =
       | [] -> []
       | _ -> failwith "Miscounted arguments in slice"
     in
-    let dims_out = CDDim (aux 0 dim args) in
-    [CDDim dims_in], dims_out
+    let dims_out = TNDim (aux 0 dim args) in
+    [TNDim dims_in], dims_out
   end else if Str.string_match regexp_supop !!id 0 then begin
     let op = Str.matched_group 1 !!id in
     let dim = int_of_string @@ Str.matched_group 2 !!id in
     let dims_in_list = List.init dim (fun i -> PSConst (reloc (SIParam i))) in
-    let dims_in = CDDim dims_in_list in
+    let dims_in = TNDim dims_in_list in
     if op = "concat" then begin
       if dim < 1 then failwith "Undefined function in presizing";
       let tail_in = List.init (dim-1) (fun i -> PSConst (reloc (SIParam (i+2)))) in
-      [CDDim (PSConst (reloc (SIParam 0)) :: tail_in); CDDim (PSConst (reloc (SIParam 1)) :: tail_in)],
-      CDDim (PSConst (reloc (SIBinOp (SAdd, reloc (SIParam 0), reloc (SIParam 1)))) :: tail_in)
+      [TNDim (PSConst (reloc (SIParam 0)) :: tail_in); TNDim (PSConst (reloc (SIParam 1)) :: tail_in)],
+      TNDim (PSConst (reloc (SIBinOp (SAdd, reloc (SIParam 0), reloc (SIParam 1)))) :: tail_in)
     end else if op = "not" then
       [dims_in], dims_in
     else if op = "mux" then
-      [CDDim []; dims_in; dims_in], dims_in
+      [TNDim []; dims_in; dims_in], dims_in
     else if op = "add_dim" then
-      [dims_in], CDDim (PSConst (reloc (SInt 1)) :: dims_in_list)
+      [dims_in], TNDim (PSConst (reloc (SInt 1)) :: dims_in_list)
     else
       [dims_in; dims_in], dims_in
   end else
@@ -61,23 +61,23 @@ let rom_ram_size mem_kind =
   let word_size = PSConst (relocalize !@mem_kind (SIParam 1)) in
   match !!mem_kind with
   | MRom ->
-      "rom", [CDDim [addr_size]], CDDim [word_size]
+      "rom", [TNDim [addr_size]], TNDim [word_size]
   | MRam ->
-      "ram", [CDDim [addr_size]; CDDim []; CDDim [addr_size]; CDDim [word_size]], CDDim [word_size]
+      "ram", [TNDim [addr_size]; TNDim []; TNDim [addr_size]; TNDim [word_size]], TNDim [word_size]
 
 let size_value loc v =
   let rec assert_size sizes value = match sizes, value with
-    | n :: tl, ParserAST.VNDim l -> if n <> List.length l then raise (Errors.NonConstantSize loc); List.iter (assert_size tl) l
-    | [],      ParserAST.VBit _ ->  ()
-    | _ :: _,  ParserAST.VBit _ ->  raise (Errors.NonConstantDimension loc)
-    | [],      ParserAST.VNDim _ -> raise (Errors.NonConstantDimension loc)
+    | n :: tl, VNDim l -> if n <> List.length l then raise (Errors.NonConstantSize loc); List.iter (assert_size tl) l
+    | [],      VBit _ ->  ()
+    | _ :: _,  VBit _ ->  raise (Errors.NonConstantDimension loc)
+    | [],      VNDim _ -> raise (Errors.NonConstantDimension loc)
   in
   let rec search_size depth = function
-    | ParserAST.VNDim (hd :: tl) -> let r = search_size depth hd in List.iter (assert_size r) tl; (List.length tl + 1) :: r
-    | ParserAST.VNDim [] -> if depth > 0 then raise (Errors.ZeroWideBusMulti (depth, loc)) else [0]
-    | ParserAST.VBit _ -> []
+    | VNDim (hd :: tl) -> let r = search_size depth hd in List.iter (assert_size r) tl; (List.length tl + 1) :: r
+    | VNDim [] -> if depth > 0 then raise (Errors.ZeroWideBusMulti (depth, loc)) else [0]
+    | VBit _ -> []
   in
-  CDDim (List.map (fun n -> PSConst (relocalize loc (SInt n))) (search_size 0 v))
+  TNDim (List.map (fun n -> PSConst (relocalize loc (SInt n))) (search_size 0 v))
 
 
 let rec exp (fun_env, var_env as env) constraints e = match !%!e with
@@ -85,13 +85,13 @@ let rec exp (fun_env, var_env as env) constraints e = match !%!e with
       let size = size_value !%@e c in
       constraints, presize (EConst c) !%@e size
   | NetlistDimensionedAST.EVar id ->
-      let size = Misc.option_get ~error:(Failure "Undefined variable in presizing") @@ Env.find_opt !!id var_env in
+      let size = Misc.option_get ~error:(Failure "Undefined variable in presizing") @@ Env.find_opt !**id var_env in
       constraints, presize (EVar id) !%@e size
   | NetlistDimensionedAST.EReg e1 ->
       let constraints, e1 = exp env constraints e1 in
       let size = match !&&e1 with
-        | CDProd _ -> failwith "UnexpectedProd in sizing"
-        | CDDim l -> CDDim l
+        | TProd _ -> failwith "UnexpectedProd in sizing"
+        | TNDim l -> TNDim l
       in
       constraints, presize (EReg e1) !%@e size
   | NetlistDimensionedAST.ECall (fname, params, args) ->
@@ -111,19 +111,19 @@ let rec exp (fun_env, var_env as env) constraints e = match !%!e with
       new_constraints @ constraints, presize (EMem (mem_kind, params, dim_args)) !%@e dims_out
 
 let rec dim_to_blank_presize s = function
-  | NDim n ->  CDDim  (List.init n (fun i -> PSVar (s, i, UniqueId.get ())))
-  | NProd l -> CDProd (List.map (dim_to_blank_presize s) l)
+  | NDim n ->  TNDim  (List.init n (fun i -> PSVar (s, i, UIDUnknownStatic.get ())))
+  | NProd l -> TProd (List.map (dim_to_blank_presize s) l)
 
 let rec lvalue var_env lval = match !%!lval with
-  | NetlistDimensionedAST.LValDrop ->
+  | LValDrop ->
       presize LValDrop !%@lval (dim_to_blank_presize (relocalize !%@lval "_") !%%lval)
-  | NetlistDimensionedAST.LValId id ->
+  | LValId id ->
       let size = Misc.option_get ~error:(Failure "Undefined variable in presizing") @@ Env.find_opt !!id var_env in
       presize (LValId id) !%@lval size
-  | NetlistDimensionedAST.LValTuple l ->
+  | LValTuple l ->
       let size_l = List.map (lvalue var_env) l in
       let size = List.map (!&&) size_l in
-      presize (LValTuple size_l) !%@lval (CDProd size)
+      presize (LValTuple size_l) !%@lval (TProd size)
 
 
 let eqs fun_env var_env0 NetlistDimensionedAST.{ equations } =
@@ -133,8 +133,8 @@ let eqs fun_env var_env0 NetlistDimensionedAST.{ equations } =
     | NetlistDimensionedAST.LValTuple l -> List.fold_left add_vars_lvalue var_env l
   in
   let var_env = List.fold_left (fun s eq -> (add_vars_lvalue s !!eq.NetlistDimensionedAST.eq_left)) var_env0 equations in
-  
-  let eq constraints equation = 
+
+  let eq constraints equation =
     let NetlistDimensionedAST.{ eq_left; eq_right } = !!equation in
     let constraints, eq_right = exp (fun_env, var_env) constraints eq_right in
     let eq_left = lvalue var_env eq_left in
@@ -169,8 +169,8 @@ let node (var_env_env, sized_inouts_env, fun_env) name NetlistDimensionedAST.{ n
   }
 
 let rec presize_of_netlist_type ident = function
-  | StaticTypedAST.TProd l -> CDProd (List.map (presize_of_netlist_type ident) l)
-  | StaticTypedAST.TNDim l -> CDDim (List.mapi
+  | StaticTypedAST.TProd l -> TProd (List.map (presize_of_netlist_type ident) l)
+  | StaticTypedAST.TNDim l -> TNDim (List.mapi
       (fun i opt_static_exp -> match !!opt_static_exp with
         | SUnknown uid -> PSVar (ident, i, uid)
         | SExp se -> PSConst (relocalize !@opt_static_exp se)
@@ -189,7 +189,7 @@ let fun_env NetlistDimensionedAST.{ node_inputs; node_outputs; _ } =
   (List.map (fun ((_, presize), _) -> presize) ins,
     match List.map (fun ((_, presize), _) -> presize) outs with
       | [out] -> out
-      | l -> CDProd l
+      | l -> TProd l
   )
 
 let program NetlistDimensionedAST.{ p_consts; p_consts_order; p_nodes } : program =
@@ -204,7 +204,7 @@ let program NetlistDimensionedAST.{ p_consts; p_consts_order; p_nodes } : progra
     r
   in
   let p_nodes = Env.mapi f p_nodes in
-  { 
+  {
     p_consts; p_consts_order;
     p_nodes; constraints = !constraints
   }

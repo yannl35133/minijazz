@@ -209,9 +209,9 @@ let lvalue_desc :=
   | ~=tuple(lvalue);  < LValTuple >
 
 let typed_ident :=
-  | ti_name=ident; { { ti_name; ti_loc = Loc $sloc; ti_type = localize $sloc (TNDim []) } }
+  | ti_name=ident; { { ti_name; ti_loc = Loc $sloc; ti_type = localize $sloc (BNetlist (TNDim [])) } }
   | ti_name=ident; ":"; type_ident=sntuple(opt_static_exp, "[", "]")+;
-    { { ti_name; ti_loc = Loc $sloc; ti_type = localize $loc(type_ident) (TNDim (List.flatten type_ident)) } }
+    { { ti_name; ti_loc = Loc $sloc; ti_type = localize $loc(type_ident) (BNetlist (TNDim (List.flatten type_ident))) } }
 
 
 // Automaton and state expressions
@@ -289,7 +289,7 @@ probe_decls:
 let node :=
   ~=node_inline; node_name=ident; ~=node_params;
     "("; node_inputs=slist(typed_ident, ","); ")"; "="; ~=node_outputs;
-  WHERE; node_body=decl*; node_probes=probe_decls; END; WHERE; ";"?;
+  WHERE; node_body=localize(decl*); node_probes=probe_decls; END; WHERE; ";"?;
     { { node_inline; node_name; node_params;
         node_inputs; node_outputs; node_body;
         node_probes; node_loc = Loc $sloc } }

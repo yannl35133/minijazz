@@ -7,7 +7,10 @@ open ParserAST
 
 let print_ident (id: ident) = dprintf "%s" id.desc
 
-let print_enum (enum: enum) = dprintf "%t" (print_ident enum.enum_name)
+let print_enum { enum_name; enum_constructors; _ } =
+  dprintf "type %t =@[<hv2>@ %t@]"
+    (print_ident enum_name)
+    (print_list_naked (dprintf " |@ ") print_ident enum_constructors)
 
 let print_sop = function
   | SAdd -> "+" | SMinus -> "-" | SMult -> "*" | SDiv -> "/" | SPower -> "^"
@@ -55,17 +58,19 @@ let print_static_typed_ident { sti_name; sti_type; _} =
 
 (* Netlist expressions *)
 
-let rec print_type = function
+let rec print_netlist_type = function
   | TNDim opt_se_l ->
-      print_list brak comma_sep print_opt_sexp opt_se_l
+    print_list brak comma_sep print_opt_sexp opt_se_l
   | TProd l ->
-      print_list par star_sep print_type l
-  | TState enum ->
-      print_enum enum
-  | TStateTransition (enum, transition) ->
-      dprintf "%t : %t"
-        (print_enum enum)
-        (print_transition transition)
+    print_list par star_sep print_netlist_type l
+
+let print_global_type = function
+  | BNetlist ti -> print_netlist_type ti
+  | BState id ->
+      print_ident id
+  | BStateTransition id ->
+      dprintf "%t transition"
+        (print_ident id)
 
 let print_slice_param = print_slice_param print_opt_sexp
 
@@ -129,18 +134,16 @@ and print_lvalue lval = print_lvalue_desc lval.desc
 
 let is_bit ti_type =
   match !!ti_type with
-  | TNDim [] -> true
-  | TNDim _ -> false
-  | TProd _ -> false
-  | TState _ -> false
-  | TStateTransition _ -> false
+  | BNetlist TNDim [] -> true
+  | _ -> false
+
 
 let print_typed_ident { ti_name; ti_type; _ } =
   dprintf "@[<hv2>%t%t@]"
     (print_ident ti_name)
     (dprint_if (not (is_bit ti_type)) @@
       dprintf ":%t"
-        (print_type !!ti_type)
+        (print_global_type !!ti_type)
     )
 
 
@@ -215,7 +218,7 @@ let print_node { node_name; node_inline; node_inputs; node_outputs; node_params;
     (print_list par comma_sep print_typed_ident node_inputs)
     (binop_sep "=")
     (print_list par comma_sep print_typed_ident node_outputs)
-    (print_block node_body)
+    (print_block !!node_body)
 
 let print_const const_desc =
   dprintf "@[<hv 2>const %t%t%t@]"

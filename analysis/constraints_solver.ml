@@ -38,7 +38,7 @@ type unknown_description =
   | Param of ident_desc * Location.location * int
 
 type new_context =
-  | Uid of UniqueId.t
+  | Uid of UIDUnknownStatic.t
   | Recontextualize of static_bitype_exp list * new_context
 
 and static_int_exp_desc =
@@ -181,7 +181,7 @@ and print_int_exp_desc = function
         print_unknown d nc
   | UIConst id -> print_ident id
   | UIUnOp (sunop, se) ->
-      dprintf "%t %t" 
+      dprintf "%t %t"
         (print_int_unop sunop)
         (print_int_exp se)
   | UIBinOp (sop, se1, se2) ->
@@ -202,7 +202,7 @@ and print_bool_exp_desc = function
   | UBUnknown (d, nc) ->
       print_unknown d nc
   | UBUnOp (sunop, se) ->
-      dprintf "%t %t" 
+      dprintf "%t %t"
         (print_bool_unop sunop)
         (print_bool_exp se)
   | UBBinOp (sop, se1, se2) ->
@@ -300,7 +300,7 @@ let rec add uid el env = match UIDEnv.find_opt uid env with
   | Some thing -> add' el env thing
 and add' el env = function
   | Link (_, uid) -> add uid el env
-  | Direct _ -> assert false
+  | Direct _ -> invalid_arg "add'"
   | Indirect (_, link) -> add' el env link
 
 
@@ -455,7 +455,7 @@ let rec from_uiexp = function
   | UInt n -> SInt n
   | UIConst id -> SIConst id
   | UIParam i -> SIParam i
-  | UIUnknown _ -> assert false
+  | UIUnknown _ -> invalid_arg "from_uiexp"
   | UIUnOp (op, se) -> SIUnOp (op, relocalize_fun from_uiexp se)
   | UIBinOp (op, se1, se2) -> SIBinOp (op, relocalize_fun from_uiexp se1, relocalize_fun from_uiexp se2)
   | UIIf (c, se1, se2) -> SIIf (relocalize_fun from_ubexp c, relocalize_fun from_uiexp se1, relocalize_fun from_uiexp se2)
@@ -464,7 +464,7 @@ and from_ubexp = function
   | UBool b -> SBool b
   | UBConst id -> SBConst id
   | UBParam i -> SBParam i
-  | UBUnknown _ -> assert false
+  | UBUnknown _ -> invalid_arg "from_ubexp"
   | UBUnOp (op, se) -> SBUnOp (op, relocalize_fun from_ubexp se)
   | UBBinOp (op, se1, se2) -> SBBinOp (op, relocalize_fun from_ubexp se1, relocalize_fun from_ubexp se2)
   | UBBinIntOp (op, se1, se2) -> SBBinIntOp (op, relocalize_fun from_uiexp se1, relocalize_fun from_uiexp se2)
@@ -557,7 +557,7 @@ let solve_constraints l =
   (* Format.eprintf "Found equalities@.";
   UIDEnv.iter (fun uid union -> Format.eprintf "%t@." (print_env uid union)) env; *)
   env
-  
+
 
 (* let (<?) a b = match a, b with
   | UInt n, UInt n' -> n < n'
