@@ -188,6 +188,7 @@ let simple_exp == localize(simple_exp_desc)
 let exp        == localize(exp_desc)
 let simple_exp_desc :=
   | ~=ident;                                                                  < EVar >
+  | ~=constructor;                                                            < EConstr >
   | "("; ~=exp; ")";                                                          < EPar >
 let exp_desc :=
   | simple_exp_desc

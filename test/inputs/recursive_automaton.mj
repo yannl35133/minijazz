@@ -2,12 +2,12 @@ main (clk) = o where
   front_edge = clk & not(reg(clk));
   down_edge = not(clk) & reg(clk);
   automaton
-  | St1 -> do
+  | St1 ->
     automaton
-    | Good -> do x = 1 continue Bad
-    | Bad -> do x = 0 until down_edge then Good
+    | Good -> x = 1 until down_edge then continue Bad
+    | Bad  -> x = 0 until down_edge then restart Good
     end
     until down_edge then St2
-  | St2 -> do o = 1 until front_edge then St1
+  | St2 -> o = 1 until front_edge then St1
   end
 end where
