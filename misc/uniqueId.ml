@@ -10,6 +10,7 @@ module type S = sig
   val get : unit -> t
   val compare : t -> t -> int
   val print : Format.formatter -> t -> unit
+  val to_string : t -> string
 end
 
 
@@ -27,4 +28,7 @@ module Make (E: Empty) : S = struct
   let compare = Int.compare
 
   let print fmt uid = Format.fprintf fmt "%d" uid
+
+  let to_string = string_of_int
 end
+

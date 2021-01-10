@@ -1,4 +1,4 @@
-main (clk) = o where
+main (clk, press) = o where
   front_edge = clk & not(reg(clk));
   down_edge = not(clk) & reg(clk);
   automaton

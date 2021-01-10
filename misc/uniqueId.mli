@@ -14,6 +14,8 @@ module type S = sig
   val compare : t -> t -> int
 
   val print : Format.formatter -> t -> unit
+
+  val to_string : t -> string
 end
 
 module Make (E: Empty) : S
