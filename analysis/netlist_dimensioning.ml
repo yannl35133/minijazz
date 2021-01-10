@@ -353,10 +353,32 @@ let rec assert_lvalue dim dimensioned (lval: StaticScopedAST.lvalue) = match !!l
       let dim = List.map extract dimed_l in
       dimensioned, tritype (LValTuple dimed_l) !@lval (BNetlist (NProd dim))
 
+let rec state_exp fun_env dimensioned e = match e.s_desc with
+  | EConstr c -> dimensioned, re_state_type e @@ EConstr c
+  | ESMux (a, b, c) ->
+      let dimensioned, a' = assert_exp fun_env (NDim 0) dimensioned a in
+      let dimensioned, b' = state_exp fun_env dimensioned b in
+      let dimensioned, c' = state_exp fun_env dimensioned c in
+      dimensioned, re_state_type e @@ ESMux (a', b', c')
+
+let state_transition_exp fun_env dimensioned e = match e.st_desc with
+    | EContinue a ->
+        let dimensioned, a' = state_exp fun_env dimensioned a in
+        dimensioned, re_state_transition_type e @@ EContinue a'
+    | ERestart a ->
+      let dimensioned, a' = state_exp fun_env dimensioned a in
+      dimensioned, re_state_transition_type e @@ ERestart a'
+
 let tritype_exp fun_env dimensioned = function
-  | Exp e -> let dimensioned, e' = exp fun_env dimensioned e in dimensioned, Exp e'
-  | StateExp e -> dimensioned, StateExp e
-  | StateTransitionExp e -> dimensioned, StateTransitionExp e
+  | Exp e ->
+      let dimensioned, e' = exp fun_env dimensioned e in
+      dimensioned, Exp e'
+  | StateExp e ->
+      let dimensioned, e' = state_exp fun_env dimensioned e in
+      dimensioned, StateExp e'
+  | StateTransitionExp e ->
+      let dimensioned, e' = state_transition_exp fun_env dimensioned e in
+      dimensioned, StateTransitionExp e'
 
 let tritype_of_exp = function
   | Exp e -> BNetlist !%%e
@@ -378,14 +400,30 @@ let assert_tritype_exp_one fun_env dim (dimensioned: dim_env) e : dim_env * trit
   | BNetlist ti, Exp e ->
       let dimensioned, e' = assert_exp_one fun_env ti dimensioned e in
       dimensioned, Result.map (fun e -> Exp e) e'
-  | BState _, StateExp e -> dimensioned, Ok (StateExp e) (* enum type checking should be done already *)
-  | BStateTransition _, StateTransitionExp e -> dimensioned, Ok (StateTransitionExp e)
+  | BState _, StateExp e ->
+      let dimensioned, e' = state_exp fun_env dimensioned e in
+      dimensioned, Ok (StateExp e') (* enum type checking should be done already *)
+  | BStateTransition _, StateTransitionExp e ->
+      let dimensioned, e' = state_transition_exp fun_env dimensioned e in
+      dimensioned, Ok (StateTransitionExp e')
   | _ -> failwith "Error in state typing"
 
 
 let tritype_exp_one fun_env (dimensioned: dim_env) e : dim_env * tritype_exp dimension_option =
   try
     let dimensioned, e' = tritype_exp fun_env dimensioned e in
+    dimensioned, Ok e'
+  with CannotDimensionYet id -> dimensioned, Error id
+
+let state_exp_one fun_env (dimensioned: dim_env) e : dim_env * exp state_exp dimension_option =
+  try
+    let dimensioned, e' = state_exp fun_env dimensioned e in
+    dimensioned, Ok e'
+  with CannotDimensionYet id -> dimensioned, Error id
+
+let state_transition_exp_one fun_env (dimensioned: dim_env) e : dim_env * exp state_transition_exp dimension_option =
+  try
+    let dimensioned, e' = state_transition_exp fun_env dimensioned e in
     dimensioned, Ok e'
   with CannotDimensionYet id -> dimensioned, Error id
 
@@ -423,9 +461,11 @@ and matcher_one fun_env dimensioned ({ m_handlers; _} as matcher) : dim_env * de
 and transition_one fun_env dimensioned : 'a -> 'b * 'c dimension_option = function
   | [] -> dimensioned, Ok []
   | hd :: tl ->
-      let dimensioned, hd' = assert_exp_one fun_env (NDim 0) dimensioned (fst hd) in
+      let dimensioned, hd1' = assert_exp_one fun_env (NDim 0) dimensioned (fst hd) in
+      let dimensioned, hd2' = state_transition_exp_one fun_env dimensioned (snd hd) in
       let dimensioned, tl' = transition_one fun_env dimensioned tl in
-      dimensioned, result_fold2 ~oks:(fun hd1 tl -> (hd1, snd hd) :: tl) hd' tl'
+      let hd' = result_fold2 ~oks:(fun a b -> a, b) hd1' hd2' in
+      dimensioned, result_fold2 ~oks:(fun hd tl -> hd :: tl) hd' tl'
 
 and automaton_handler_one fun_env dimensioned ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
   let dimensioned, a_body' = block_one fun_env dimensioned a_body in
@@ -457,7 +497,8 @@ and decl_one fun_env dimensioned (d: StaticTypedAST.decl) : dim_env * decl dimen
       dimensioned, (result_fold2 ~oks:(fun e b -> relocalize !@d @@ Dreset (e, b)) e' b')
   | Dmatch (e, m) ->
       let dimensioned, m' = matcher_one fun_env dimensioned m in
-      dimensioned, (Result.map (fun m -> relocalize !@d @@ Dmatch (e, m)) m')
+      let dimensioned, e' = state_exp_one fun_env dimensioned e in
+      dimensioned, (result_fold2 ~oks:(fun e m -> relocalize !@d @@ Dmatch (e, m)) e' m')
   | Dautomaton a ->
       let dimensioned, a' = automaton_one fun_env dimensioned a in
       dimensioned, (Result.map (fun a -> relocalize !@d @@ Dautomaton a) a')

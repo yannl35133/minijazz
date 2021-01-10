@@ -60,25 +60,26 @@ type static_typed_ident = static_type CommonAST.static_typed_ident
 
 (* State expressions *)
 
-type state_exp_desc =
+type 'exp state_exp_desc =
   | EConstr of constructor
+  | ESMux of ('exp * 'exp state_exp * 'exp state_exp)
   (* | ECall   of funname * static_unknown_exp list * exp list *)
     (* function * params * args *)
 
-and state_exp = state_exp_desc state_typed
+and 'exp state_exp = 'exp state_exp_desc state_typed
 
-and state_transition_exp_desc =
-  | EContinue of state_exp
-  | ERestart  of state_exp
+and 'exp state_transition_exp_desc =
+  | EContinue of 'exp state_exp
+  | ERestart  of 'exp state_exp
   (* | ECall   of funname * static_unknown_exp list * exp list *)
     (* function * params * args *)
 
-and state_transition_exp = state_transition_exp_desc state_transition_typed
+and 'exp state_transition_exp = 'exp state_transition_exp_desc state_transition_typed
 
 type 'exp tritype_exp =
   | Exp of 'exp
-  | StateExp of state_exp
-  | StateTransitionExp of state_transition_exp
+  | StateExp of 'exp state_exp
+  | StateTransitionExp of 'exp state_transition_exp
 
 type 'netlist_type lvalue_desc =
   | LValDrop

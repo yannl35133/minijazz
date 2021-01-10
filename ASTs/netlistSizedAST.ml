@@ -50,8 +50,8 @@ type decl_desc =
   | Deq        of lvalue * tritype_exp (* p = e *)
   | Dlocaleq   of lvalue * tritype_exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
-  | Dautomaton of ((exp * state_transition_exp) list, decl) automaton
-  | Dmatch     of state_exp * decl matcher
+  | Dautomaton of ((exp * exp state_transition_exp) list, decl) automaton
+  | Dmatch     of exp state_exp * decl matcher
   | Dif        of static_bool_exp * decl list * decl list (*netlist_size Env.t ??*)
 
 and decl = decl_desc localized

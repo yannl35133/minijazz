@@ -82,10 +82,23 @@ let rec exp var_env e =
   in
   resize_fun f var_env e
 
+
+let rec state_exp var_env e = match e.s_desc with
+  | EConstr c -> re_state_type e @@ EConstr c
+  | ESMux (a, b, c) ->
+      re_state_type e @@ ESMux (exp var_env a, state_exp var_env b, state_exp var_env c)
+
+let state_transition_exp var_env e = match e.st_desc with
+    | EContinue a ->
+        re_state_transition_type e @@ EContinue (state_exp var_env a)
+    | ERestart a ->
+        re_state_transition_type e @@ ERestart (state_exp var_env a)
+
 let tritype_exp var_env = function
-  | Exp e ->                Exp (exp var_env e)
-  | StateExp e ->           StateExp e
-  | StateTransitionExp e -> StateTransitionExp e
+  | Exp e -> Exp (exp var_env e)
+  | StateExp e -> StateExp (state_exp var_env e)
+  | StateTransitionExp e -> StateTransitionExp (state_transition_exp var_env e)
+
 
 let rec lvalue var_env =
   let f = function
@@ -107,7 +120,7 @@ let rec decl var_env : NetlistConstrainedAST.decl -> decl =
   | Dreset (e, b) ->
       Dreset (exp var_env e, block var_env b)
   | Dmatch (e, m) ->
-      Dmatch (e, matcher var_env m)
+      Dmatch (state_exp var_env e, matcher var_env m)
   | Dautomaton a ->
       Dautomaton (automaton var_env a)
 
@@ -118,7 +131,7 @@ and matcher var_env ({ m_handlers; _} as matcher) =
   { matcher with m_handlers = ConstructEnv.map (match_handler var_env) m_handlers }
 
 and transition var_env =
-  List.map (fun (e1, e2) -> (exp var_env e1, e2))
+  List.map (fun (e1, e2) -> (exp var_env e1, state_transition_exp var_env e2))
 
 and automaton_handler var_env ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
   let a_body = block var_env a_body in

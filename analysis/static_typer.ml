@@ -163,8 +163,19 @@ let rec exp ((fun_env: fun_env), static_env as env) e =
       let args = List.map (exp env) args in
       EMem (mem_kind, (addr_size, word_size, input_file), args)
 
-let state_exp enum_env (e: StaticScopedAST.exp) = match !!e with
+let rec state_exp (exp_env, enum_env as env) (e: StaticScopedAST.exp) = match !!e with
   | EConstr c ->    state_type (EConstr c) !@e (Misc.option_get ~error:(Failure "enum_env") @@ ConstructEnv.find_opt !**c enum_env)
+  | ESupOp (op, args) when !!op = "mux" -> begin
+      let arg1, arg2, arg3 = match args with
+        | [arg1; arg2; arg3] -> arg1, arg2, arg3
+        | _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 3, !!op)
+      in
+      let a = exp exp_env arg1 in
+      let b, c = state_exp env arg2, state_exp env arg3 in
+      if !**(b.s_type.enum_name) <> !**(c.s_type.enum_name) then
+        raise @@ Errors.WrongType (!*!(c.s_type.enum_name), !*!(b.s_type.enum_name), c.s_loc);
+      state_type (ESMux (a, b, c)) !@e b.s_type
+    end
   | EContinue _ ->  raise @@ Errors.WrongType ("state transition", "state", !@e)
   | ERestart _ ->   raise @@ Errors.WrongType ("state transition", "state", !@e)
   | EConst _ ->     raise @@ Errors.WrongType ("netlist", "state", !@e)
@@ -175,12 +186,12 @@ let state_exp enum_env (e: StaticScopedAST.exp) = match !!e with
   | ECall _ ->      raise @@ Errors.WrongType ("netlist", "state", !@e)
   | EMem _ ->       raise @@ Errors.WrongType ("netlist", "state", !@e)
 
-let state_transition_exp enum_env (e: StaticScopedAST.exp) = match !!e with
+let state_transition_exp env (e: StaticScopedAST.exp) = match !!e with
   | EContinue e' ->
-      let e' = state_exp enum_env e' in
+      let e' = state_exp env e' in
       state_transition_type (ERestart e') !@e e'.s_type
   | ERestart e' ->
-      let e' = state_exp enum_env e' in
+      let e' = state_exp env e' in
       state_transition_type (ERestart e') !@e e'.s_type
   | EConstr _ ->    raise @@ Errors.WrongType ("state",   "state transition", !@e)
   | EConst _ ->     raise @@ Errors.WrongType ("netlist", "state transition", !@e)
@@ -191,40 +202,40 @@ let state_transition_exp enum_env (e: StaticScopedAST.exp) = match !!e with
   | ECall _ ->      raise @@ Errors.WrongType ("netlist", "state transition", !@e)
   | EMem _ ->       raise @@ Errors.WrongType ("netlist", "state transition", !@e)
 
-let tritype_exp (enum_env, exp_env) e =
+let tritype_exp (exp_env, _ as env) e =
   let f f_exp env = try Ok (f_exp env e) with Errors.WrongType e -> Error e in
-  match f exp exp_env, f state_exp enum_env, f state_transition_exp enum_env with
+  match f exp exp_env, f state_exp env, f state_transition_exp env with
   | Ok a, Error _, Error _ -> Exp a
   | Error _, Ok b, Error _ -> StateExp b
   | Error _, Error _, Ok c -> StateTransitionExp c
-  | _ -> failwith "Expressions are not ambiguous"
+  | _ -> raise @@ Errors.TwoTypes !@e
 
 
 let rec match_handler env ({ m_body; _ } as handler) =
-  { handler with m_body = List.map (eq env) m_body }
+  { handler with m_body = List.map (decl env) m_body }
 
 and matcher env ({ m_handlers; m_state_type; _ } as matcher) =
   m_state_type, { matcher with m_handlers = ConstructEnv.map (match_handler env) m_handlers }
 
-and automaton_handler (enum_env, exp_env as env) ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
+and automaton_handler (exp_env, _ as env) ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
   { handler with
-    a_body = List.map (eq env) a_body;
-    a_weak_transition = List.map (fun (e1, e2) -> exp exp_env e1, state_transition_exp enum_env e2) a_weak_transition;
-    a_strong_transition = List.map (fun (e1, e2) -> exp exp_env e1, state_transition_exp enum_env e2) a_strong_transition;
+    a_body = List.map (decl env) a_body;
+    a_weak_transition = List.map (fun (e1, e2) -> exp exp_env e1, state_transition_exp env e2) a_weak_transition;
+    a_strong_transition = List.map (fun (e1, e2) -> exp exp_env e1, state_transition_exp env e2) a_strong_transition;
   }
 
 and automaton env ({ a_handlers; _ } as auto) =
   { auto with a_handlers = ConstructEnv.map (automaton_handler env) a_handlers }
 
-and eq (enum_env, (_, static_env as exp_env) as env) = relocalize_fun @@ function
+and decl ((_, static_env as exp_env), _ as env) = relocalize_fun @@ function
   | StaticScopedAST.Deq (lv, e) ->          Deq (lv, tritype_exp env e)
   | StaticScopedAST.Dlocaleq (lv, e) ->     Dlocaleq (lv, tritype_exp env e)
-  | StaticScopedAST.Dreset (c, eqs) ->      Dreset (exp exp_env c, List.map (eq env) eqs)
-  | StaticScopedAST.Dif (c, b1, b2) ->      Dif (static_bool_exp_full static_env c, List.map (eq env) b1, List.map (eq env) b2)
+  | StaticScopedAST.Dreset (c, eqs) ->      Dreset (exp exp_env c, List.map (decl env) eqs)
+  | StaticScopedAST.Dif (c, b1, b2) ->      Dif (static_bool_exp_full static_env c, List.map (decl env) b1, List.map (decl env) b2)
   | StaticScopedAST.Dautomaton (auto) ->    Dautomaton (automaton env auto)
   | StaticScopedAST.Dmatch (e, match0) ->
       let state_type, match' = matcher env match0 in
-      let e' = state_exp enum_env e in
+      let e' = state_exp env e in
       if e'.s_type <> state_type then raise @@ Errors.WrongType (e'.s_type.enum_name.id_desc, state_type.enum_name.id_desc, !@e);
       Dmatch (e', match')
 
@@ -260,7 +271,7 @@ let node enum_env fun_env consts_env ({ node_params; node_inputs; node_outputs; 
     node_params = new_params;
     node_inputs =   List.map (starput (consts_env, params_env)) node_inputs;
     node_outputs =  List.map (starput (consts_env, params_env)) node_outputs;
-    node_body =     List.map (eq (enum_env, (fun_env, (consts_env, params_env)))) node_body;
+    node_body =     List.map (decl ((fun_env, (consts_env, params_env)), enum_env)) node_body;
   }
 
 let const consts_env ({ const_decl; _ } as const) =

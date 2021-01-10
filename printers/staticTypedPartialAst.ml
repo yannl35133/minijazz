@@ -99,19 +99,23 @@ let print_static_typed_ident = print_static_typed_ident print_static_type
 
 (* State expressions *)
 
-let print_state_exp_desc = function
+let rec print_state_exp_desc print_exp = function
   | EConstr id -> print_constructor id
-let print_state_exp s = print_state_exp_desc s.s_desc
+  | ESMux (e, es1, es2) -> dprintf "mux@[<hv 2>(@,%t,@ %t,@ %t@;<0 -2>)@]"
+      (print_exp e)
+      (print_state_exp print_exp es1)
+      (print_state_exp print_exp es2)
+and print_state_exp print_exp s = print_state_exp_desc print_exp s.s_desc
 
-let print_state_transition_exp_desc = function
-  | EContinue s -> dprintf "continue %t" (print_state_exp s)
-  | ERestart s -> dprintf "restart %t" (print_state_exp s)
-let print_state_transition_exp s = print_state_transition_exp_desc s.st_desc
+let print_state_transition_exp_desc print_exp = function
+  | EContinue s -> dprintf "continue %t" (print_state_exp print_exp s)
+  | ERestart s -> dprintf "restart %t" (print_state_exp print_exp s)
+let print_state_transition_exp print_exp s = print_state_transition_exp_desc print_exp s.st_desc
 
 let print_tritype_exp print_exp = function
   | Exp e -> print_exp e
-  | StateExp s -> print_state_exp s
-  | StateTransitionExp st -> print_state_transition_exp st
+  | StateExp s -> print_state_exp print_exp s
+  | StateTransitionExp st -> print_state_transition_exp print_exp st
 
 (* Netlist expressions *)
 

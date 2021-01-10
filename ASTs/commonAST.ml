@@ -119,6 +119,9 @@ type 'a state_typed = {
 let state_type desc loc ty =
   { s_desc = desc; s_loc = loc; s_type = ty }
 
+let re_state_type { s_desc = _; s_loc; s_type } desc =
+  { s_desc = desc; s_loc; s_type }
+
 type 'a state_transition_typed = {
   st_desc: 'a;
   st_loc:  Location.location;
@@ -127,6 +130,9 @@ type 'a state_transition_typed = {
 
 let state_transition_type desc loc ty =
   { st_desc = desc; st_loc = loc; st_type = ty }
+
+let re_state_transition_type { st_desc = _; st_loc; st_type } desc =
+  { st_desc = desc; st_loc; st_type }
 
 type ('a, 'netlist_type) trityped = {
   b_desc: 'a;
