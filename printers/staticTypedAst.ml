@@ -73,13 +73,13 @@ let rec print_decl_desc = function
       dprintf "@[<h>%t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
-        (print_exp exp)
+        (print_tritype_exp print_exp exp)
         (semicolon_sep)
   | Dlocaleq (lv, exp) ->
       dprintf "@[<h>local %t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
-        (print_exp exp)
+        (print_tritype_exp print_exp exp)
         (semicolon_sep)
   | Dreset (exp, eqs) ->
       dprintf "@[<hv2>reset@ %t@]@ every %t%t"

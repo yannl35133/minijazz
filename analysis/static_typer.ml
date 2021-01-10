@@ -191,11 +191,20 @@ let state_transition_exp enum_env (e: StaticScopedAST.exp) = match !!e with
   | ECall _ ->      raise @@ Errors.WrongType ("netlist", "state transition", !@e)
   | EMem _ ->       raise @@ Errors.WrongType ("netlist", "state transition", !@e)
 
-let rec match_handler env ({ m_body; _} as handler) =
+let tritype_exp (enum_env, exp_env) e =
+  let f f_exp env = try Ok (f_exp env e) with Errors.WrongType e -> Error e in
+  match f exp exp_env, f state_exp enum_env, f state_transition_exp enum_env with
+  | Ok a, Error _, Error _ -> Exp a
+  | Error _, Ok b, Error _ -> StateExp b
+  | Error _, Error _, Ok c -> StateTransitionExp c
+  | _ -> failwith "Expressions are not ambiguous"
+
+
+let rec match_handler env ({ m_body; _ } as handler) =
   { handler with m_body = List.map (eq env) m_body }
 
-and matcher env ({ m_handlers; _} as matcher) =
-  { matcher with m_handlers = ConstructEnv.map (match_handler env) m_handlers }
+and matcher env ({ m_handlers; m_state_type; _ } as matcher) =
+  m_state_type, { matcher with m_handlers = ConstructEnv.map (match_handler env) m_handlers }
 
 and automaton_handler (enum_env, exp_env as env) ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
   { handler with
@@ -204,16 +213,20 @@ and automaton_handler (enum_env, exp_env as env) ({ a_body; a_weak_transition; a
     a_strong_transition = List.map (fun (e1, e2) -> exp exp_env e1, state_transition_exp enum_env e2) a_strong_transition;
   }
 
-and automaton env ({ a_handlers; _} as auto) =
+and automaton env ({ a_handlers; _ } as auto) =
   { auto with a_handlers = ConstructEnv.map (automaton_handler env) a_handlers }
 
 and eq (enum_env, (_, static_env as exp_env) as env) = relocalize_fun @@ function
-  | StaticScopedAST.Deq (lv, e) ->          Deq (lv, exp exp_env e)
-  | StaticScopedAST.Dlocaleq (lv, e) ->     Dlocaleq (lv, exp exp_env e)
+  | StaticScopedAST.Deq (lv, e) ->          Deq (lv, tritype_exp env e)
+  | StaticScopedAST.Dlocaleq (lv, e) ->     Dlocaleq (lv, tritype_exp env e)
   | StaticScopedAST.Dreset (c, eqs) ->      Dreset (exp exp_env c, List.map (eq env) eqs)
   | StaticScopedAST.Dif (c, b1, b2) ->      Dif (static_bool_exp_full static_env c, List.map (eq env) b1, List.map (eq env) b2)
   | StaticScopedAST.Dautomaton (auto) ->    Dautomaton (automaton env auto)
-  | StaticScopedAST.Dmatch (e, match0) ->   Dmatch (state_exp enum_env e, matcher env match0)
+  | StaticScopedAST.Dmatch (e, match0) ->
+      let state_type, match' = matcher env match0 in
+      let e' = state_exp enum_env e in
+      if e'.s_type <> state_type then raise @@ Errors.WrongType (e'.s_type.enum_name.id_desc, state_type.enum_name.id_desc, !@e);
+      Dmatch (e', match')
 
 
 let starput static_env ({ ti_type; _ } as typed_ident) =

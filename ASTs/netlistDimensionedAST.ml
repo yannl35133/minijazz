@@ -44,19 +44,20 @@ type lvalue = netlist_dimension StaticTypedPartialAST.lvalue
 
 type typed_ident = size CommonAST.typed_ident
 
+type automaton = ((exp * state_transition_exp) list, decl) CommonAST.automaton
 
-type decl_desc =
+and decl_desc =
   | Deq        of lvalue * tritype_exp (* p = e *)
   | Dlocaleq   of lvalue * tritype_exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
-  | Dautomaton of ((exp * state_transition_exp) list, decl) automaton
+  | Dautomaton of automaton
   | Dmatch     of state_exp * decl matcher
   | Dif        of static_bool_exp * decl list * decl list
 
 and decl = decl_desc localized
 
 
-type fun_env = static_type list Env.t
+type fun_env = (netlist_dimension list * netlist_dimension) FunEnv.t
 
 type node = (static_type, size, decl) CommonAST.node
 type const = static_bitype_exp CommonAST.const

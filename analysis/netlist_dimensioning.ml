@@ -2,8 +2,9 @@ open CommonAST
 open StaticTypedPartialAST
 open NetlistDimensionedAST
 
-exception CannotDimensionYet
-
+exception CannotDimensionYet of ident option (* Variable that could not be typed, None for a LValueDrop *)
+type 'a dimension_option = ('a, ident option) result
+type dim_env = global_type option Env.t
 
 type fun_context =
   ProdArg of string * netlist_dimension list (* funname, fun type *)
@@ -108,14 +109,14 @@ let slice params loc dim =
   NDim dims_remaining, fun e1 -> ECall (reloc @@ "slice_" ^ name, size @ args, [e1])
 
 
-let rec exp fun_env dimensioned e = match !!e with
+let rec exp (fun_env: fun_env) dimensioned e = match !!e with
   | StaticTypedAST.EConst c ->
       let dim = dim_value !@e c in
       dimensioned, dimension (EConst c) !@e dim
   | StaticTypedAST.EVar id -> begin
       try
         match Env.find !**id dimensioned with
-        | None -> raise CannotDimensionYet
+        | None -> raise (CannotDimensionYet (Some id))
         | Some BNetlist dim -> dimensioned, dimension (EVar id) !@e dim
         | Some BState s -> raise (UnexpectedState (s, !*@id))
         | Some BStateTransition s -> raise (UnexpectedState (s, !*@id))
@@ -159,12 +160,12 @@ let rec exp fun_env dimensioned e = match !!e with
       let f d arg =
         try
           let d, res = exp fun_env d arg in
-          d, Some res
-        with CannotDimensionYet -> d, None
+          d, Ok res
+        with CannotDimensionYet id -> d, Error (CannotDimensionYet id)
       in
       let dimensioned, test_dim_args = List.fold_left_map f dimensioned args in
-      let dim_ex = List.find_map Fun.id test_dim_args in
-      let dim_ex = Misc.option_get ~error:CannotDimensionYet dim_ex in
+      let dim_ex = List.find_opt Result.is_ok test_dim_args in
+      let dim_ex = Result.get_ok @@ Misc.option_get ~error:(Result.get_error @@ List.hd test_dim_args) dim_ex in
       let dim = match !%%dim_ex with
         | NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@dim_ex, ProdOp !!op)
         | NDim n -> n
@@ -229,7 +230,7 @@ and assert_exp fun_env dim dimensioned e =
     let dimensioned, res = exp fun_env dimensioned e in
     if dim <> !%%res then raise @@ (* Errors. *)WrongDimension (!%%res, dim, !@e, ErSimple);
     dimensioned, res
-  with CannotDimensionYet -> match !!e with
+  with CannotDimensionYet id -> match !!e with
   | StaticTypedAST.EConst _ -> failwith "Cannot fail to dimension a constant"
   | StaticTypedAST.EVar id -> begin
       try
@@ -247,7 +248,7 @@ and assert_exp fun_env dim dimensioned e =
   | StaticTypedAST.ESupOp (op, _) when !!op = "concat" -> begin
       match dim with
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
-        | NDim _ -> raise CannotDimensionYet
+        | NDim _ -> raise (CannotDimensionYet id)
       end
   | StaticTypedAST.ESupOp (op, args) when !!op = "dim_add" ->
       let dim_int = match dim with
@@ -302,14 +303,14 @@ and assert_exp fun_env dim dimensioned e =
       dimensioned, dimension (EReg e1) !@e !%%e1
   | StaticTypedAST.ECall _
   | StaticTypedAST.EMem _ ->
-     raise CannotDimensionYet (* The dimension of the result does not give further info to dimension the arguments *)
+     raise (CannotDimensionYet id) (* The dimension of the result does not give further info to dimension the arguments *)
 
 let rec lvalue dimensioned (lval: StaticScopedAST.lvalue) = match !!lval with
-  | LValDrop -> raise CannotDimensionYet
+  | LValDrop -> raise (CannotDimensionYet None)
   | LValId id -> begin
       try
         match Env.find !**id dimensioned with
-        | None -> raise CannotDimensionYet
+        | None -> raise (CannotDimensionYet (Some id))
         | Some dim -> tritype (LValId id) !@lval dim
       with Not_found -> failwith "Variable not properly added"
       end
@@ -349,86 +350,176 @@ let rec assert_lvalue dim dimensioned (lval: StaticScopedAST.lvalue) = match !!l
       let dim = List.map extract dimed_l in
       dimensioned, tritype (LValTuple dimed_l) !@lval (BNetlist (NProd dim))
 
+let tritype_exp fun_env dimensioned = function
+  | Exp e -> let dimensioned, e' = exp fun_env dimensioned e in dimensioned, Exp e'
+  | StateExp e -> dimensioned, StateExp e
+  | StateTransitionExp e -> dimensioned, StateTransitionExp e
 
-let eq_left eq = match !!eq with StaticTypedAST.EQeq (lv, _) -> lv | _ -> assert false (* TODO *)
-let eq_right eq = match !!eq with StaticTypedAST.EQeq (_, e) -> e | _ -> assert false (* TODO *)
+let tritype_of_exp = function
+  | Exp e -> BNetlist !%%e
+  | StateExp e -> BState e.s_type
+  | StateTransitionExp e -> BStateTransition e.st_type
 
-let eqs fun_env (name, loc, outputs) dimensioned eq_l =
-  let rec add_vars_lvalue vars lvalue = match !!lvalue with
-    | LValDrop -> vars
-    | LValId id -> IdentSet.add !!id vars
-    | LValTuple l -> List.fold_left add_vars_lvalue vars l
+
+let result_fold2 ~oks r1 r2 =
+  Misc.result_fold2 ~oks:oks ~errors:(fun a b -> if Option.is_some a then a else b) ~mixed1:(fun _ e -> Error e) ~mixed2:(fun e _ -> Error e) r1 r2
+
+let assert_exp_one fun_env dim (dimensioned: dim_env) e : dim_env * exp dimension_option =
+  try
+    let dimensioned, e' = assert_exp fun_env dim dimensioned e in
+    dimensioned, Ok e'
+  with CannotDimensionYet id -> dimensioned, Error id
+
+let assert_tritype_exp_one fun_env dim (dimensioned: dim_env) e : dim_env * tritype_exp dimension_option =
+  match (dim, e) with
+  | BNetlist ti, Exp e ->
+      let dimensioned, e' = assert_exp_one fun_env ti dimensioned e in
+      dimensioned, Result.map (fun e -> Exp e) e'
+  | BState _, StateExp e -> dimensioned, Ok (StateExp e) (* enum type checking should be done already *)
+  | BStateTransition _, StateTransitionExp e -> dimensioned, Ok (StateTransitionExp e)
+  | _ -> failwith "Error in state typing"
+
+
+let tritype_exp_one fun_env (dimensioned: dim_env) e : dim_env * tritype_exp dimension_option =
+  try
+    let dimensioned, e' = tritype_exp fun_env dimensioned e in
+    dimensioned, Ok e'
+  with CannotDimensionYet id -> dimensioned, Error id
+
+let lvalue_one dimensioned lval : lvalue dimension_option =
+  try
+    Ok (lvalue dimensioned lval)
+  with CannotDimensionYet id -> Error id
+
+let assert_lvalue_one dim dimensioned lval : dim_env * lvalue dimension_option =
+  try
+    let dimensioned, lval' = assert_lvalue dim dimensioned lval in
+    dimensioned, Ok lval'
+  with CannotDimensionYet id -> dimensioned, Error id
+
+let eq_one fun_env dimensioned (lval, e) =
+  let dimensioned, e' = tritype_exp_one fun_env dimensioned e in
+  let dimensioned, lval' = match e' with
+    | Ok a -> assert_lvalue_one (tritype_of_exp a) dimensioned lval
+    | Error _ -> dimensioned, lvalue_one dimensioned lval
   in
-  let vars = List.fold_left (fun s eq -> (add_vars_lvalue s (eq_left eq))) IdentSet.empty eq_l in
-  Option.fold ~some:(fun var -> raise (UndefinedReturnVariables (var, name, loc))) ~none:() @@ IdentSet.choose_opt @@ IdentSet.diff outputs vars;
-  let dimensioned = IdentSet.fold (fun el dimed -> if Env.mem el dimed then dimed else Env.add el None dimed) vars dimensioned in
-
-  let try_dimensioning dimensioned eq =
-    let dimensioned, r2 = (try let dimensioned, r2 = exp fun_env dimensioned (eq_right eq) in dimensioned, Some r2 with CannotDimensionYet -> dimensioned, None) in
-    dimensioned, ((try Some (lvalue dimensioned (eq_left eq)) with CannotDimensionYet -> None), r2, loc)
+  let dimensioned, e' = match lval' with
+    | Ok a -> assert_tritype_exp_one fun_env !??a dimensioned e
+    | Error _ -> dimensioned, e'
   in
+  dimensioned, (lval', e')
 
-  let rec dimension_eq (dimensioned, dim_eqs) =
-    let dimensioned', dim_eqs' = Misc.fold_left_map2
-    (fun dimensioned (eq_left0, eq_right0, loc0 as eq0) eq ->
-      match eq_left0, eq_right0 with
-      | None, None -> try_dimensioning dimensioned eq
-      | Some lval, None -> begin
-          try let dimed, r = assert_exp fun_env !%%lval dimensioned (eq_right eq) in dimed, (eq_left0, Some r, loc0)
-          with CannotDimensionYet -> dimensioned, eq0
-          end
-      | None, Some exp -> begin
-          try let dimed, r = assert_lvalue !%%exp dimensioned (eq_left eq) in dimed, (Some r, eq_right0, loc0)
-          with CannotDimensionYet -> dimensioned, eq0
-          end
-      | Some _, Some _ -> dimensioned, eq0
-    )
-    dimensioned dim_eqs eq_l
-    in
-    if dimensioned <> dimensioned' then
-      dimension_eq (dimensioned', dim_eqs')
-    else
-      let var = Env.choose_opt @@ Env.filter (fun _ dim -> dim = None) dimensioned' in
-      match var with
-      | None -> dimensioned', dim_eqs'
-      | Some (one, _) ->
-          Errors.raise_warning_dimension (Errors.InsufficientAnnotations (name, loc, one));
-          dimension_eq (Env.add one (Some (NDim 0)) dimensioned', dim_eqs')
+let rec match_handler_one fun_env dimensioned ({ m_body; _} as handler) =
+  let dimensioned, m_body' = block_one fun_env dimensioned m_body in
+  dimensioned, Result.map (fun m_body -> { handler with m_body }) m_body'
+
+and matcher_one fun_env dimensioned ({ m_handlers; _} as matcher) : dim_env * decl matcher dimension_option =
+  let dimensioned, m_handlers' = constructenv_map_fold1 (match_handler_one fun_env) dimensioned m_handlers in
+  dimensioned, Result.map (fun m_handlers -> { matcher with m_handlers }) m_handlers'
+
+and transition_one fun_env dimensioned : 'a -> 'b * 'c dimension_option = function
+  | [] -> dimensioned, Ok []
+  | hd :: tl ->
+      let dimensioned, hd' = assert_exp_one fun_env (NDim 0) dimensioned (fst hd) in
+      let dimensioned, tl' = transition_one fun_env dimensioned tl in
+      dimensioned, result_fold2 ~oks:(fun hd1 tl -> (hd1, snd hd) :: tl) hd' tl'
+
+and automaton_handler_one fun_env dimensioned ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
+  let dimensioned, a_body' = block_one fun_env dimensioned a_body in
+  let dimensioned, a_weak_transition' = transition_one fun_env dimensioned a_weak_transition in
+  let dimensioned, a_strong_transition' = transition_one fun_env dimensioned a_strong_transition in
+  let transitions' = result_fold2 ~oks:(fun a b -> (a, b)) a_weak_transition' a_strong_transition' in
+  dimensioned, result_fold2 ~oks:(fun a_body (a_weak_transition, a_strong_transition) ->
+    { handler with a_body; a_weak_transition; a_strong_transition})
+    a_body' transitions'
+
+and automaton_one fun_env dimensioned ({ a_handlers; _} as auto: StaticTypedAST.automaton) : dim_env * automaton dimension_option =
+  let dimensioned, a_handlers' = constructenv_map_fold2 (automaton_handler_one fun_env) dimensioned a_handlers in
+  dimensioned, Result.map (fun a_handlers -> { auto with a_handlers }) a_handlers'
+
+and decl_one fun_env dimensioned (d: StaticTypedAST.decl) : dim_env * decl dimension_option = match !!d with
+  | Deq (lval, e) ->
+      let dimensioned, (lval', e') = eq_one fun_env dimensioned (lval, e) in
+      dimensioned, (result_fold2 ~oks:(fun a b -> relocalize !@d @@ Deq (a, b)) lval' e')
+  | Dlocaleq (lval, e) ->
+      let dimensioned, (lval', e') = eq_one fun_env dimensioned (lval, e) in
+      dimensioned, (result_fold2 ~oks:(fun a b -> relocalize !@d @@ Dlocaleq (a, b)) lval' e')
+  | Dif (c, b1, b2) ->
+      let dimensioned, b1' = block_one fun_env dimensioned b1 in
+      let dimensioned, b2' = block_one fun_env dimensioned b2 in
+      dimensioned, (result_fold2 ~oks:(fun b1 b2 -> relocalize !@d @@ Dif (c, b1, b2)) b1' b2')
+  | Dreset (e, b) ->
+      let dimensioned, e' = assert_exp_one fun_env (NDim 0) dimensioned e in
+      let dimensioned, b' = block_one fun_env dimensioned b in
+      dimensioned, (result_fold2 ~oks:(fun e b -> relocalize !@d @@ Dreset (e, b)) e' b')
+  | Dmatch (e, m) ->
+      let dimensioned, m' = matcher_one fun_env dimensioned m in
+      dimensioned, (Result.map (fun m -> relocalize !@d @@ Dmatch (e, m)) m')
+  | Dautomaton a ->
+      let dimensioned, a' = automaton_one fun_env dimensioned a in
+      dimensioned, (Result.map (fun a -> relocalize !@d @@ Dautomaton a) a')
+
+and constructenv_map_fold1 handler_one dimensioned s_handlers =
+  ConstructEnv.fold
+    (fun uid handler (dimensioned, re_handlers') ->
+      let dimensioned, handler' = handler_one dimensioned handler in
+      dimensioned, result_fold2 ~oks:(fun handler re_handlers -> ConstructEnv.add uid handler re_handlers) handler' re_handlers'
+    ) s_handlers (dimensioned, Ok ConstructEnv.empty)
+
+and constructenv_map_fold2 handler_one dimensioned s_handlers = (* Typing would not le me use the same function twice *)
+  ConstructEnv.fold
+    (fun uid handler (dimensioned, re_handlers') ->
+      let dimensioned, handler' = handler_one dimensioned handler in
+      dimensioned, result_fold2 ~oks:(fun handler re_handlers -> ConstructEnv.add uid handler re_handlers) handler' re_handlers'
+    ) s_handlers (dimensioned, Ok ConstructEnv.empty)
+
+and block_one fun_env dimensioned : StaticTypedAST.decl list -> dim_env * decl list dimension_option = function
+  | [] -> dimensioned, Ok []
+  | hd :: tl ->
+      let dimensioned, hd' = decl_one fun_env dimensioned hd in
+      let dimensioned, tl' = block_one fun_env dimensioned tl in
+      dimensioned, result_fold2 ~oks:List.cons hd' tl'
+
+let body fun_env (name, loc) dimensioned b =
+  let rec one (dimensioned, b) =
+    let (dimensioned', b') = block_one fun_env dimensioned b in
+    match b' with
+    | Ok a ->
+        a
+    | Error _ when dimensioned <> dimensioned' ->
+        one (dimensioned', b)
+    | Error Some id ->
+        Errors.raise_warning_dimension (Errors.InsufficientAnnotations (!!name, loc, !*!id));
+        one (Env.add !**id (Some (BNetlist (NDim 0))) dimensioned', b)
+    | Error None ->
+        failwith "We can have all variables dimensioned, but not be able to dimension everything?"
   in
-  let dimensioned, dim_eqs = dimension_eq @@ List.fold_left_map try_dimensioning dimensioned eq_l in
-  let _dimensioned = Env.map (Misc.option_get ~error:(Failure "There remained undimensioned variables")) dimensioned in
-  let dim_eqs = List.map (fun (eq_left, eq_right, loc) -> match eq_left, eq_right with
-    | Some lval, Some exp ->
-        if !%%lval <> !%%exp then
-          raise @@ (* Errors. *)WrongDimension (!%%exp, !%%lval, !%@exp, ErSimple)
-        else
-          relocalize loc { eq_left = lval; eq_right = exp }
-    | _ -> failwith "We can have all variables dimensioned, but not be able to dimension everything?"
-    ) dim_eqs
-  in { equations = dim_eqs }
-
-
-
-let rec body fun_env (name, outputs as node_info) dimensioned e = relocalize_fun (function
-  | StaticTypedAST.BIf (condition, block1, block2) -> BIf (condition, body fun_env node_info dimensioned block1, body fun_env node_info dimensioned block2)
-  | StaticTypedAST.BEqs eq_l -> BEqs (eqs fun_env (name, !@e, outputs) dimensioned eq_l)
-  ) e
+  one (dimensioned, b)
 
 let rec dimension_of_netlist_type = function
-  | StaticTypedAST.TProd l -> NProd (List.map dimension_of_netlist_type l)
-  | StaticTypedAST.TNDim l -> NDim (List.length l)
+  | TProd l -> (NProd (List.map dimension_of_netlist_type l))
+  | TNDim l -> (NDim (List.length l))
 
-let starput dimensioned { ti_name; ti_type; _ } =
-  Env.add !**ti_name (Some (!!ti_type)) dimensioned
+let global_of_netlist_type = function
+  | BNetlist ti -> BNetlist (dimension_of_netlist_type ti)
+  | BState s -> BState s
+  | BStateTransition s -> BStateTransition s
 
-let fun_env StaticTypedAST.{ node_inputs; node_outputs; _ } =
-  List.map (fun input -> dimension_of_netlist_type !!(!!input.StaticTypedAST.typed) ) node_inputs,
-  match List.map (fun input -> dimension_of_netlist_type !!(!!input.StaticTypedAST.typed)) node_outputs with
+let true_global_of_netlist_type = function
+  | BNetlist ti -> (dimension_of_netlist_type ti)
+  | _ -> failwith "Not implemented state arguments in functions"
+
+let starput dimensioned { ti_name; ti_type; _ } : dim_env =
+  Env.add !**ti_name (Some (global_of_netlist_type !!ti_type)) dimensioned
+
+let fun_env { node_inputs; node_outputs; _ } =
+  List.map (fun input -> true_global_of_netlist_type !!(input.ti_type)) node_inputs,
+  match List.map (fun input -> true_global_of_netlist_type !!(input.ti_type)) node_outputs with
   | [out] -> out
   | l -> NProd l
 
 
-let node fun_env name ({ node_inputs; node_outputs; node_body; node_variables; _ } as node) : node =
+let node fun_env ({ node_inputs; node_outputs; node_body; node_variables; node_name; node_loc; _ } as node) : node =
   let dimensioned = IdentSet.fold (fun el env -> Env.add el None env) node_variables Env.empty in
   let dimensioned = List.fold_left starput dimensioned node_inputs in
   let dimensioned = List.fold_left starput dimensioned node_outputs in
@@ -436,12 +527,12 @@ let node fun_env name ({ node_inputs; node_outputs; node_body; node_variables; _
   { node with
     node_inputs;
     node_outputs;
-    node_body = body fun_env (name, output_set) dimensioned node_body;
+    node_body = body fun_env (node_name, node_loc) dimensioned node_body;
   }
 
-let program StaticTypedAST.{ p_enums; p_consts; p_consts_order; p_nodes } : program =
-  let fun_env = Env.map fun_env p_nodes in
+let program { p_enums; p_consts; p_consts_order; p_nodes } : program =
+  let fun_env = FunEnv.map fun_env p_nodes in
   {
     p_enums; p_consts; p_consts_order;
-    p_nodes = Env.mapi (node fun_env) p_nodes;
+    p_nodes = FunEnv.map (node fun_env) p_nodes;
   }

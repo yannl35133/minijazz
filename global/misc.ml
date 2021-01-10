@@ -40,6 +40,13 @@ let option_get ?(error=Invalid_argument "option_get") opt =
     | None -> raise error
     | Some thing -> thing
 
+let result_fold2 ~oks ~errors ~mixed1 ~mixed2 r1 r2 =
+  match r1, r2 with
+  | Ok a, Ok b -> Ok (oks a b)
+  | Error a, Error b -> Error (errors a b)
+  | Ok a, Error b -> mixed1 a b
+  | Error a, Ok b -> mixed2 a b
+
 
 (* Functions to decompose a list into a tuple *)
 exception Arity_error of int * int (*expected, found*)

@@ -23,13 +23,17 @@ type exp_desc =
 
 and exp = exp_desc localized
 
+type tritype_exp = exp StaticTypedPartialAST.tritype_exp
+
 type typed_ident = size CommonAST.typed_ident
 
-type decl_desc =
-  | Deq        of StaticScopedAST.lvalue * exp (* p = e *)
-  | Dlocaleq   of StaticScopedAST.lvalue * exp (* local p = e *)
+type automaton = ((exp * state_transition_exp) list, decl) CommonAST.automaton
+
+and decl_desc =
+  | Deq        of StaticScopedAST.lvalue * tritype_exp (* p = e *)
+  | Dlocaleq   of StaticScopedAST.lvalue * tritype_exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
-  | Dautomaton of ((exp * state_transition_exp) list, decl) automaton
+  | Dautomaton of automaton
   | Dmatch     of state_exp * decl matcher
   | Dif        of static_bool_exp * decl list * decl list
 
