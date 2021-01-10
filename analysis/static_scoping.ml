@@ -76,7 +76,8 @@ let rec lvalue vars_uids = relocalize_fun @@ function
   | ParserAST.LValId id ->   LValId (re_identify id (StringEnv.find !!id vars_uids))
 
 
-let merge_uids_sets : ident Env.t -> ident Env.t -> ident Env.t = Env.union (fun _ a b -> if a <> b then failwith "Non-unique uid" else Some a)
+let merge_uids_sets : ident Env.t -> ident Env.t -> ident Env.t = Env.union (fun _ a b -> if !**a <> !**b then failwith "Non-unique uid" else Some a)
+let merge_string_sets : UIDIdent.t StringEnv.t -> UIDIdent.t StringEnv.t -> UIDIdent.t StringEnv.t = StringEnv.union (fun _ a b -> if a <> b then failwith "Error in add_vars" else Some a)
 
 (**
 [add_vars_lvalue] adds var/uid couples to [vars_uids].
@@ -96,37 +97,46 @@ let rec add_vars_lvalue already_declared (uids_set, vars_uids) lvalue = match !!
       let uid = StringEnv.find !!id vars_uid in
       Env.add uid (re_identify id uid) uids_set, vars_uid
 
-let rec same_vars_blocks already_declared (uids_set, vars_uids) = function
-  | [] ->   (uids_set, vars_uids)
-  | [hd] -> add_vars_block already_declared (uids_set, vars_uids) !!hd
-  | hd :: tl ->
-      let uids_set', reference = add_vars_block already_declared (uids_set, vars_uids) !!hd in
-      let new_already_declared = StringEnv.union (fun _ a b -> if a <> b then failwith "Error in add_vars" else Some a) already_declared reference in
-      (* The duplication detection happens before the "already_declared" detection, so no problem there *)
-      let others = List.map (relocalize_fun (fun b -> snd @@ add_vars_block new_already_declared (uids_set, vars_uids) b)) tl in
-      let problem = List.find_opt (fun map -> not @@ StringEnv.equal (=) !!map reference) others in
-      match problem with
-      | None -> uids_set', reference
-      | Some pb ->
-        match
-          StringEnv.choose_opt (StringEnv.filter (fun el _ -> not @@ StringEnv.mem el reference) !!pb),
-          StringEnv.choose_opt (StringEnv.filter (fun el _ -> not @@ StringEnv.mem el !!pb) reference)
-        with
-        | Some (el, _), _ -> raise (MissingVariable (el, !@hd))
-        | _, Some (el, _) -> raise (MissingVariable (el, !@pb))
-        | None, None -> failwith "Problem in symmetric difference of maps"
+let rec add_vars_lvalue3 already_declared (uids_set, minimal_vars, vars_uids) lvalue = match !!lvalue with
+  | ParserAST.LValTuple l -> List.fold_left (add_vars_lvalue3 already_declared) (uids_set, minimal_vars, vars_uids) l
+  | ParserAST.LValDrop ->    (uids_set, minimal_vars, vars_uids)
+  | ParserAST.LValId id ->
+      let vars_uid = StringEnv.update !!id
+        (function
+        | None -> begin match StringEnv.find_opt !!id already_declared with Some uid -> Some uid | None -> Some (UIDIdent.get ()) end
+        | Some _ -> raise @@ VariableAlreadyDeclared (!!id, !@id))
+        vars_uids
+      in
+      let uid = StringEnv.find !!id vars_uid in
+      Env.add uid (re_identify id uid) uids_set, StringSet.add !!id minimal_vars, vars_uid
+
+let rec split3 = function
+  | [] -> [], [], []
+  | (a, b, c) :: tl -> let la, lb, lc = split3 tl in a :: la, b :: lb, c :: lc
+
+let rec same_vars_blocks already_declared (uids_set, minimal_vars, vars_uids) = function
+  | [] ->   (uids_set, minimal_vars, vars_uids)
+  | lst ->
+      let f already_declared block =
+        let (uids_set', minimal_vars_uids', vars_uids') = add_vars_block already_declared (uids_set, minimal_vars, vars_uids) block in
+        merge_string_sets already_declared vars_uids', (uids_set', minimal_vars_uids', vars_uids')
+      in
+      let uids_sets, minimal_varss, vars_uidss = split3 @@ snd @@ List.fold_left_map f already_declared lst in
+      List.fold_left merge_uids_sets uids_set uids_sets,
+      List.fold_left StringSet.inter (List.hd minimal_varss) minimal_varss,
+      List.fold_left merge_string_sets vars_uids vars_uidss
 
 
 and add_vars_decl already_declared vars_envs decl = match !!decl with
-  | ParserAST.Deq (lv, _) ->                add_vars_lvalue already_declared vars_envs lv
+  | ParserAST.Deq (lv, _) ->                add_vars_lvalue3 already_declared vars_envs lv
   | ParserAST.Dlocaleq (_, _) ->            vars_envs (* local eqs will be considered in the second pass, they are not global *)
   | ParserAST.Dreset (_, block) ->          add_vars_block already_declared vars_envs block
   | ParserAST.Dif (_, block1, block2) ->    same_vars_blocks already_declared vars_envs [block1; block2]
   | ParserAST.Dautomaton { a_handlers; _ } ->
-      let blocks = List.map (fun (handler: ParserAST.automaton_handler) -> relocalize handler.a_hloc handler.a_body) a_handlers in
+      let blocks = List.map (fun (handler: ParserAST.automaton_handler) -> handler.a_body) a_handlers in
       same_vars_blocks already_declared vars_envs blocks
   | ParserAST.Dmatch (_, { m_handlers; _ }) ->
-      let blocks = List.map (fun (handler: ParserAST.match_handler) -> relocalize handler.m_hloc handler.m_body) m_handlers in
+      let blocks = List.map (fun (handler: ParserAST.match_handler) -> handler.m_body) m_handlers in
       same_vars_blocks already_declared vars_envs blocks
 
 and add_vars_block already_declared vars_envs = List.fold_left (fun map decl -> add_vars_decl already_declared map decl) vars_envs
@@ -198,8 +208,8 @@ and decl (constrs_uids, _, const_uids, fun_set, params_order, (uids_set, vars_ui
       let uids_set, eqs = block env eqs in
       uids_set, Dreset (exp exp_env condition, eqs)
   | ParserAST.Dif (condition, block1, block2) ->
-      let uids_set1, block1 = block env !!block1 in
-      let uids_set2, block2 = block env !!block2 in
+      let uids_set1, block1 = block env block1 in
+      let uids_set2, block2 = block env block2 in
       merge_uids_sets uids_set1 uids_set2, Dif (static_exp_full static_env condition, block1, block2)
   | ParserAST.Dmatch (switch, matcher0) ->
       let uids_set, matcher0 = matcher env matcher0 in
@@ -238,9 +248,9 @@ let body (constrs_uids, enum_constrs, const_uids, fun_set, params_order, input_v
     |> List.to_seq |> StringEnv.of_seq
   in
   let inouts_vars = StringEnv.merge merge_idents_uid input_vars output_vars in
-  let uids_set, vars_uids = add_vars_block inouts_vars (input_set, input_vars) !!lst in
+  let uids_set, minimal_vars_uids, vars_uids = add_vars_block inouts_vars (input_set, StringSet.empty, input_vars) !!lst in
   try
-    let pb, _ = StringEnv.choose @@ StringEnv.filter (fun el _ -> not @@ StringEnv.mem el vars_uids) output_vars in
+    let pb, _ = StringEnv.choose @@ StringEnv.filter (fun el _ -> not @@ StringSet.mem el minimal_vars_uids) output_vars in
     raise (MissingVariable (pb, !@lst))
   with Not_found -> ();
   block (constrs_uids, enum_constrs, const_uids, fun_set, params_order, (uids_set, vars_uids)) !!lst

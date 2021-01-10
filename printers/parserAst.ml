@@ -203,8 +203,8 @@ and print_decl_desc = function
   | Dif (se, b1, b2) ->
      dprintf "@[if@ %t@ then@]@;<1 2>@[<v>%t@]@ else@;<1 2>@[<v>%t@]@ end if"
         (print_sexp se)
-        (print_block !!b1)
-        (print_block !!b2)
+        (print_block b1)
+        (print_block b2)
 
 and print_decl eq = print_decl_desc eq.desc
 and print_block b = print_list_naked dprint_newline print_decl b

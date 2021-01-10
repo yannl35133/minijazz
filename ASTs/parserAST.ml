@@ -147,7 +147,7 @@ and decl_desc =
   | Dreset     of exp * decl list (* reset eq every e *)
   | Dautomaton of automaton
   | Dmatch     of (exp * matcher)
-  | Dif        of static_exp * decl list localized * decl list localized
+  | Dif        of static_exp * decl list * decl list
 
 and decl = decl_desc localized
 

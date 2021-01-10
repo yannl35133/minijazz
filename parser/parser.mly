@@ -261,8 +261,8 @@ let decl_desc :=
   | RESET; eqs=block; EVERY; cond=exp;      { Dreset (cond, eqs) }
   | ~=automaton;                            < Dautomaton >
   | ~=matcher;                              < Dmatch >
-  | IF; c=static_exp; THEN; b1=localize(block);
-    ELSE; b2=localize(block); END; IF;      { Dif (c, b1, b2) }
+  | IF; c=static_exp; THEN; b1=block;
+    ELSE; b2=block; END; IF;      { Dif (c, b1, b2) }
 
 let block := slist_optlast(decl, ";")
 

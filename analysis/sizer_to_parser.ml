@@ -202,8 +202,8 @@ and cvt_decl_desc (d:decl_desc) : ParserAST.decl_desc =
   | Dreset (e, eqs) -> Dreset (cvt_exp e, cvt_block eqs)
   | Dautomaton a -> Dautomaton (cvt_automaton a)
   | Dmatch (e, m) -> Dmatch (cvt_state_exp e, cvt_match m)
-  | Dif (c, b1, b2) -> (* The localizations are lost *)
-    Dif (cvt_static_bool_exp c, relocalize !@c @@ cvt_block b1,  relocalize !@c @@ cvt_block b2)
+  | Dif (c, b1, b2) ->
+    Dif (cvt_static_bool_exp c, cvt_block b1, cvt_block b2)
 
 and cvt_decl (d:decl) : ParserAST.decl = relocalize !@d @@ cvt_decl_desc !!d
 
