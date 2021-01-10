@@ -14,17 +14,17 @@ type netlist_size = size CommonAST.netlist_type
 type global_size = size CommonAST.global_type
 
 type 'a sized = {
-  ps_desc: 'a;
-  ps_loc: Location.location;
-  ps_size: netlist_size
+  si_desc: 'a;
+  si_loc: Location.location;
+  si_size: netlist_size
 }
 
-let (!$!) = fun obj -> obj.ps_desc
-let (!$@) = fun obj -> obj.ps_loc
-let (!$$) = fun obj -> obj.ps_size
+let (!$!) = fun obj -> obj.si_desc
+let (!$@) = fun obj -> obj.si_loc
+let (!$$) = fun obj -> obj.si_size
 
 let size desc loc size =
-  { ps_desc = desc; ps_loc = loc; ps_size = size }
+  { si_desc = desc; si_loc = loc; si_size = size }
 
 type 'a global_sized = ('a, size) CommonAST.global_typed
 

@@ -81,6 +81,11 @@ let stuple  (x, o, c) == o; ~=slist  (x, ","); c; <>
 let sntuple (x, o, c) == o; ~=snlist (x, ","); c; <>
 let tuple (x) == stuple(x, "(", ")")
 
+let slist_optlast (x, sep) :=
+  |                                       { [] }
+  | ~=x;                                  { [x] }
+  | ~=x; sep; ~=slist_optlast (x, sep);   < (::) >
+
 let snlist_optlast (x, sep) :=
   | ~=x; sep?;                            { [x] }
   | ~=x; sep; ~=snlist_optlast (x, sep);  < (::) >
@@ -220,7 +225,7 @@ let state :=
   | c = constructor; { c }
 
 let match_handler :=
-  | BAR; m_state=state; ARROW; m_body=decl*;
+  | BAR; m_state=state; ARROW; m_body=block;
         { { m_state; m_body; m_hloc = Loc $sloc } }
 
 let matcher :=
@@ -236,12 +241,12 @@ let escape_list :=
   | UNLESS; l=snlist(escape, ELSE); r=escape_list;  { fst r, l @ snd r }
 
 let automaton_handler :=
-  // | BAR; a_state = state; ARROW; a_body = decl*; DONE;
+  // | BAR; a_state = state; ARROW; a_body = block; DONE;
   //     { { a_state; a_body; a_weak_transition = []; a_strong_transition = [] } }
-  | BAR; a_state = state; ARROW; a_body = decl*; THEN; e = exp;
+  | BAR; a_state = state; ARROW; a_body = block; THEN; e = exp;
       { { a_state; a_body; a_hloc = Loc $sloc; a_strong_transition = [];
           a_weak_transition = [localize $sloc (EConst (VBit true)), e] } }
-  | BAR; a_state = state; ARROW; a_body = decl*; es = escape_list;
+  | BAR; a_state = state; ARROW; a_body = block; es = escape_list;
       { { a_state; a_body; a_hloc = Loc $sloc;
           a_weak_transition = fst es; a_strong_transition = snd es } }
 
@@ -250,15 +255,15 @@ let automaton :=
 
 let decl == localize(decl_desc)
 let decl_desc :=
-  | lv=lvalue; "="; e=exp; ";";             { Deq (lv, e) }
-  | LOCAL; lv=lvalue; "="; e=exp; ";";      { Dlocaleq (lv, e) }
-  | RESET; eqs=decl*; EVERY; cond=exp;";";  { Dreset (cond, eqs) }
+  | lv=lvalue; "="; e=exp;                  { Deq (lv, e) }
+  | LOCAL; lv=lvalue; "="; e=exp;           { Dlocaleq (lv, e) }
+  | RESET; eqs=block; EVERY; cond=exp;      { Dreset (cond, eqs) }
   | ~=automaton;                            < Dautomaton >
   | ~=matcher;                              < Dmatch >
-  | IF; c=static_exp; THEN; b1=localize(decl*);
-    ELSE; b2=localize(decl*); END; IF;      { Dif (c, b1, b2) }
+  | IF; c=static_exp; THEN; b1=localize(block);
+    ELSE; b2=localize(block); END; IF;      { Dif (c, b1, b2) }
 
-
+let block := slist_optlast(decl, ";")
 
 
 // Declarations (of equations and automata)
@@ -289,7 +294,7 @@ probe_decls:
 let node :=
   ~=node_inline; node_name=ident; ~=node_params;
     "("; node_inputs=slist(typed_ident, ","); ")"; "="; ~=node_outputs;
-  WHERE; node_body=localize(decl*); node_probes=probe_decls; END; WHERE; ";"?;
+  WHERE; node_body=localize(block); node_probes=probe_decls; END; WHERE; ";"?;
     { { node_inline; node_name; node_params;
         node_inputs; node_outputs; node_body;
         node_probes; node_loc = Loc $sloc } }
