@@ -127,14 +127,33 @@ let rec exp (fun_env, var_env as env) constraints e = match !%!e with
       let new_constraints = List.concat @@ List.rev_map2 eq_to_constraints dims_in @@ List.map (!&&) dim_args in
       new_constraints @ constraints, presize (EMem (mem_kind, params, dim_args)) !%@e dims_out
 
+
+let rec state_exp fun_env constraints e = match e.s_desc with
+  | EConstr c -> constraints, re_state_type e @@ EConstr c
+  | ESMux (a, b, c) ->
+      let constraints, a' = exp fun_env constraints a in
+      let constraints, b' = state_exp fun_env constraints b in
+      let constraints, c' = state_exp fun_env constraints c in
+      constraints, re_state_type e @@ ESMux (a', b', c')
+
+let state_transition_exp fun_env constraints e = match e.st_desc with
+    | EContinue a ->
+        let constraints, a' = state_exp fun_env constraints a in
+        constraints, re_state_transition_type e @@ EContinue a'
+    | ERestart a ->
+      let constraints, a' = state_exp fun_env constraints a in
+      constraints, re_state_transition_type e @@ ERestart a'
+
 let tritype_exp env constraints : NetlistDimensionedAST.tritype_exp -> constraints * NetlistConstrainedAST.tritype_exp = function
   | Exp e ->
       let constraints, e' = exp env constraints e in
       constraints, Exp e'
   | StateExp e ->
-      constraints, StateExp e
+      let constraints, e' = state_exp env constraints e in
+      constraints, StateExp e'
   | StateTransitionExp e ->
-      constraints, StateTransitionExp e
+      let constraints, e' = state_transition_exp env constraints e in
+      constraints, StateTransitionExp e'
 
 let rec dim_to_blank_presize name = function
   | NDim n ->  TNDim (List.init n (fun idim -> PSVar (name, idim, UIDUnknownStatic.get ())))
@@ -182,7 +201,8 @@ let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = m
       constraints, relocalize !@d @@ Dreset (e', b')
   | Dmatch (e, m) ->
       let constraints, m' = matcher env constraints m in
-      constraints, relocalize !@d @@ Dmatch (e, m')
+      let constraints, e' = state_exp env constraints e in
+      constraints, relocalize !@d @@ Dmatch (e', m')
   | Dautomaton a ->
       let constraints, a' = automaton env constraints a in
       constraints, relocalize !@d @@ Dautomaton a'
@@ -196,7 +216,10 @@ and matcher env constraints ({ m_handlers; _} as matcher) =
   constraints, { matcher with m_handlers }
 
 and transition env =
-  List.fold_left_map (fun c (e1, e2) -> let c', e1' = exp env c e1 in c', (e1', e2))
+  List.fold_left_map (fun constraints (e1, e2) ->
+    let constraints, e1' = exp env constraints e1 in
+    let constraints, e2' = state_transition_exp env constraints e2 in
+    constraints, (e1', e2'))
 
 and automaton_handler env constraints ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
   let constraints, a_body = block env constraints a_body in
@@ -208,19 +231,19 @@ and automaton fun_env constraints ({ a_handlers; _} as auto) =
   let constraints, a_handlers = constructenv_map_fold2 (automaton_handler fun_env) constraints a_handlers in
   constraints, { auto with a_handlers }
 
-and constructenv_map_fold1 handler_one dimensioned s_handlers = (* Typing would not le me use the same function twice *)
+and constructenv_map_fold1 handler_one constraints s_handlers = (* Typing would not le me use the same function twice *)
   ConstructEnv.fold
-    (fun uid handler (dimensioned, re_handlers') ->
-      let dimensioned, handler' = handler_one dimensioned handler in
-      dimensioned, ConstructEnv.add uid handler' re_handlers'
-    ) s_handlers (dimensioned, ConstructEnv.empty)
+    (fun uid handler (constraints, re_handlers') ->
+      let constraints, handler' = handler_one constraints handler in
+      constraints, ConstructEnv.add uid handler' re_handlers'
+    ) s_handlers (constraints, ConstructEnv.empty)
 
-and constructenv_map_fold2 handler_one dimensioned s_handlers =
+and constructenv_map_fold2 handler_one constraints s_handlers =
   ConstructEnv.fold
-    (fun uid handler (dimensioned, re_handlers') ->
-      let dimensioned, handler' = handler_one dimensioned handler in
-      dimensioned, ConstructEnv.add uid handler' re_handlers'
-    ) s_handlers (dimensioned, ConstructEnv.empty)
+    (fun uid handler (constraints, re_handlers') ->
+      let constraints, handler' = handler_one constraints handler in
+      constraints, ConstructEnv.add uid handler' re_handlers'
+    ) s_handlers (constraints, ConstructEnv.empty)
 
 and block env = List.fold_left_map (decl env)
 

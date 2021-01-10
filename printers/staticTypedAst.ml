@@ -88,10 +88,10 @@ let rec print_decl_desc = function
         (semicolon_sep)
   | Dautomaton auto ->
      dprintf "@[<v2>automaton@ %t@]@ end"
-      (print_automaton (print_exp, print_state_transition_exp, print_decl) auto)
+      (print_automaton (print_exp, print_state_transition_exp print_exp, print_decl) auto)
   | Dmatch (e, matcher) ->
     dprintf "@[<v2>match %t with@ %t@]@ end"
-      (print_state_exp e)
+      (print_state_exp print_exp e)
       (print_matcher print_decl matcher)
   | Dif (se, b1, b2) ->
      dprintf "@[if@ %t@ then@]@;<1 2>@[<v>%t@]@ else@;<1 2>@[<v>%t@]@ end if"
