@@ -168,31 +168,31 @@ let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = m
       let constraints, b' = block env constraints b in
       constraints, relocalize !@d @@ Dreset (e', b')
   | Dmatch (e, m) ->
-      let constraints, m' = matcher_one env constraints m in
+      let constraints, m' = matcher env constraints m in
       constraints, relocalize !@d @@ Dmatch (e, m')
   | Dautomaton a ->
-      let constraints, a' = automaton_one env constraints a in
+      let constraints, a' = automaton env constraints a in
       constraints, relocalize !@d @@ Dautomaton a'
 
-and match_handler_one env constraints ({ m_body; _} as handler) =
+and match_handler env constraints ({ m_body; _} as handler) =
   let constraints, m_body = block env constraints m_body in
   constraints, { handler with m_body }
 
-and matcher_one env constraints ({ m_handlers; _} as matcher) =
-  let constraints, m_handlers = constructenv_map_fold1 (match_handler_one env) constraints m_handlers in
+and matcher env constraints ({ m_handlers; _} as matcher) =
+  let constraints, m_handlers = constructenv_map_fold1 (match_handler env) constraints m_handlers in
   constraints, { matcher with m_handlers }
 
-and transition_one env =
+and transition env =
   List.fold_left_map (fun c (e1, e2) -> let c', e1' = exp env c e1 in c', (e1', e2))
 
-and automaton_handler_one env constraints ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
+and automaton_handler env constraints ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
   let constraints, a_body = block env constraints a_body in
-  let constraints, a_weak_transition = transition_one env constraints a_weak_transition in
-  let constraints, a_strong_transition = transition_one env constraints a_strong_transition in
+  let constraints, a_weak_transition = transition env constraints a_weak_transition in
+  let constraints, a_strong_transition = transition env constraints a_strong_transition in
   constraints, { handler with a_body; a_weak_transition; a_strong_transition}
 
-and automaton_one fun_env constraints ({ a_handlers; _} as auto) =
-  let constraints, a_handlers = constructenv_map_fold2 (automaton_handler_one fun_env) constraints a_handlers in
+and automaton fun_env constraints ({ a_handlers; _} as auto) =
+  let constraints, a_handlers = constructenv_map_fold2 (automaton_handler fun_env) constraints a_handlers in
   constraints, { auto with a_handlers }
 
 and constructenv_map_fold1 handler_one dimensioned s_handlers = (* Typing would not le me use the same function twice *)

@@ -20,7 +20,7 @@ let assert_bool = function
 let rec substitute_int var_env params = function
   | SInt n -> SInt n
   | SIConst id -> SIConst id
-  | SIParam i -> assert_int @@ (!!) @@ List.nth params i
+  | SIParam i -> assert_int @@ (!!) @@ List.nth params !**i
   | SIUnOp (op, se) -> SIUnOp (op, relocalize_fun (substitute_int var_env params) se)
   | SIBinOp (op, se1, se2) -> SIBinOp (op, relocalize_fun (substitute_int var_env params) se1, relocalize_fun (substitute_int var_env params) se2)
   | SIIf (c, se1, se2) -> SIIf (relocalize_fun (substitute_bool var_env params) c,
@@ -29,7 +29,7 @@ let rec substitute_int var_env params = function
 and substitute_bool var_env params = function
   | SBool b -> SBool b
   | SBConst id -> SBConst id
-  | SBParam i -> assert_bool @@ (!!) @@ List.nth params i
+  | SBParam i -> assert_bool @@ (!!) @@ List.nth params !**i
   | SBUnOp (op, se) -> SBUnOp (op, relocalize_fun (substitute_bool var_env params) se)
   | SBBinOp (op, se1, se2) -> SBBinOp (op, relocalize_fun (substitute_bool var_env params) se1, relocalize_fun (substitute_bool var_env params) se2)
   | SBBinIntOp (op, se1, se2) -> SBBinIntOp (op, relocalize_fun (substitute_int var_env params) se1, relocalize_fun (substitute_int var_env params) se2)
@@ -55,8 +55,13 @@ let rec presize_to_size var_env = function
       Size (substitute_int var_env params se)
 
 let rec netlist_presize_to_netlist_size var_env = function
-    | NetlistConstrainedAST.CDProd l -> TProd (List.map (netlist_presize_to_netlist_size var_env) l)
-    | NetlistConstrainedAST.CDDim l ->  TDim  (List.map (presize_to_size var_env) l)
+    | TProd l -> TProd (List.map (netlist_presize_to_netlist_size var_env) l)
+    | TNDim l -> TNDim (List.map (presize_to_size var_env) l)
+
+let global_presize_to_global_size var_env = function
+  | BNetlist ti -> BNetlist (netlist_presize_to_netlist_size var_env ti)
+  | BState s -> BState s
+  | BStateTransition s -> BStateTransition s
 
 let resize_fun f var_env e =
   size (f !&!e) !&@e @@ netlist_presize_to_netlist_size var_env !&&e
@@ -77,14 +82,54 @@ let rec exp var_env e =
   in
   resize_fun f var_env e
 
+let tritype_exp var_env = function
+  | Exp e ->                Exp (exp var_env e)
+  | StateExp e ->           StateExp e
+  | StateTransitionExp e -> StateTransitionExp e
+
 let rec lvalue var_env =
   let f = function
-    | NetlistConstrainedAST.LValDrop -> LValDrop
-    | NetlistConstrainedAST.LValId id -> LValId id
-    | NetlistConstrainedAST.LValTuple l -> LValTuple (List.map (lvalue var_env) l)
+    | LValDrop -> LValDrop
+    | LValId id -> LValId id
+    | LValTuple l -> LValTuple (List.map (lvalue var_env) l)
   in
-  resize_fun f var_env
+  (fun lval -> tritype (f !?!lval) !?@lval (global_presize_to_global_size var_env !??lval))
 
+
+let rec decl var_env : NetlistConstrainedAST.decl -> decl =
+  (relocalize_fun: 'a -> NetlistConstrainedAST.decl -> decl) @@ function
+  | Deq (lval, e) ->
+      Deq (lvalue var_env lval, tritype_exp var_env e)
+  | Dlocaleq (lval, e) ->
+      Dlocaleq (lvalue var_env lval, tritype_exp var_env e)
+  | Dif (c, b1, b2) ->
+      Dif (c, block var_env b1, block var_env b2)
+  | Dreset (e, b) ->
+      Dreset (exp var_env e, block var_env b)
+  | Dmatch (e, m) ->
+      Dmatch (e, matcher var_env m)
+  | Dautomaton a ->
+      Dautomaton (automaton var_env a)
+
+and match_handler var_env ({ m_body; _} as handler) =
+  { handler with m_body = block var_env m_body }
+
+and matcher var_env ({ m_handlers; _} as matcher) =
+  { matcher with m_handlers = ConstructEnv.map (match_handler var_env) m_handlers }
+
+and transition var_env =
+  List.map (fun (e1, e2) -> (exp var_env e1, e2))
+
+and automaton_handler var_env ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
+  let a_body = block var_env a_body in
+  let a_weak_transition   = transition var_env a_weak_transition in
+  let a_strong_transition = transition var_env a_strong_transition in
+  { handler with a_body; a_weak_transition; a_strong_transition}
+
+and automaton fun_env ({ a_handlers; _} as auto) =
+  { auto with a_handlers = ConstructEnv.map (automaton_handler fun_env) a_handlers }
+
+and block var_env = List.map (decl var_env)
 
 let eqs _var_env _ (* NetlistConstrainedAST.{ equations; dim_env }*) = assert false (* TODO *)
   (* let sized_equations = List.map (fun NetlistConstrainedAST.{ desc = { eq_left; eq_right }; loc } ->
@@ -102,31 +147,29 @@ let body _var_env _e = assert false (* TODO *)
    * ) e *)
 
 
-let starput var_env NetlistConstrainedAST.{desc = { name; presize }; loc } =
-  relocalize loc { name; size = relocalize_fun (netlist_presize_to_netlist_size var_env) presize }
+let starput var_env ({ ti_type; _ } as ti) =
+  { ti with ti_type = relocalize_fun (global_presize_to_global_size var_env) ti_type }
 
 
-
-let node var_env NetlistConstrainedAST.{ node_name_loc; node_loc; node_params; node_inline; node_inputs; node_outputs; node_body; node_probes } : node =
+let node var_env ({ node_inputs; node_outputs; node_body; node_variables; _ } as node) : node =
   let node_inputs  = List.map (starput var_env) node_inputs in
   let node_outputs = List.map (starput var_env) node_outputs in
-  {
+  let node_variables = Env.map (fun ti -> { ti with b_type = global_presize_to_global_size var_env ti.b_type }) node_variables in
+  { node with
     node_inputs;
     node_outputs;
     node_body = body var_env node_body;
-    node_name_loc; node_loc; node_inline; node_params; node_probes
+    node_variables
   }
 
-let program NetlistConstrainedAST.{ p_consts; p_consts_order; p_nodes; constraints } : program =
+let program ({ p_nodes; _ } as program, constraints) : program =
   try
     let var_env = Constraints_solver.solve_constraints constraints in
-    {
-      p_enum = [];
-      p_consts; p_consts_order;
-      p_nodes = Env.map (node var_env) p_nodes;
+    { program with
+      p_nodes = FunEnv.map (node var_env) p_nodes;
     }
   with
     | CouldNotSize (id, i) ->
-        Format.eprintf "%aCould not size dimension %i of variable %s@." Location.print_location !@id i !!id; raise Errors.ErrorDetected
+        Format.eprintf "%aCould not size dimension %i of variable %s@." Location.print_location !*@id i !*!id; raise Errors.ErrorDetected
     | CouldNotInfer (fname, loc, i) ->
         Format.eprintf "%aCould not infer the value of parameter number %i of function %s@." Location.print_location loc i fname; raise Errors.ErrorDetected

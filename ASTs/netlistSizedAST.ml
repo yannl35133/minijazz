@@ -13,10 +13,21 @@ type netlist_size = size CommonAST.netlist_type
 
 type global_size = size CommonAST.global_type
 
-type 'a sized = ('a, netlist_size) trityped
+type 'a sized = {
+  ps_desc: 'a;
+  ps_loc: Location.location;
+  ps_size: netlist_size
+}
+
+let (!$!) = fun obj -> obj.ps_desc
+let (!$@) = fun obj -> obj.ps_loc
+let (!$$) = fun obj -> obj.ps_size
+
+let size desc loc size =
+  { ps_desc = desc; ps_loc = loc; ps_size = size }
+
 type 'a global_sized = ('a, size) CommonAST.global_typed
 
-let size: 'a -> 'b -> 'c -> 'a sized = tritype
 
 type exp_desc =
   | EConst  of value

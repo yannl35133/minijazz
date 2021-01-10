@@ -43,7 +43,7 @@ type new_context =
 
 and static_int_exp_desc =
   | UInt      of int
-  | UIParam   of int
+  | UIParam   of parameter
   | UIConst   of ident
   | UIUnknown of unknown_description * new_context
   | UIUnOp    of        int_unop * static_int_exp
@@ -52,7 +52,7 @@ and static_int_exp_desc =
 
 and static_bool_exp_desc =
   | UBool     of bool
-  | UBParam   of int
+  | UBParam   of parameter
   | UBConst   of ident
   | UBUnknown of unknown_description * new_context
   | UBUnOp    of       bool_unop * static_bool_exp
@@ -73,101 +73,18 @@ let sintexp = fun se -> SIntExp se
 
 (* ------------------------------------------------------------------------------------------------------ *)
 
-(* Printing Static expression *)
-
 open Format
-open CommonAST
-
-(* Helpers *)
-
-let dprint_bool b = dprintf "%s" (if b then "1" else "0")
-let dprint_nop = dprintf ""
-
-
-let rec print_list_naked sep printer l =
-  match l with
-  | []     -> dprint_nop
-  | [h]    -> printer h
-  | h :: t ->
-      dprintf "%t%t%t"
-        (printer h)
-        sep
-        (print_list_naked sep printer t)
-
-let print_list del sep printer l =
-  del (print_list_naked sep printer l)
-
-let print_list_if_nonempty del sep printer l =
-  match l with
-  | [] -> dprint_nop
-  | _  -> print_list del sep printer l
-
-let dprint_if b printer = if b then printer else dprint_nop
-let dprint_newline = dprintf "@ "
-
-
-let binop_sep str = dprintf " %s@ " str
-let star_sep = binop_sep "*"
-let comma_sep = dprintf ",@ "
-let semicolon_sep = dprintf ";@ "
-
-let delim prefix suffix printer =
-  dprintf "@[<hv 2>%t@,%t@;<0 -2>%t@]"
-    prefix
-    printer
-    suffix
-
-
-let par  = delim (dprintf "(") (dprintf ")")
-let chev = delim (dprintf "<") (dprintf ">")
-let brak = delim (dprintf "[") (dprintf "]")
-
-
-(* CommonAST *)
-
-let print_ident (id: ident) = dprintf "%s" id.desc
-
-let print_mem_kind_desc = function
-  | MRom -> dprintf "rom"
-  | MRam -> dprintf "ram"
-
-let print_mem_kind mem_kind = print_mem_kind_desc mem_kind.desc
-
-let print_inline_status = function
-  | Inline    -> dprintf "inline "
-  | NotInline -> dprint_nop
-
-
-let print_int_op = function
-  | SAdd -> "+" | SMinus -> "-" | SMult -> "*" | SDiv -> "/" | SPower -> "^"
-let print_int_bool_op = function
-  | SEq -> "=" | SNeq -> "!="
-  | SLt -> "<" | SLeq -> "<=" | SGt -> ">" | SGeq -> ">="
-let print_bool_op = function
-  | SOr -> "||" | SAnd -> "&&"
-
-let print_int_unop unop =
-  let op_str =
-    match unop with
-    | SNeg -> "-"
-  in
-  dprintf "%s" op_str
-
-let print_bool_unop unop =
-  let op_str =
-    match unop with
-    | SNot -> "!"
-  in
-  dprintf "%s" op_str
+open Printers.CommonAst
+open Printers.StaticTypedPartialAst
 
 let print_desc = function
-  | VarDim (name, i) -> dprintf "%s.%i" !!name i
+  | VarDim (name, i) -> dprintf "%s.%i" !*!name i
   | Param (fname, _, i) -> dprintf "%s#%i" fname i
 
 let rec print_unknown d = function
   | Uid uid ->
       dprintf "?%a(%t)"
-        UniqueId.print uid
+        UIDUnknownStatic.print uid
         (print_desc d)
   | Recontextualize (params, r) ->
       dprintf "%t%t"
@@ -176,7 +93,7 @@ let rec print_unknown d = function
 
 and print_int_exp_desc = function
   | UInt n     -> dprintf "%i" n
-  | UIParam i  -> dprintf "#%i" i
+  | UIParam i  -> dprintf "%s" i.id_desc
   | UIUnknown (d, nc) ->
         print_unknown d nc
   | UIConst id -> print_ident id
@@ -197,7 +114,7 @@ and print_int_exp_desc = function
 
 and print_bool_exp_desc = function
   | UBool b    -> dprint_bool b
-  | UBParam i  -> dprintf "#%i" i
+  | UBParam i  -> dprintf "%s" i.id_desc
   | UBConst id -> print_ident id
   | UBUnknown (d, nc) ->
       print_unknown d nc
@@ -231,7 +148,7 @@ and print_bitype_exp se = print_bitype_exp_desc se.desc
 
 let print_opt_int_exp_desc = function
   | SUnknown uid ->
-      dprintf "?%a" UniqueId.print uid
+      dprintf "?%a" UIDUnknownStatic.print uid
   | SExp se -> print_int_exp_desc se
 
 let print_opt_int_exp se = print_opt_int_exp_desc se.desc
@@ -256,10 +173,10 @@ let print_constraints l =
 (* ---------------------------------------------------------------------------------- *)
 
 
-module UIDEnv = Map.Make(UniqueId)
+module UIDEnv = Map.Make (UIDUnknownStatic)
 
 type union_find =
-  | Link of unknown_description * UniqueId.t
+  | Link of unknown_description * UIDUnknownStatic.t
   | Indirect of Location.location * union_find
   | Direct of StaticTypedPartialAST.static_bitype_exp
 
@@ -268,13 +185,13 @@ type env = union_find UIDEnv.t
 (* ----------------------------------------------------------------------------------- *)
 
 let rec print_union_find = function
-  | Link (d, uid) -> dprintf "%t@ ?%a" (par @@ print_desc d) UniqueId.print uid
+  | Link (d, uid) -> dprintf "%t@ ?%a" (par @@ print_desc d) UIDUnknownStatic.print uid
   | Indirect (_loc, un) -> dprintf "(loc) =@ %t" @@ print_union_find un
   | Direct exp -> dprintf "@[%t@]" (Printers.StaticTypedPartialAst.print_bitype_exp exp)
 
 let print_env uid union_find =
   dprintf "?%a = @[%t@]"
-    UniqueId.print uid
+    UIDUnknownStatic.print uid
     (print_union_find union_find)
 
 (* ----------------------------------------------------------------------------------- *)
@@ -333,7 +250,7 @@ let rec aux_substitute_int params se =
   | UInt n ->                     reloc @@ UInt n
   | UIConst id ->                 reloc @@ UIConst id
   | UIParam i ->                  begin
-      match List.nth_opt params i with
+      match List.nth_opt params !**i with
         | None ->                                failwith "Param list too short"
         | Some { desc = UBoolExp _; loc = _ } -> failwith "Static type error"
         | Some { desc = UIntExp se; loc } ->     relocalize loc se
@@ -349,7 +266,7 @@ and aux_substitute_bool params se =
   | UBool b ->                    reloc @@ UBool b
   | UBConst id ->                 reloc @@ UBConst id
   | UBParam i ->                  begin
-    match List.nth_opt params i with
+    match List.nth_opt params !**i with
       | None ->                                failwith "Param list too short"
       | Some { desc = UIntExp _; loc = _ } ->  failwith "Static type error"
       | Some { desc = UBoolExp se; loc } ->    relocalize loc se
@@ -420,7 +337,7 @@ and substitute_env_bool env se =
 
 
 let rec presize_to_uiexp = function
-  | PSVar (name, i, uid) -> relocalize !@name (UIUnknown (VarDim (name, i), Uid uid))
+  | PSVar (name, i, uid) -> relocalize !*@name (UIUnknown (VarDim (name, i), Uid uid))
   | PSConst se -> relocalize_fun to_uiexp se
   | PSOtherContext (fname, loc, params, ps) ->
       let f_param i = relocalize_fun (to_ubiexp fname loc i) in
@@ -430,8 +347,8 @@ let rec presize_to_uiexp = function
 
 let rec maybe_equal_int = function
   | UInt n1,    UInt n2 -> b_to_t (n1 = n2)
-  | UIParam i1, UIParam i2 -> b_to_t (i1 = i2)
-  | UIConst v1, UIConst v2 -> b_to_t (!!v1 = !!v2)
+  | UIParam i1, UIParam i2 -> b_to_t (!**i1 = !**i2)
+  | UIConst v1, UIConst v2 -> b_to_t (!**v1 = !**v2)
   | UIUnknown (_, nc1), UIUnknown (_, nc2) -> b_to_t (extract_uid nc1 = extract_uid nc2)
   | (UInt _ | UIParam _ | UIConst _ | UIUnknown _), (UInt _ | UIParam _ | UIConst _ | UIUnknown _) -> Maybe   (* We don't want to rely on the equality of two value types -- missing ifs *)
   | UIUnOp (SNeg, se1), UIUnOp (SNeg, se2) -> maybe_equal_int (!!se1, !!se2)
@@ -441,8 +358,8 @@ let rec maybe_equal_int = function
 
 and maybe_equal_bool = function
   | UBool b1,   UBool b2 -> b_to_t (b1 = b2)
-  | UBParam i1, UBParam i2 -> b_to_t (i1 = i2)
-  | UBConst v1, UBConst v2 -> b_to_t (!!v1 = !!v2)
+  | UBParam i1, UBParam i2 -> b_to_t (!**i1 = !**i2)
+  | UBConst v1, UBConst v2 -> b_to_t (!**v1 = !**v2)
   | UBUnknown (_, nc1), UBUnknown (_, nc2) -> b_to_t (extract_uid nc1 = extract_uid nc2)
   | (UBool _ | UBParam _ | UBConst _ | UBUnknown _), (UBool _ | UBParam _ | UBConst _ | UBUnknown _) -> Maybe   (* We don't want to rely on the equality of two value types -- missing ifs *)
   | UBUnOp (SNot, se1), UBUnOp (SNot, se2) -> maybe_equal_bool (!!se1, !!se2)
