@@ -15,6 +15,8 @@ let rec eq_to_constraints c1 c2 = match c1, c2 with
 
 let global_eq_to_constraints (c1: global_presize) c2 = match c1, c2 with
   | BNetlist t1, BNetlist t2 -> eq_to_constraints t1 t2
+  | BState s1, BState s2 -> if s1 <> s2 then failwith "Mistype in state" else []
+  | BStateTransition s1, BStateTransition s2 -> if s1 <> s2 then failwith "Mistype in state transition" else []
   | _ -> failwith "Mix between states and netlists"
 
 let tritype_of_exp = function
@@ -129,21 +131,24 @@ let rec exp (fun_env, var_env as env) constraints e = match !%!e with
 
 
 let rec state_exp fun_env constraints e = match e.s_desc with
-  | EConstr c -> constraints, re_state_type e @@ EConstr c
+  | ESConstr c -> constraints, re_state_type e @@ ESConstr c
   | ESMux (a, b, c) ->
       let constraints, a' = exp fun_env constraints a in
       let constraints, b' = state_exp fun_env constraints b in
       let constraints, c' = state_exp fun_env constraints c in
       constraints, re_state_type e @@ ESMux (a', b', c')
-  | _ -> assert false
+  | ESVar id -> constraints, re_state_type e @@ ESVar id
+  | ESReg a ->
+      let constraints, a' = state_exp fun_env constraints a in
+      constraints, re_state_type e @@ ESReg a'
 
 let state_transition_exp fun_env constraints e = match e.st_desc with
-    | EContinue a ->
+    | ESTContinue a ->
         let constraints, a' = state_exp fun_env constraints a in
-        constraints, re_state_transition_type e @@ EContinue a'
-    | ERestart a ->
+        constraints, re_state_transition_type e @@ ESTContinue a'
+    | ESTRestart a ->
       let constraints, a' = state_exp fun_env constraints a in
-      constraints, re_state_transition_type e @@ ERestart a'
+      constraints, re_state_transition_type e @@ ESTRestart a'
 
 let tritype_exp env constraints : NetlistDimensionedAST.tritype_exp -> constraints * NetlistConstrainedAST.tritype_exp = function
   | Exp e ->

@@ -154,15 +154,17 @@ let rec cvt_exp_desc (e:exp_desc) : ParserAST.exp_desc =
 and cvt_exp (e:exp) = relocalize !$@e @@ cvt_exp_desc !$!e
 
 let rec cvt_state_exp_desc : 'a -> ParserAST.exp_desc = function
-  | EConstr c -> EConstr (cvt_ident c)
+  | ESConstr c -> EConstr (cvt_ident c)
   | ESMux (e, es1, es2) -> ESupOp (no_localize "mux", [cvt_exp e; cvt_state_exp es1; cvt_state_exp es2])
-  | _ -> assert false
+  | ESReg a -> EReg (cvt_state_exp a)
+  | ESVar id -> EVar (cvt_ident id)
+
 
 and cvt_state_exp (e: exp state_exp) = relocalize e.s_loc @@ cvt_state_exp_desc e.s_desc
 
 let cvt_state_transition_exp_desc : exp state_transition_exp_desc -> ParserAST.exp_desc = function
-  | EContinue e -> EContinue (cvt_state_exp e)
-  | ERestart e ->  ERestart (cvt_state_exp e)
+  | ESTContinue e -> EContinue (cvt_state_exp e)
+  | ESTRestart e ->  ERestart (cvt_state_exp e)
 
 let cvt_state_transition_exp (e: exp state_transition_exp) = relocalize e.st_loc @@ cvt_state_transition_exp_desc e.st_desc
 
