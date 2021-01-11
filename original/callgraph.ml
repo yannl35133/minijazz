@@ -1,4 +1,4 @@
-(* (***********************************************************************)
+(***********************************************************************)
 (*                                                                     *)
 (*                             MiniJazz                                *)
 (*                                                                     *)
@@ -23,7 +23,7 @@
 (*                                                                     *)
 (***********************************************************************)
 
-open Ast
+open Ast_old
 open Mapfold
 open Static
 open Static_utils
@@ -36,13 +36,13 @@ let expect_bool env se =
   let se = simplify env se in
   match se.se_desc with
     | SBool v -> v
-    | _ -> Format.eprintf "Expected a boolean@."; raise ErrorDetected
+    | _ -> Format.eprintf "Expected a boolean@."; raise Error
 
 let expect_int env se =
   let se = simplify env se in
   match se.se_desc with
     | SInt v -> v
-    | _ -> Format.eprintf "Expected an integer@."; raise ErrorDetected
+    | _ -> Format.eprintf "Expected an integer@."; raise Error
 
 let simplify_ty env ty = match ty with
   | TBitArray se -> TBitArray (simplify env se)
@@ -67,7 +67,7 @@ let vars_of_pat env pat =
   in
     _vars_of_pat [] pat
 
-let ident_of_exp e = match !!e with
+let ident_of_exp e = match e.e_desc with
   | Evar x -> x
   | _ -> assert false
 
@@ -101,7 +101,7 @@ let do_subst_block m subst b  =
   in
   let exp funs (subst, m) e =
     let e, _ = Mapfold.exp funs (subst, m) e in
-    match !!e with
+    match e.e_desc with
     | Evar x ->
         let e = if IdentEnv.mem x subst then IdentEnv.find x subst else e in
         e, (subst, m)
@@ -131,13 +131,13 @@ let check_params loc m param_names params cl =
   with Unsatisfiable(c) ->
     Format.eprintf "%aThe following constraint is not satisfied: %a@."
       print_location loc  Printer.print_static_exp c;
-    raise ErrorDetected
+    raise Error
 
 let rec inline_node loc env m call_stack f params args pat =
   (* Check that the definition is sound *)
   if List.mem (f, params) call_stack then (
     Format.eprintf "The definition of %s is circular.@." f;
-    raise ErrorDetected
+    raise Error
   );
   let call_stack = (f, params)::call_stack in
 
@@ -154,7 +154,7 @@ let rec inline_node loc env m call_stack f params args pat =
   b, call_stack
 
 and translate_eq env m subst call_stack (eqs, vds) ((pat, e) as eq) =
-  match !!e with
+  match e.e_desc with
     (* Inline all nodes  or only those with params or declared inline
        if no_inline_all = true *)
     | Ecall(f, params, args) ->
@@ -162,7 +162,7 @@ and translate_eq env m subst call_stack (eqs, vds) ((pat, e) as eq) =
             let n = find_node f in
             if not !Cli_options.no_inline_all
               || not (Misc.is_empty params)
-              || n.n_inlined = Inline then
+              || n.n_inlined = Inlined then
               let params = List.map (simplify m) params in
               let b, call_stack = inline_node e.e_loc env m call_stack f params args pat in
               let new_eqs, new_vds = translate_block env m subst call_stack b in
@@ -214,11 +214,10 @@ let program p =
       let n = List.find (fun n -> n.n_name = !Cli_options.main_node) p.p_nodes in
       if n.n_params <> [] then (
         Format.eprintf "The main node '%s' cannot have static parameters@." n.n_name;
-        raise ErrorDetected
+        raise Error
       );
       { p with p_nodes = [node m n] }
     with Not_found ->
       Format.eprintf "Cannot find the main node '%s'@." !Cli_options.main_node;
-      raise ErrorDetected
+      raise Error
   )
- *)

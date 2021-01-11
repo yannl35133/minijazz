@@ -4,6 +4,6 @@
    (:standard -warn-error -A))))
 
 (library
- (name analysis)
+ (name original)
  (wrapped false)
- (libraries str global asts printers))
+ (libraries global netlist))

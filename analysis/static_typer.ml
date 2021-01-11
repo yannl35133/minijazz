@@ -277,7 +277,7 @@ let node enum_env fun_env consts_env ({ node_params; node_inputs; node_outputs; 
 let const consts_env ({ const_decl; _ } as const) =
   { const with const_decl = static_bitype_exp consts_env const_decl }
 
-let program ({ p_enums; p_consts; p_consts_order; p_nodes } : StaticScopedAST.program) : program =
+let program ({ p_enums; p_consts; p_consts_order; p_nodes; p_nodes_order } : StaticScopedAST.program) : program =
   let type_const { const_decl; _ } = match !!const_decl with
     | SIntExp _ -> TInt
     | SBoolExp _ -> TBool
@@ -292,4 +292,5 @@ let program ({ p_enums; p_consts; p_consts_order; p_nodes } : StaticScopedAST.pr
     p_consts = Env.map (const consts_env) p_consts;
     p_consts_order;
     p_nodes = FunEnv.map (node p_enums fun_env consts_env) p_nodes;
+    p_nodes_order
   }

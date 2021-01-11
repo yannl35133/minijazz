@@ -85,17 +85,12 @@ let compile_impl filename =
   end;
 
   let ic, lexbuf = lexbuf_from_file filename in
-  let _net_name = (Filename.chop_suffix filename ".mj") ^ ".net" in
-  (* let net = open_out net_name in *)
-  let close_all_files () =
-    close_in ic;
-    (* close_out net *)
-  in
+  let net_name = (Filename.chop_suffix filename ".mj") ^ ".net" in
   try
     Format.printf "parsing %s@." filename;
     base_path := Filename.dirname filename;
 
-    (* let pp = Printer.print_program stdout in *)
+    let pp = Printer.print_program stdout in
     (* Parsing of the file *)
     let parsing_ast = parse lexbuf in
 
@@ -107,28 +102,37 @@ let compile_impl filename =
     let dimensioned_program = Netlist_dimensioning.program static_typed_ast in
     let constrained_program = Netlist_constrain.program dimensioned_program in
 
-    let _sized_program = Netlist_sizer.program constrained_program in
+    let sized_program = Netlist_sizer.program constrained_program in
+
+    (* let p = Automaton.program sized_program in
+     * Printers.ParserAst.print_program (Sizer_to_parser.program p)
+     *   Format.std_formatter; *)
+
+    (* let _ = exit 0 in *)
 
     Format.printf "done typing@.";
 
-    (* let p = pass "Scoping" true Scoping.program p pp in
-     *
-     * let p = pass "Typing" true Typing.program p pp in
-     *
-     * let p = pass "Normalize" true Normalize.program p pp in
-     *
-     * let p = pass "Callgraph" true Callgraph.program p pp in *)
+    let p = Sized_to_old.program sized_program in
 
-    (* let p = pass "Simplify" true Simplify.program p pp in *)
+    let p = pass "Scoping" true Scoping.program p pp in
 
-    (* let p = Mj2net.program p in *)
+    let p = pass "Typing" true Typing.program p pp in
 
-    (* let p = if !netlist_simplify
-     *         then Netlist_simplify.simplify p
-     *         else p in
-     *
-     * Netlist_printer.print_program net p; *)
+    let p = pass "Normalize" true Normalize.program p pp in
 
-    close_all_files ()
+    let p = pass "Callgraph" true Callgraph.program p pp in
+
+    let p = pass "Simplify" true Simplify.program p pp in
+
+    let p = Mj2net.program p in
+
+    let p = if !netlist_simplify
+             then Netlist_simplify.simplify p
+             else p in
+
+
+    let net = open_out net_name in
+    Netlist_printer.print_program net p;
+    close_out net
   with
-  | x -> close_all_files (); raise x
+  | x -> close_in ic; raise x

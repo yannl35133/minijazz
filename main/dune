@@ -5,5 +5,5 @@
 
 (executable
  (name mjc)
- (libraries global parser printers analysis netlist)
+ (libraries global parser printers analysis netlist original)
  (modes byte))

@@ -1,3 +1,5 @@
+type st = | St1 | St2
+
 main (clk) = o where
   front_edge = clk & not(reg(clk));
   down_edge = not(clk) & reg(clk);
