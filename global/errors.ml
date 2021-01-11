@@ -81,6 +81,7 @@ exception NonConstantSize of Location.location
 open Location
 
 exception ErrorDetected
+exception Error
 
 let lexical_error err loc =
   Format.eprintf "%aSyntax error: %s@."

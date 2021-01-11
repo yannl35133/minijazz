@@ -579,9 +579,8 @@ let node fun_env ({ node_inputs; node_outputs; node_body; node_variables; node_n
     node_variables
   }
 
-let program { p_enums; p_consts; p_consts_order; p_nodes } : program =
+let program ({ p_nodes; _ } as program) : program =
   let fun_env = FunEnv.map fun_env p_nodes in
-  {
-    p_enums; p_consts; p_consts_order;
+  { program with
     p_nodes = FunEnv.map (node fun_env) p_nodes;
   }

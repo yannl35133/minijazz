@@ -1,4 +1,4 @@
-(* (***********************************************************************)
+(***********************************************************************)
 (*                                                                     *)
 (*                             MiniJazz                                *)
 (*                                                                     *)
@@ -23,46 +23,46 @@
 (*                                                                     *)
 (***********************************************************************)
 
-open Ast
-open Static
+open Ast_old
+open Mapfold
 
-let is_not_zero ty = match ty with
-  | TBitArray { se_desc = SInt 0; _ } -> false
-  | _ -> true
+let mk_eq e =
+  let id = Ident.fresh_ident "_l" in
+  let eq = (Evarpat id, e) in
+  let vd = mk_var_dec id e.e_ty in
+  Evar id, vd, eq
 
-let rec simplify_exp e = match !!e with
-  (* replace x[i..j] with [] if j < i *)
-  | Ecall("slice",
-         [{ se_desc = SInt min; _ };
-          { se_desc = SInt max; _ }; _n], _) when max < min ->
-      { e with e_desc = Econst (VBitArray (Array.make 0 false)) }
-  (* replace x[i..i] with x[i] *)
-  | Ecall("slice", [min; max; n], args) when min = max ->
-      let new_e = { e with e_desc = Ecall("select", [min; n], args) } in
-      simplify_exp new_e
-  (* replace x.[] or [].x with x *)
-  | Ecall("concat", _, [{ e_ty = TBitArray { se_desc = SInt 0; _ }; _ }; e1])
-  | Ecall("concat", _, [e1; { e_ty = TBitArray { se_desc = SInt 0; _ }; _ }]) ->
-      e1
-  | Ecall(f, params, args) ->
-      { e with e_desc = Ecall(f, params, List.map simplify_exp args) }
-  | _ -> e
+(* Put all the arguments in separate equations *)
+let exp funs (eqs, vds) e = match e.e_desc with
+  | Econst _ | Evar _ -> e, (eqs, vds)
+  | _ ->
+      let e, (eqs, vds) = Mapfold.exp funs (eqs, vds) e in
+      let desc, vd, eq = mk_eq e in
+      { e with e_desc = desc }, (eq::eqs, vd::vds)
 
-let simplify_eq (pat,e) =
-  (pat, simplify_exp e)
+let equation funs (eqs, vds) (pat, e) =
+  match e.e_desc with
+    | Econst _ | Evar _ -> (pat, e), (eqs, vds)
+    | _ -> (
+      match Mapfold.exp_it funs (eqs, vds) e with
+      | _, ((_, e)::eqs, _::vds) -> (pat, e), (eqs, vds)
+      | _ -> failwith "Mapfold.exp_it error"
+    )
 
-let rec block b = match b with
+
+let block funs acc b = match b with
   | BEqs(eqs, vds) ->
-      let eqs = List.map simplify_eq eqs in
-      (* remove variables with size 0 *)
-      let vds = List.filter (fun vd -> is_not_zero vd.v_ty) vds in
-      let eqs = List.filter (fun (_, e) -> is_not_zero e.e_ty) eqs in
-      BEqs(eqs, vds)
-  | BIf(se, trueb, elseb) -> BIf(se, block trueb, block elseb)
-
-let node n =
-  { n with n_body = block n.n_body }
+      let eqs, (new_eqs, new_vds) = Misc.mapfold (Mapfold.equation_it funs) ([], []) eqs in
+      BEqs(new_eqs@eqs, new_vds@vds), acc
+  | BIf _ -> raise Mapfold.Fallback
 
 let program p =
-    { p with p_nodes = List.map node p.p_nodes }
- *)
+  let funs = { Mapfold.defaults with exp = exp; equation = equation; block = block } in
+  let p, _ = Mapfold.program_it funs ([], []) p in
+  p
+
+(* Used by Callgraph *)
+let block b =
+  let funs = { Mapfold.defaults with exp = exp; equation = equation; block = block } in
+  let b, _ = Mapfold.block_it funs ([], []) b in
+  b

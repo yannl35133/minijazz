@@ -1,4 +1,4 @@
-open CommonAST
+(* open CommonAST
 open StaticTypedPartialAST
 open NetlistSizedAST
 
@@ -185,4 +185,4 @@ let match_reduction (_p:program) = assert false
 (** [reset_reduction p] takes a program and
     transform the ast in order to remove all reset constructions
     here we assume no automaton nor match are left *)
-let reset_reduction (_p:program) = assert false
+let reset_reduction (_p:program) = assert false *)

@@ -1,4 +1,4 @@
-(* (***********************************************************************)
+(***********************************************************************)
 (*                                                                     *)
 (*                             MiniJazz                                *)
 (*                                                                     *)
@@ -23,7 +23,7 @@
 (*                                                                     *)
 (***********************************************************************)
 
-open Ast
+open Ast_old
 open Static
 open Static_utils
 open Printer
@@ -37,7 +37,7 @@ type error_kind =
   | Args_arity_error of int * int
   | Params_arity_error of int * int
   | Result_arity_error of int * int
-  | Type_error of typ * typ
+  | Type_error of ty * ty
   | Static_type_error of static_ty * static_ty
   | Static_constraint_false of static_exp
 
@@ -67,17 +67,17 @@ let message loc err = match err with
 
 
 type signature =
-    { s_inputs : typ list;
-      s_outputs : typ list;
+    { s_inputs : ty list;
+      s_outputs : ty list;
       s_params : name list;
       s_constraints : static_exp list }
 
 module Modules = struct
-  let env = ref Ast.NameEnv.empty
+  let env = ref Ast_old.NameEnv.empty
 
   let add_sig ?(params = []) ?(constr = []) n inp outp =
     let s = { s_inputs = inp; s_outputs = outp; s_params = params; s_constraints = constr } in
-    env := Ast.NameEnv.add n s !env
+    env := Ast_old.NameEnv.add n s !env
 
   let _ =
     let fix_ty ty0 _ = ty0
@@ -137,7 +137,7 @@ module Modules = struct
               s_outputs = tys_of_vds n.n_outputs;
               s_params = List.map (fun p -> p.p_name) n.n_params;
               s_constraints = constr } in
-    env := Ast.NameEnv.add n.n_name s !env
+    env := Ast_old.NameEnv.add n.n_name s !env
 
   let build_param_env param_names params =
     List.fold_left2
@@ -150,7 +150,7 @@ module Modules = struct
 
   let find_node n params =
     try
-      let s = Ast.NameEnv.find n !env in
+      let s = Ast_old.NameEnv.find n !env in
       if List.length s.s_params <> List.length params then
         error (Params_arity_error (List.length params, List.length s.s_params));
       let env = build_param_env s.s_params params in
@@ -162,7 +162,7 @@ module Modules = struct
       s
     with Not_found ->
       Format.eprintf "Unbound node '%s'@." n;
-      raise ErrorDetected
+      raise Error
 end
 
 let constr_list = ref []
@@ -201,7 +201,7 @@ let rec ty_repr ty = match ty with
 let rec occur_check index ty =
   let ty = ty_repr ty in
   match ty with
-    | TUntyped | TBit | TBitArray _  -> ()
+    | TUnit | TBit | TBitArray _  -> ()
     | TVar { contents = TIndex n } when index <> n -> ()
     | TProd ty_list -> List.iter (occur_check index) ty_list
     | _ -> raise Unify
@@ -308,9 +308,9 @@ let solve_constr params cl =
 (* Typing of expressions *)
 let rec type_exp env e =
   try
-    let desc, ty = match !!e with
-      | Econst (VBit _) -> !!e, TBit
-      | Econst (VBitArray a) -> !!e, TBitArray (mk_static_int (Array.length a))
+    let desc, ty = match e.e_desc with
+      | Econst (VBit _) -> e.e_desc, TBit
+      | Econst (VBitArray a) -> e.e_desc, TBitArray (mk_static_int (Array.length a))
       | Evar id -> Evar id, IdentEnv.find id env
       | Ereg e ->
           let e, e_ty = type_exp env e in
@@ -343,7 +343,7 @@ let rec type_exp env e =
     in
     { e with e_desc = desc; e_ty = ty }, ty
   with
-    | Typing_error k -> message e.e_loc k; raise ErrorDetected
+    | Typing_error k -> message e.e_loc k; raise Error
 
 and expect_exp env e ty =
   let e, found_ty = type_exp env e in
@@ -409,9 +409,8 @@ let node n =
     Modules.add_node n constr;
     { n with n_body = body; n_constraints = constr }
   with
-      Typing_error k -> message n.n_loc k; raise ErrorDetected
+      Typing_error k -> message n.n_loc k; raise Error
 
 let program p =
   let p_nodes = List.map node p.p_nodes in
     { p with p_nodes = p_nodes }
- *)

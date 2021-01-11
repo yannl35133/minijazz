@@ -1,4 +1,4 @@
-(* (***********************************************************************)
+(***********************************************************************)
 (*                                                                     *)
 (*                             MiniJazz                                *)
 (*                                                                     *)
@@ -23,7 +23,7 @@
 (*                                                                     *)
 (***********************************************************************)
 
-open Ast
+open Ast_old
 open Static
 open Misc
 
@@ -32,29 +32,29 @@ exception Fallback
 type 'a it_funs = {
   static_exp : 'a it_funs -> 'a -> static_exp -> static_exp * 'a;
   static_exp_desc : 'a it_funs -> 'a -> static_exp_desc -> static_exp_desc * 'a;
-  ty : 'a it_funs -> 'a -> typ -> typ * 'a;
-  (* link : 'a it_funs -> 'a -> link -> link * 'a; *)
-  exp_desc : 'a it_funs -> 'a -> exp_desc -> exp_desc * 'a;
+  ty : 'a it_funs -> 'a -> ty -> ty * 'a;
+  link : 'a it_funs -> 'a -> link -> link * 'a;
+  edesc : 'a it_funs -> 'a -> edesc -> edesc * 'a;
   exp : 'a it_funs -> 'a -> exp -> exp * 'a;
-  pat : 'a it_funs -> 'a -> lvalue_desc -> lvalue_desc * 'a;
+  pat : 'a it_funs -> 'a -> pat -> pat * 'a;
   equation : 'a it_funs -> 'a -> equation -> equation * 'a;
-  var_dec : 'a it_funs -> 'a -> typed_ident_desc -> typed_ident_desc * 'a;
+  var_dec : 'a it_funs -> 'a -> var_dec -> var_dec * 'a;
   block : 'a it_funs -> 'a -> block -> block * 'a;
-  node_desc : 'a it_funs -> 'a -> node_desc -> node_desc * 'a;
-  const_desc : 'a it_funs -> 'a -> const_desc -> const_desc * 'a;
+  node_dec : 'a it_funs -> 'a -> node_dec -> node_dec * 'a;
+  const_dec : 'a it_funs -> 'a -> const_dec -> const_dec * 'a;
   program : 'a it_funs -> 'a -> program -> program * 'a;
 }
 
 let rec exp_it funs acc e = funs.exp funs acc e
 and exp funs acc e =
-  let e_desc, acc = edesc_it funs acc !!e in
+  let e_desc, acc = edesc_it funs acc e.e_desc in
   let e_ty, acc = ty_it funs acc e.e_ty in
   { e with e_desc = e_desc; e_ty = e_ty }, acc
 
 and edesc_it funs acc ed =
-  try funs.exp_desc funs acc ed
-  with Fallback -> exp_desc funs acc ed
-and exp_desc funs acc ed = match ed with
+  try funs.edesc funs acc ed
+  with Fallback -> edesc funs acc ed
+and edesc funs acc ed = match ed with
   | Econst v -> Econst v, acc
   | Evar id -> Evar id, acc
   | Ereg e ->
@@ -94,7 +94,7 @@ and static_exp_desc funs acc sed = match sed with
 
 and ty_it funs acc t = try funs.ty funs acc t with Fallback -> ty funs acc t
 and ty funs acc t = match t with
-  | TUntyped | TBit -> t, acc
+  | TUnit | TBit -> t, acc
   | TBitArray se ->
       let se, acc = static_exp_it funs acc se in
       TBitArray se, acc
@@ -146,8 +146,8 @@ and var_dec funs acc vd =
   { vd with v_ty = v_ty }, acc
 
 
-and node_dec_it funs acc nd = funs.node_desc funs acc nd
-and node_desc funs acc nd =
+and node_dec_it funs acc nd = funs.node_dec funs acc nd
+and node_dec funs acc nd =
   let n_inputs, acc = mapfold (var_dec_it funs) acc nd.n_inputs in
   let n_outputs, acc = mapfold (var_dec_it funs) acc nd.n_outputs in
   let n_constraints, acc = mapfold (static_exp_it funs) acc nd.n_constraints in
@@ -160,8 +160,8 @@ and node_desc funs acc nd =
   , acc
 
 
-and const_dec_it funs acc c = funs.const_desc funs acc c
-and const_desc funs acc c =
+and const_dec_it funs acc c = funs.const_dec funs acc c
+and const_dec funs acc c =
   let c_value, acc = static_exp_it funs acc c.c_value in
   { c with c_value = c_value }, acc
 
@@ -177,14 +177,13 @@ let defaults = {
   static_exp_desc = static_exp_desc;
   ty = ty;
   link = link;
-  exp_desc = exp_desc;
+  edesc = edesc;
   exp = exp;
   pat = pat;
   equation = equation;
   var_dec = var_dec;
   block = block;
-  node_desc = node_desc;
-  const_desc = const_desc;
+  node_dec = node_dec;
+  const_dec = const_dec;
   program = program;
 }
- *)

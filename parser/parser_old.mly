@@ -88,8 +88,8 @@ node_dec:
       { mk_node n (Loc $sloc) inline args out p b probes }
 
 inline:
-  |         { NotInline }
-  | INLINE  { Inline }
+  |         { NotInlined }
+  | INLINE  { Inlined }
 
 node_name:
   | id=IDENTIFIER { reset_symbol_table (); id }
