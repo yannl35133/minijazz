@@ -29,7 +29,7 @@ let print_bool_unop unop =
 
 let rec print_int_exp_desc = function
   | SInt n     -> dprintf "%i" n
-  | SIParam i  -> dprintf "%s" i.id_desc
+  | SIParam i  -> dprintf "%s#%i" !*!i !**i
   | SIConst id -> print_ident id
   | SIUnOp (sunop, se) ->
       dprintf "%t %t"
@@ -48,7 +48,7 @@ let rec print_int_exp_desc = function
 
 and print_bool_exp_desc = function
   | SBool b    -> dprint_bool b
-  | SBParam i  -> dprintf "%s" i.id_desc
+  | SBParam i  -> dprintf "%s#%i" !*!i !**i
   | SBConst id -> print_ident id
   | SBUnOp (sunop, se) ->
       dprintf "%t %t"
