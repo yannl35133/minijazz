@@ -37,9 +37,9 @@ exception WrongType of (option_tritype * option_tritype * Location.location * er
 (* exception UnexpectedStateTransition of state_type * Location.location *)
 exception UndefinedReturnVariables of (string * string * Location.location)
 
-let rec print_netlist_dimension fmt = function
-  | NDim n -> Format.fprintf fmt "%d" n
-  | NProd l -> Format.fprintf fmt "@[<hv2>%a@]" (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt " * ") print_netlist_dimension) l
+let rec print_netlist_dimension = function
+  | NDim n -> Format.dprintf "%d-dim" n
+  | NProd l -> Format.dprintf "@[<hv2>%t@]" (Printers.CommonAst.print_list_naked (Format.dprintf " * ") print_netlist_dimension l)
 
 let new_unknown_parameter () =
   SOIntExp (SUnknown (UIDUnknownStatic.get ()))

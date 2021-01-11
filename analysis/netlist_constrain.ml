@@ -15,6 +15,8 @@ let rec eq_to_constraints c1 c2 = match c1, c2 with
 
 let global_eq_to_constraints (c1: global_presize) c2 = match c1, c2 with
   | BNetlist t1, BNetlist t2 -> eq_to_constraints t1 t2
+  | BState s1, BState s2 -> if s1 <> s2 then failwith "Mistype in state" else []
+  | BStateTransition s1, BStateTransition s2 -> if s1 <> s2 then failwith "Mistype in state transition" else []
   | _ -> failwith "Mix between states and netlists"
 
 let tritype_of_exp = function
