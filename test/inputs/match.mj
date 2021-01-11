@@ -1,0 +1,10 @@
+type t = | St1 | St2
+
+main (clk) = o where
+  front_edge = clk & not(reg(clk));
+  down_edge = not(clk) & reg(clk);
+  match reg st with
+  | St1 -> o = 0; st = mux(down_edge, St1, St2)
+  | St2 -> o = 1; st = mux(front_edge, St2, St1)
+  end;
+end where
