@@ -360,6 +360,7 @@ let rec state_exp fun_env dimensioned e = match e.s_desc with
       let dimensioned, b' = state_exp fun_env dimensioned b in
       let dimensioned, c' = state_exp fun_env dimensioned c in
       dimensioned, re_state_type e @@ ESMux (a', b', c')
+  | _ -> assert false
 
 let state_transition_exp fun_env dimensioned e = match e.st_desc with
     | EContinue a ->

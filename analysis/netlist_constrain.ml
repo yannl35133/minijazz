@@ -135,6 +135,7 @@ let rec state_exp fun_env constraints e = match e.s_desc with
       let constraints, b' = state_exp fun_env constraints b in
       let constraints, c' = state_exp fun_env constraints c in
       constraints, re_state_type e @@ ESMux (a', b', c')
+  | _ -> assert false
 
 let state_transition_exp fun_env constraints e = match e.st_desc with
     | EContinue a ->

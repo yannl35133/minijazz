@@ -86,7 +86,8 @@ let rec exp var_env e =
 let rec state_exp var_env e = match e.s_desc with
   | EConstr c -> re_state_type e @@ EConstr c
   | ESMux (a, b, c) ->
-      re_state_type e @@ ESMux (exp var_env a, state_exp var_env b, state_exp var_env c)
+     re_state_type e @@ ESMux (exp var_env a, state_exp var_env b, state_exp var_env c)
+  | _ -> assert false
 
 let state_transition_exp var_env e = match e.st_desc with
     | EContinue a ->

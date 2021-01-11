@@ -156,6 +156,7 @@ and cvt_exp (e:exp) = relocalize !$@e @@ cvt_exp_desc !$!e
 let rec cvt_state_exp_desc : 'a -> ParserAST.exp_desc = function
   | EConstr c -> EConstr (cvt_ident c)
   | ESMux (e, es1, es2) -> ESupOp (no_localize "mux", [cvt_exp e; cvt_state_exp es1; cvt_state_exp es2])
+  | _ -> assert false
 
 and cvt_state_exp (e: exp state_exp) = relocalize e.s_loc @@ cvt_state_exp_desc e.s_desc
 

@@ -101,6 +101,8 @@ let print_static_typed_ident = print_static_typed_ident print_static_type
 
 let rec print_state_exp_desc print_exp = function
   | EConstr id -> print_constructor id
+  | ESVar id -> print_ident id
+  | ESReg e -> dprintf "reg@ %t" (print_state_exp print_exp e)
   | ESMux (e, es1, es2) -> dprintf "mux@[<hv 2>(@,%t,@ %t,@ %t@;<0 -2>)@]"
       (print_exp e)
       (print_state_exp print_exp es1)
@@ -132,4 +134,3 @@ and print_lvalue print_netlist_type lval =
 
 
 let print_const = print_const print_bitype_exp
-

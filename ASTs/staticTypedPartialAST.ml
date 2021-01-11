@@ -62,6 +62,8 @@ type static_typed_ident = static_type CommonAST.static_typed_ident
 
 type 'exp state_exp_desc =
   | EConstr of constructor
+  | ESVar of ident
+  | ESReg of 'exp state_exp
   | ESMux of ('exp * 'exp state_exp * 'exp state_exp)
   (* | ECall   of funname * static_unknown_exp list * exp list *)
     (* function * params * args *)
