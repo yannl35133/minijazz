@@ -278,19 +278,24 @@ let const consts_env ({ const_decl; _ } as const) =
   { const with const_decl = static_bitype_exp consts_env const_decl }
 
 let program ({ p_enums; p_consts; p_consts_order; p_nodes; p_nodes_order } : StaticScopedAST.program) : program =
-  let type_const { const_decl; _ } = match !!const_decl with
-    | SIntExp _ -> TInt
-    | SBoolExp _ -> TBool
-  in
-  let consts_env = List.fold_left (
-    fun consts_preenv el ->
-      Env.add el (type_const @@ const consts_preenv @@ Env.find el p_consts) consts_preenv
-    ) Env.empty p_consts_order in
-  let fun_env = FunEnv.map fun_env p_nodes in
-  {
-    p_enums;
-    p_consts = Env.map (const consts_env) p_consts;
-    p_consts_order;
-    p_nodes = FunEnv.map (node p_enums fun_env consts_env) p_nodes;
-    p_nodes_order
-  }
+  try
+    let type_const { const_decl; _ } = match !!const_decl with
+      | SIntExp _ -> TInt
+      | SBoolExp _ -> TBool
+    in
+    let consts_env = List.fold_left (
+      fun consts_preenv el ->
+        Env.add el (type_const @@ const consts_preenv @@ Env.find el p_consts) consts_preenv
+      ) Env.empty p_consts_order in
+    let fun_env = FunEnv.map fun_env p_nodes in
+    {
+      p_enums;
+      p_consts = Env.map (const consts_env) p_consts;
+      p_consts_order;
+      p_nodes = FunEnv.map (node p_enums fun_env consts_env) p_nodes;
+      p_nodes_order
+    }
+      with Errors.WrongType (s1, s2, loc) ->
+        Format.eprintf "%aType Error: This expression has type %s but an expression of type %s was expected@."
+          Location.print_location loc s1 s2;
+        raise Errors.ErrorDetected
