@@ -84,16 +84,17 @@ let rec exp var_env e =
 
 
 let rec state_exp var_env e = match e.s_desc with
-  | EConstr c -> re_state_type e @@ EConstr c
+  | ESConstr c -> re_state_type e @@ ESConstr c
+  | ESVar id -> re_state_type e @@ ESVar id
   | ESMux (a, b, c) ->
-     re_state_type e @@ ESMux (exp var_env a, state_exp var_env b, state_exp var_env c)
-  | _ -> assert false
+      re_state_type e @@ ESMux (exp var_env a, state_exp var_env b, state_exp var_env c)
+  | ESReg a -> re_state_type e @@ ESReg (state_exp var_env a)
 
 let state_transition_exp var_env e = match e.st_desc with
-    | EContinue a ->
-        re_state_transition_type e @@ EContinue (state_exp var_env a)
-    | ERestart a ->
-        re_state_transition_type e @@ ERestart (state_exp var_env a)
+  | ESTContinue a ->
+      re_state_transition_type e @@ ESTContinue (state_exp var_env a)
+  | ESTRestart a ->
+      re_state_transition_type e @@ ESTRestart (state_exp var_env a)
 
 let tritype_exp var_env = function
   | Exp e -> Exp (exp var_env e)

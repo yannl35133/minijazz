@@ -61,7 +61,7 @@ type static_typed_ident = static_type CommonAST.static_typed_ident
 (* State expressions *)
 
 type 'exp state_exp_desc =
-  | EConstr of constructor
+  | ESConstr of constructor
   | ESVar of ident
   | ESReg of 'exp state_exp
   | ESMux of ('exp * 'exp state_exp * 'exp state_exp)
@@ -71,8 +71,8 @@ type 'exp state_exp_desc =
 and 'exp state_exp = 'exp state_exp_desc state_typed
 
 and 'exp state_transition_exp_desc =
-  | EContinue of 'exp state_exp
-  | ERestart  of 'exp state_exp
+  | ESTContinue of 'exp state_exp
+  | ESTRestart  of 'exp state_exp
   (* | ECall   of funname * static_unknown_exp list * exp list *)
     (* function * params * args *)
 

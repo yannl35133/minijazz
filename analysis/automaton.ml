@@ -8,7 +8,7 @@ let one_bit_type = TNDim [Size (SInt 1)]
 
 let var name loc ty = size (EVar name) loc ty
 
-let constr (c:state) (e:enum) = state_type (EConstr c) c.id_loc e
+let constr (c:state) (e:enum) = state_type (ESConstr c) c.id_loc e
 
 let reg (e:exp state_exp) = { e with s_desc = ESReg e }
 
@@ -61,8 +61,8 @@ let rec decl env (d:decl) = match d.desc with
        | (cond, tr) :: es ->
           (* TODO reset *)
           let _reset, nx_st = match tr.st_desc with
-            | EContinue st -> false, st
-            | ERestart  st -> true, st
+            | ESTContinue st -> false, st
+            | ESTRestart  st -> true, st
           in
 
           let nx_st_uid = nx_st.s_type.enum_name.id_uid in

@@ -100,7 +100,7 @@ let print_static_typed_ident = print_static_typed_ident print_static_type
 (* State expressions *)
 
 let rec print_state_exp_desc print_exp = function
-  | EConstr id -> print_constructor id
+  | ESConstr id -> print_constructor id
   | ESVar id -> print_ident id
   | ESReg e -> dprintf "reg@ %t" (print_state_exp print_exp e)
   | ESMux (e, es1, es2) -> dprintf "mux@[<hv 2>(@,%t,@ %t,@ %t@;<0 -2>)@]"
@@ -110,8 +110,8 @@ let rec print_state_exp_desc print_exp = function
 and print_state_exp print_exp s = print_state_exp_desc print_exp s.s_desc
 
 let print_state_transition_exp_desc print_exp = function
-  | EContinue s -> dprintf "continue %t" (print_state_exp print_exp s)
-  | ERestart s -> dprintf "restart %t" (print_state_exp print_exp s)
+  | ESTContinue s -> dprintf "continue %t" (print_state_exp print_exp s)
+  | ESTRestart s -> dprintf "restart %t" (print_state_exp print_exp s)
 let print_state_transition_exp print_exp s = print_state_transition_exp_desc print_exp s.st_desc
 
 let print_tritype_exp print_exp = function

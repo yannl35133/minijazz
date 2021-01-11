@@ -18,13 +18,23 @@ type prod_context =
   | ProdRev
   | ProdOp of string (* opname *)
 
+type option_tritype =
+  | OTNetlist of netlist_dimension option
+  | OTState of state_type option
+  | OTStateTransition of state_type option
+
+let ot_of_t = function
+  | BNetlist ti -> OTNetlist (Some ti)
+  | BState s -> OTState (Some s)
+  | BStateTransition s -> OTStateTransition (Some s)
+
 exception UnexpectedProd of (Location.location * prod_context) (* Obtained product, expected dimension *)
 exception ImpossibleProd of (Location.location * prod_context * fun_context option) (* Expected product, obtained expression which returns dimension *)
 exception ImpossibleDimension of (netlist_dimension * Location.location)
 exception WrongDimension of (netlist_dimension * netlist_dimension * Location.location * error_context)
-exception WrongType of (netlist_dimension tritype * netlist_dimension tritype * Location.location * error_context)
-exception UnexpectedState of state_type * Location.location
-exception UnexpectedStateTransition of state_type * Location.location
+exception WrongType of (option_tritype * option_tritype * Location.location * error_context)
+(* exception UnexpectedState of state_type * Location.location *)
+(* exception UnexpectedStateTransition of state_type * Location.location *)
 exception UndefinedReturnVariables of (string * string * Location.location)
 
 let rec print_netlist_dimension fmt = function
@@ -109,20 +119,22 @@ let slice params loc dim =
   NDim dims_remaining, fun e1 -> ECall (reloc @@ "slice_" ^ name, size @ args, [e1])
 
 
-let rec exp (fun_env: fun_env) dimensioned e = match !!e with
-  | StaticTypedAST.EConst c ->
+let rec exp (fun_env: fun_env) dimensioned (e: StaticTypedAST.exp) = match !!e with
+  | EConst c ->
       let dim = dim_value !@e c in
       dimensioned, dimension (EConst c) !@e dim
-  | StaticTypedAST.EVar id -> begin
+  | EVar id -> begin
       try
         match Env.find !**id dimensioned with
         | None -> raise (CannotDimensionYet (Some id))
         | Some BNetlist dim -> dimensioned, dimension (EVar id) !@e dim
-        | Some BState s -> raise (UnexpectedState (s, !*@id))
-        | Some BStateTransition s -> raise (UnexpectedState (s, !*@id))
+        | Some (BState _ | BStateTransition _ as ti) -> raise (WrongType (ot_of_t ti, OTNetlist None, !@e, ErSimple))
       with Not_found -> raise (Errors.Scope_error (!*!id, !*@id))
       end
-  | StaticTypedAST.ESupOp (op, args) when !!op = "concat" -> begin
+  | EConstr _ ->   raise (WrongType (OTState None, OTNetlist None, !@e, ErSimple))
+  | EContinue _ -> raise (WrongType (OTStateTransition None, OTNetlist None, !@e, ErSimple))
+  | ERestart _ ->  raise (WrongType (OTStateTransition None, OTNetlist None, !@e, ErSimple))
+  | ESupOp (op, args) when !!op = "concat" -> begin
       let dimensioned, dim_args = List.fold_left_map (exp fun_env) dimensioned args in
       let arg1, arg2 = match dim_args with
         | [arg1; arg2] -> arg1, arg2
@@ -138,7 +150,7 @@ let rec exp (fun_env: fun_env) dimensioned e = match !!e with
       in
       dimensioned, concat op !@e (arg1, n1) (arg2, n2)
       end
-  | StaticTypedAST.ESupOp (op, args) when !!op = "add_dim" -> begin
+  | ESupOp (op, args) when !!op = "add_dim" -> begin
       let dimensioned, dim_args = List.fold_left_map (exp fun_env) dimensioned args in
       let arg = match dim_args with
         | [arg] -> arg
@@ -150,7 +162,7 @@ let rec exp (fun_env: fun_env) dimensioned e = match !!e with
       in
       dimensioned, dimension (supop op (dim_args) dim) !@e (NDim (dim+1))
       end
-  | StaticTypedAST.ESupOp (op, args) ->
+  | ESupOp (op, args) ->
       let special_arg, args =
         if !!op = "mux" then
           try [List.hd args], List.tl args with Failure _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 3, !!op)
@@ -181,7 +193,7 @@ let rec exp (fun_env: fun_env) dimensioned e = match !!e with
       let dimensioned, dim_special_arg = List.fold_left_map (f 0) dimensioned special_arg in
       let dimensioned, dim_args = List.fold_left_map (f dim) dimensioned args in
       dimensioned, dimension (supop op (dim_special_arg @ dim_args) dim) !@e (NDim dim)
-  | StaticTypedAST.ESlice (params, e1) ->
+  | ESlice (params, e1) ->
       let dimensioned, e1 = exp fun_env dimensioned e1 in
       let dim = match !%%e1 with
         | NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@e1, ProdOp "slice")
@@ -189,14 +201,14 @@ let rec exp (fun_env: fun_env) dimensioned e = match !!e with
       in
       let dim, exp = try slice params !@e dim with Errors.TmpError -> raise @@ Errors.SliceTooMuch (dim, List.length params, !%@e1) in
       dimensioned, dimension (exp e1) !@e dim
-  | StaticTypedAST.EReg e1 ->
+  | EReg e1 ->
       let dimensioned, e1 = exp fun_env dimensioned e1 in
       let dim = match !%%e1 with
         | NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@e1, ProdOp "reg")
         | NDim n -> NDim n
       in
       dimensioned, dimension (EReg e1) !@e dim
-  | StaticTypedAST.ECall (fname, params, args) ->
+  | ECall (fname, params, args) ->
       let dims_in, dims_out = Misc.option_get ~error:(Errors.Scope_error (!!fname, !@fname)) @@ FunEnv.find_opt !!fname fun_env in
       let dimensioned, dim_args =
         let f dimensioned dim arg =
@@ -211,7 +223,7 @@ let rec exp (fun_env: fun_env) dimensioned e = match !!e with
         with Not_found -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, List.length dims_in, !!fname)
       in
       dimensioned, dimension (ECall (fname, params, dim_args)) !@e dims_out
-  | StaticTypedAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
+  | EMem (mem_kind, (addr_size, word_size, input_file), args) ->
       let fname = match !!mem_kind with MRom -> "rom" | MRam -> "ram" in
       let dims_in, dims_out = Misc.option_get (FunEnv.find_opt fname fun_env) in
       let dimensioned, dim_args =
@@ -234,12 +246,14 @@ and assert_exp fun_env dim dimensioned e =
     if dim <> !%%res then raise @@ (* Errors. *)WrongDimension (!%%res, dim, !@e, ErSimple);
     dimensioned, res
   with CannotDimensionYet id -> match !!e with
-  | StaticTypedAST.EConst _ -> failwith "Cannot fail to dimension a constant"
-  | StaticTypedAST.EVar id -> begin
+  | EConst _ -> failwith "Cannot fail to dimension a constant"
+  | EConstr _
+  | EContinue _
+  | ERestart _ -> failwith "Should aleady be excluded"
+  | EVar id -> begin
       try
         match Env.find !**id dimensioned with
-        | Some BState s -> raise (UnexpectedState (s, !*@id))
-        | Some BStateTransition s -> raise (UnexpectedState (s, !*@id))
+        | Some (BState _ | BStateTransition _ as ti) -> raise (WrongType (ot_of_t ti, OTNetlist None, !@e, ErRev))
         | Some BNetlist dim' when dim <> dim' ->
             raise @@ (* Errors. *)WrongDimension (dim', dim, !@e, ErSimple)
         | None ->
@@ -248,12 +262,12 @@ and assert_exp fun_env dim dimensioned e =
             dimensioned, dimension (EVar id) !@e dim'
       with Not_found -> raise (Errors.Scope_error (!*!id, !*@id))
       end
-  | StaticTypedAST.ESupOp (op, _) when !!op = "concat" -> begin
+  | ESupOp (op, _) when !!op = "concat" -> begin
       match dim with
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
         | NDim _ -> raise (CannotDimensionYet id)
       end
-  | StaticTypedAST.ESupOp (op, args) when !!op = "dim_add" ->
+  | ESupOp (op, args) when !!op = "dim_add" ->
       let dim_int = match dim with
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
         | NDim 0 -> raise @@ (* Errors. *)ImpossibleDimension (NDim 0, !@e)
@@ -261,7 +275,7 @@ and assert_exp fun_env dim dimensioned e =
       in
       let dimensioned, dim_args = List.fold_left_map (assert_exp fun_env (NDim (dim_int - 1))) dimensioned args in
       dimensioned, dimension (supop op dim_args dim_int) !@e dim
-  | StaticTypedAST.ESupOp (op, args) when !!op = "mux" ->
+  | ESupOp (op, args) when !!op = "mux" ->
       let dim_int = match dim with
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
         | NDim n -> n
@@ -272,14 +286,14 @@ and assert_exp fun_env dim dimensioned e =
       let dimensioned, dim_spe_arg = assert_exp fun_env (NDim 0) dimensioned special_arg in
       let dimensioned, dim_args = List.fold_left_map (assert_exp fun_env dim) dimensioned args in
       dimensioned, dimension (supop op (dim_spe_arg :: dim_args) dim_int) !@e dim
-  | StaticTypedAST.ESupOp (op, args) ->
+  | ESupOp (op, args) ->
       let dim_int = match dim with
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp (!!op), None)
         | NDim n -> n
       in
       let dimensioned, dim_args = List.fold_left_map (assert_exp fun_env dim) dimensioned args in
       dimensioned, dimension (supop op dim_args dim_int) !@e dim
-  | StaticTypedAST.ESlice (params, e1) ->
+  | ESlice (params, e1) ->
       let dim_int_pre = match dim with
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp "slice", None)
         | NDim n -> n
@@ -297,15 +311,15 @@ and assert_exp fun_env dim dimensioned e =
       let dim', exp = try slice params !@e dim_int with Errors.TmpError -> failwith "Problem in computations in backwards slice" in
       if dim <> dim' then failwith "Problem in computations in backwards slice";
       dimensioned, dimension (exp e1) !@e dim'
-  | StaticTypedAST.EReg e1 ->
+  | EReg e1 ->
       let dim = match dim with
         | NProd _ -> raise @@ (* Errors. *)ImpossibleProd (!@e, ProdOp "reg", None)
         | NDim n -> NDim n
       in
       let dimensioned, e1 = assert_exp fun_env dim dimensioned e1 in
       dimensioned, dimension (EReg e1) !@e !%%e1
-  | StaticTypedAST.ECall _
-  | StaticTypedAST.EMem _ ->
+  | ECall _
+  | EMem _ ->
      raise (CannotDimensionYet id) (* The dimension of the result does not give further info to dimension the arguments *)
 
 let rec lvalue dimensioned (lval: StaticScopedAST.lvalue) = match !!lval with
@@ -332,7 +346,7 @@ let rec assert_lvalue dim dimensioned (lval: StaticScopedAST.lvalue) = match !!l
       try
         match Env.find !**id dimensioned with
         | Some dim' when dim <> dim' ->
-            raise @@ (* Errors. *)WrongType (dim', dim, !@lval, ErRev)
+            raise @@ (* Errors. *)WrongType (ot_of_t dim', ot_of_t dim, !@lval, ErRev)
         | None ->
             Env.add !**id (Some dim) dimensioned, tritype (LValId id) !@lval dim
         | Some dim' ->
@@ -353,33 +367,122 @@ let rec assert_lvalue dim dimensioned (lval: StaticScopedAST.lvalue) = match !!l
       let dim = List.map extract dimed_l in
       dimensioned, tritype (LValTuple dimed_l) !@lval (BNetlist (NProd dim))
 
-let rec state_exp fun_env dimensioned e = match e.s_desc with
-  | EConstr c -> dimensioned, re_state_type e @@ EConstr c
-  | ESMux (a, b, c) ->
-      let dimensioned, a' = assert_exp fun_env (NDim 0) dimensioned a in
-      let dimensioned, b' = state_exp fun_env dimensioned b in
-      let dimensioned, c' = state_exp fun_env dimensioned c in
-      dimensioned, re_state_type e @@ ESMux (a', b', c')
-  | _ -> assert false
 
-let state_transition_exp fun_env dimensioned e = match e.st_desc with
-    | EContinue a ->
-        let dimensioned, a' = state_exp fun_env dimensioned a in
-        dimensioned, re_state_transition_type e @@ EContinue a'
-    | ERestart a ->
-      let dimensioned, a' = state_exp fun_env dimensioned a in
-      dimensioned, re_state_transition_type e @@ ERestart a'
 
-let tritype_exp fun_env dimensioned = function
-  | Exp e ->
-      let dimensioned, e' = exp fun_env dimensioned e in
-      dimensioned, Exp e'
-  | StateExp e ->
-      let dimensioned, e' = state_exp fun_env dimensioned e in
-      dimensioned, StateExp e'
-  | StateTransitionExp e ->
-      let dimensioned, e' = state_transition_exp fun_env dimensioned e in
-      dimensioned, StateTransitionExp e'
+let rec state_exp (exp_env, enum_env as env) dimensioned (e: StaticTypedAST.exp) = match !!e with
+  | EConstr c ->
+      dimensioned, state_type (ESConstr c) !@e (Misc.option_get ~error:(Failure "enum_env") @@ ConstructEnv.find_opt !**c enum_env)
+  | ESupOp (op, args) when !!op = "mux" -> begin
+      let arg1, arg2, arg3 = match args with
+        | [arg1; arg2; arg3] -> arg1, arg2, arg3
+        | _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 3, !!op)
+      in
+      let dimensioned, a = assert_exp exp_env (NDim 0) dimensioned arg1 in
+      let dimensioned, b = state_exp env dimensioned arg2 in
+      let dimensioned, c = state_exp env dimensioned arg3 in
+      if !**(b.s_type.enum_name) <> !**(c.s_type.enum_name) then
+        raise @@ WrongType (ot_of_t (BState c.s_type), ot_of_t (BState b.s_type), c.s_loc, ErSimple);
+      dimensioned, state_type (ESMux (a, b, c)) !@e b.s_type
+    end
+  | EReg a ->
+      let dimensioned, e' = state_exp env dimensioned a in
+      dimensioned, state_type (ESReg e') !@e e'.s_type
+  | EVar id -> begin
+      try
+        match Env.find !**id dimensioned with
+        | None -> raise (CannotDimensionYet (Some id))
+        | Some BState s -> dimensioned, state_type (ESVar id) !@e s
+        | Some (BNetlist _ | BStateTransition _ as ti) -> raise (WrongType (ot_of_t ti, OTState None, !@e, ErSimple))
+      with Not_found -> raise (Errors.Scope_error (!*!id, !*@id))
+    end
+  | EContinue _ ->  raise @@ WrongType (OTStateTransition None, OTState None, !@e, ErSimple)
+  | ERestart _ ->   raise @@ WrongType (OTStateTransition None, OTState None, !@e, ErSimple)
+  | EConst _ ->     raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+  | ESupOp _ ->     raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+  | ESlice _ ->     raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+  | ECall _ ->      raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+  | EMem _ ->       raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+
+let rec assert_state_exp (exp_env, enum_env as env) s dimensioned (e: StaticTypedAST.exp) = match !!e with
+  | EConstr c ->
+      let s' = Misc.option_get ~error:(Failure "enum_env") @@ ConstructEnv.find_opt !**c enum_env in
+      if s <> s' then raise @@ WrongType (ot_of_t (BState s'), ot_of_t (BState s), !@e, ErRev);
+      dimensioned, state_type (ESConstr c) !@e s'
+  | ESupOp (op, args) when !!op = "mux" -> begin
+      let arg1, arg2, arg3 = match args with
+        | [arg1; arg2; arg3] -> arg1, arg2, arg3
+        | _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, 3, !!op)
+      in
+      let dimensioned, a = assert_exp exp_env (NDim 0) dimensioned arg1 in
+      let dimensioned, b = assert_state_exp env s dimensioned arg2 in
+      let dimensioned, c = assert_state_exp env s dimensioned arg3 in
+      dimensioned, state_type (ESMux (a, b, c)) !@e s
+    end
+  | EReg a ->
+      let dimensioned, e' = assert_state_exp env s dimensioned a in
+      dimensioned, state_type (ESReg e') !@e s
+  | EVar id -> begin
+      try
+        match Env.find !**id dimensioned with
+        | Some (BNetlist _ | BStateTransition _ as ti) -> raise (WrongType (ot_of_t ti, OTState None, !@e, ErRev))
+        | Some BState s' when s <> s' ->
+            raise @@ WrongType (ot_of_t (BState s'), ot_of_t (BState s), !@e, ErRev)
+        | None ->
+            Env.add !**id (Some (BStateTransition s)) dimensioned, state_type (ESVar id) !@e s
+        | Some BState _ ->
+            dimensioned, state_type (ESVar id) !@e s
+      with Not_found -> raise (Errors.Scope_error (!*!id, !*@id))
+    end
+  | EContinue _ ->  raise @@ WrongType (OTStateTransition None, OTState None, !@e, ErSimple)
+  | ERestart _ ->   raise @@ WrongType (OTStateTransition None, OTState None, !@e, ErSimple)
+  | EConst _ ->     raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+  | ESupOp _ ->     raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+  | ESlice _ ->     raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+  | ECall _ ->      raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+  | EMem _ ->       raise @@ WrongType (OTNetlist None, OTState None, !@e, ErSimple)
+
+
+
+let state_transition_exp env dimensioned (e: StaticTypedAST.exp) = match !!e with
+  | EContinue e' ->
+      let dimensioned, e' = state_exp env dimensioned e' in
+      dimensioned, state_transition_type (ESTContinue e') !@e e'.s_type
+  | ERestart e' ->
+      let dimensioned, e' = state_exp env dimensioned e' in
+      dimensioned, state_transition_type (ESTRestart e') !@e e'.s_type
+  | EConstr _ ->    raise @@ WrongType (OTState None,   OTStateTransition None, !@e, ErSimple)
+  | EConst _ ->     raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | EVar _ ->       raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | ESupOp _ ->     raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | ESlice _ ->     raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | EReg _ ->       raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | ECall _ ->      raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | EMem _ ->       raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+
+let assert_state_transition_exp env s dimensioned (e: StaticTypedAST.exp) = match !!e with
+  | EContinue e' ->
+      let dimensioned, e' = assert_state_exp env s dimensioned e' in
+      dimensioned, state_transition_type (ESTContinue e') !@e s
+  | ERestart e' ->
+      let dimensioned, e' = assert_state_exp env s dimensioned e' in
+      dimensioned, state_transition_type (ESTRestart e') !@e s
+  | EConstr _ ->    raise @@ WrongType (OTState None,   OTStateTransition None, !@e, ErSimple)
+  | EConst _ ->     raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | EVar _ ->       raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | ESupOp _ ->     raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | ESlice _ ->     raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | EReg _ ->       raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | ECall _ ->      raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+  | EMem _ ->       raise @@ WrongType (OTNetlist None, OTStateTransition None, !@e, ErSimple)
+
+let tritype_exp (exp_env, _ as env) dimensioned e =
+  let f f_exp env = try Ok (f_exp env dimensioned e) with WrongType e -> Error e in
+  match f exp exp_env, f state_exp env, f state_transition_exp env with
+  | Ok (dimensioned, a), Error _, Error _ -> dimensioned, Exp a
+  | Error _, Ok (dimensioned, b), Error _ -> dimensioned, StateExp b
+  | Error _, Error _, Ok (dimensioned, c) -> dimensioned, StateTransitionExp c
+  | _ -> raise @@ Errors.TwoTypes !@e
+
 
 let tritype_of_exp = function
   | Exp e -> BNetlist !%%e
@@ -396,18 +499,30 @@ let assert_exp_one fun_env dim (dimensioned: dim_env) e : dim_env * exp dimensio
     dimensioned, Ok e'
   with CannotDimensionYet id -> dimensioned, Error id
 
-let assert_tritype_exp_one fun_env dim (dimensioned: dim_env) e : dim_env * tritype_exp dimension_option =
-  match (dim, e) with
-  | BNetlist ti, Exp e ->
-      let dimensioned, e' = assert_exp_one fun_env ti dimensioned e in
+let assert_state_exp_one env s (dimensioned: dim_env) e : dim_env * exp state_exp dimension_option =
+  try
+    let dimensioned, e' = assert_state_exp env s dimensioned e in
+    dimensioned, Ok e'
+  with CannotDimensionYet id -> dimensioned, Error id
+
+let assert_state_transition_exp_one env s (dimensioned: dim_env) e : dim_env * exp state_transition_exp dimension_option =
+  try
+    let dimensioned, e' = assert_state_transition_exp env s dimensioned e in
+    dimensioned, Ok e'
+  with CannotDimensionYet id -> dimensioned, Error id
+
+
+let assert_tritype_exp_one (exp_env, _ as env) dim (dimensioned: dim_env) e : dim_env * tritype_exp dimension_option =
+  match dim with
+  | BNetlist ti ->
+      let dimensioned, e' = assert_exp_one exp_env ti dimensioned e in
       dimensioned, Result.map (fun e -> Exp e) e'
-  | BState _, StateExp e ->
-      let dimensioned, e' = state_exp fun_env dimensioned e in
-      dimensioned, Ok (StateExp e') (* enum type checking should be done already *)
-  | BStateTransition _, StateTransitionExp e ->
-      let dimensioned, e' = state_transition_exp fun_env dimensioned e in
-      dimensioned, Ok (StateTransitionExp e')
-  | _ -> failwith "Error in state typing"
+  | BState s ->
+      let dimensioned, e' = assert_state_exp_one env s dimensioned e in
+      dimensioned, Result.map (fun e -> StateExp e) e'
+  | BStateTransition s ->
+      let dimensioned, e' = assert_state_transition_exp_one env s dimensioned e in
+      dimensioned, Result.map (fun e -> StateTransitionExp e) e'
 
 
 let tritype_exp_one fun_env (dimensioned: dim_env) e : dim_env * tritype_exp dimension_option =
@@ -455,53 +570,53 @@ let rec match_handler_one fun_env dimensioned ({ m_body; _} as handler) =
   let dimensioned, m_body' = block_one fun_env dimensioned m_body in
   dimensioned, Result.map (fun m_body -> { handler with m_body }) m_body'
 
-and matcher_one fun_env dimensioned ({ m_handlers; _} as matcher) : dim_env * decl matcher dimension_option =
+and matcher_one fun_env dimensioned ({ m_handlers; m_state_type; _ } as matcher) : dim_env * state_type * decl matcher dimension_option =
   let dimensioned, m_handlers' = constructenv_map_fold1 (match_handler_one fun_env) dimensioned m_handlers in
-  dimensioned, Result.map (fun m_handlers -> { matcher with m_handlers }) m_handlers'
+  dimensioned, m_state_type, Result.map (fun m_handlers -> { matcher with m_handlers }) m_handlers'
 
-and transition_one fun_env dimensioned : 'a -> 'b * 'c dimension_option = function
+and transition_one (fun_env, _ as env) dimensioned : 'a -> 'b * 'c dimension_option = function
   | [] -> dimensioned, Ok []
   | hd :: tl ->
       let dimensioned, hd1' = assert_exp_one fun_env (NDim 0) dimensioned (fst hd) in
-      let dimensioned, hd2' = state_transition_exp_one fun_env dimensioned (snd hd) in
-      let dimensioned, tl' = transition_one fun_env dimensioned tl in
+      let dimensioned, hd2' = state_transition_exp_one env dimensioned (snd hd) in
+      let dimensioned, tl' = transition_one env dimensioned tl in
       let hd' = result_fold2 ~oks:(fun a b -> a, b) hd1' hd2' in
       dimensioned, result_fold2 ~oks:(fun hd tl -> hd :: tl) hd' tl'
 
-and automaton_handler_one fun_env dimensioned ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
-  let dimensioned, a_body' = block_one fun_env dimensioned a_body in
-  let dimensioned, a_weak_transition' = transition_one fun_env dimensioned a_weak_transition in
-  let dimensioned, a_strong_transition' = transition_one fun_env dimensioned a_strong_transition in
+and automaton_handler_one env dimensioned ({ a_body; a_weak_transition; a_strong_transition; _ } as handler) =
+  let dimensioned, a_body' = block_one env dimensioned a_body in
+  let dimensioned, a_weak_transition' = transition_one env dimensioned a_weak_transition in
+  let dimensioned, a_strong_transition' = transition_one env dimensioned a_strong_transition in
   let transitions' = result_fold2 ~oks:(fun a b -> (a, b)) a_weak_transition' a_strong_transition' in
   dimensioned, result_fold2 ~oks:(fun a_body (a_weak_transition, a_strong_transition) ->
     { handler with a_body; a_weak_transition; a_strong_transition})
     a_body' transitions'
 
-and automaton_one fun_env dimensioned ({ a_handlers; _} as auto: StaticTypedAST.automaton) : dim_env * automaton dimension_option =
-  let dimensioned, a_handlers' = constructenv_map_fold2 (automaton_handler_one fun_env) dimensioned a_handlers in
+and automaton_one env dimensioned ({ a_handlers; _} as auto: StaticTypedAST.automaton) : dim_env * automaton dimension_option =
+  let dimensioned, a_handlers' = constructenv_map_fold2 (automaton_handler_one env) dimensioned a_handlers in
   dimensioned, Result.map (fun a_handlers -> { auto with a_handlers }) a_handlers'
 
-and decl_one fun_env dimensioned (d: StaticTypedAST.decl) : dim_env * decl dimension_option = match !!d with
+and decl_one (fun_env, _ as env) dimensioned (d: StaticTypedAST.decl) : dim_env * decl dimension_option = match !!d with
   | Deq (lval, e) ->
-      let dimensioned, (lval', e') = eq_one fun_env dimensioned (lval, e) in
+      let dimensioned, (lval', e') = eq_one env dimensioned (lval, e) in
       dimensioned, (result_fold2 ~oks:(fun a b -> relocalize !@d @@ Deq (a, b)) lval' e')
   | Dlocaleq (lval, e) ->
-      let dimensioned, (lval', e') = eq_one fun_env dimensioned (lval, e) in
+      let dimensioned, (lval', e') = eq_one env dimensioned (lval, e) in
       dimensioned, (result_fold2 ~oks:(fun a b -> relocalize !@d @@ Dlocaleq (a, b)) lval' e')
   | Dif (c, b1, b2) ->
-      let dimensioned, b1' = block_one fun_env dimensioned b1 in
-      let dimensioned, b2' = block_one fun_env dimensioned b2 in
+      let dimensioned, b1' = block_one env dimensioned b1 in
+      let dimensioned, b2' = block_one env dimensioned b2 in
       dimensioned, (result_fold2 ~oks:(fun b1 b2 -> relocalize !@d @@ Dif (c, b1, b2)) b1' b2')
   | Dreset (e, b) ->
       let dimensioned, e' = assert_exp_one fun_env (NDim 0) dimensioned e in
-      let dimensioned, b' = block_one fun_env dimensioned b in
+      let dimensioned, b' = block_one env dimensioned b in
       dimensioned, (result_fold2 ~oks:(fun e b -> relocalize !@d @@ Dreset (e, b)) e' b')
   | Dmatch (e, m) ->
-      let dimensioned, m' = matcher_one fun_env dimensioned m in
-      let dimensioned, e' = state_exp_one fun_env dimensioned e in
+      let dimensioned, s, m' = matcher_one env dimensioned m in
+      let dimensioned, e' = assert_state_exp_one env s dimensioned e in
       dimensioned, (result_fold2 ~oks:(fun e m -> relocalize !@d @@ Dmatch (e, m)) e' m')
   | Dautomaton a ->
-      let dimensioned, a' = automaton_one fun_env dimensioned a in
+      let dimensioned, a' = automaton_one env dimensioned a in
       dimensioned, (Result.map (fun a -> relocalize !@d @@ Dautomaton a) a')
 
 and constructenv_map_fold1 handler_one dimensioned s_handlers =
@@ -580,8 +695,8 @@ let node fun_env ({ node_inputs; node_outputs; node_body; node_variables; node_n
     node_variables
   }
 
-let program ({ p_nodes; _ } as program) : program =
+let program ({ p_nodes; p_enums; _ } as program) : program =
   let fun_env = FunEnv.map fun_env p_nodes in
   { program with
-    p_nodes = FunEnv.map (node fun_env) p_nodes;
+    p_nodes = FunEnv.map (node (fun_env, p_enums)) p_nodes;
   }

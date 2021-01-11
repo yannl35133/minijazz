@@ -16,6 +16,9 @@ let print_netlist_type = print_netlist_type print_size
 let rec print_exp_desc = function
   | EConst v ->  print_val v
   | EVar id  ->  print_ident id
+  | EConstr id -> print_constructor id
+  | EContinue s -> dprintf "continue %t" (print_exp s)
+  | ERestart s -> dprintf "restart %t" (print_exp s)
   | EReg e   ->  dprintf "reg@ %t" (print_exp e)
   | ESlice (params, arg) ->
       dprintf "%t%t"
@@ -73,13 +76,13 @@ let rec print_decl_desc = function
       dprintf "@[<h>%t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
-        (print_tritype_exp print_exp exp)
+        (print_exp exp)
         (semicolon_sep)
   | Dlocaleq (lv, exp) ->
       dprintf "@[<h>local %t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
-        (print_tritype_exp print_exp exp)
+        (print_exp exp)
         (semicolon_sep)
   | Dreset (exp, eqs) ->
       dprintf "@[<hv2>reset@ %t@]@ every %t%t"
@@ -88,10 +91,10 @@ let rec print_decl_desc = function
         (semicolon_sep)
   | Dautomaton auto ->
      dprintf "@[<v2>automaton@ %t@]@ end"
-      (print_automaton (print_exp, print_state_transition_exp print_exp, print_decl) auto)
+      (print_automaton (print_exp, print_exp, print_decl) auto)
   | Dmatch (e, matcher) ->
     dprintf "@[<v2>match %t with@ %t@]@ end"
-      (print_state_exp print_exp e)
+      (print_exp e)
       (print_matcher print_decl matcher)
   | Dif (se, b1, b2) ->
      dprintf "@[if@ %t@ then@]@;<1 2>@[<v>%t@]@ else@;<1 2>@[<v>%t@]@ end if"

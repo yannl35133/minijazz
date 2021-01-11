@@ -12,7 +12,10 @@ type slice_param = size CommonAST.slice_param
 
 type exp_desc =
   | EConst  of value
+  | EConstr of constructor
   | EVar    of ident
+  | EContinue of exp
+  | ERestart of exp
   | EReg    of exp
   | ESlice  of slice_param list * exp
   | ESupOp  of funname * exp list
@@ -23,18 +26,16 @@ type exp_desc =
 
 and exp = exp_desc localized
 
-type tritype_exp = exp StaticTypedPartialAST.tritype_exp
-
 type typed_ident = size CommonAST.typed_ident
 
-type automaton = ((exp * exp state_transition_exp) list, decl) CommonAST.automaton
+type automaton = ((exp * exp) list, decl) CommonAST.automaton
 
 and decl_desc =
-  | Deq        of StaticScopedAST.lvalue * tritype_exp (* p = e *)
-  | Dlocaleq   of StaticScopedAST.lvalue * tritype_exp (* local p = e *)
+  | Deq        of StaticScopedAST.lvalue * exp (* p = e *)
+  | Dlocaleq   of StaticScopedAST.lvalue * exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
   | Dautomaton of automaton
-  | Dmatch     of exp state_exp * decl matcher
+  | Dmatch     of exp * decl matcher
   | Dif        of static_bool_exp * decl list * decl list
 
 and decl = decl_desc localized
