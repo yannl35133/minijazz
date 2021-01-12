@@ -8,7 +8,7 @@ open ParserAST
 let print_ident (id: ident) = dprintf "%s" id.desc
 
 let print_enum { enum_name; enum_constructors; _ } =
-  dprintf "type %t =@[<hv2>@ %t@]"
+  dprintf "type %t =@[<hv2>@ %t@]@\n"
     (print_ident enum_name)
     (print_list_naked (dprintf " |@ ") print_ident enum_constructors)
 
@@ -78,10 +78,10 @@ let rec print_exp_desc = function
   | EConst v -> print_val v
   | EConstr c -> print_ident c
   | EVar id  -> print_ident id
-  | EContinue e -> dprintf "continue@ %t" (print_exp e)
-  | ERestart e ->  dprintf "restart@ %t" (print_exp e)
+  | EContinue e -> dprintf "continue %t" (print_exp e)
+  | ERestart e ->  dprintf "restart %t" (print_exp e)
   | EPar e   -> par (print_exp e)
-  | EReg e   -> dprintf "reg@ %t" (print_exp e)
+  | EReg e   -> dprintf "reg(%t)" (print_exp e)
   | ESlice (params, arg) ->
       dprintf "%t%t"
         (print_exp arg)

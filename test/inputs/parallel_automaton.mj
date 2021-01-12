@@ -1,0 +1,27 @@
+type st = | St1 | St2
+
+main (clk) = o where
+  front_edge = clk & not(reg(clk));
+  down_edge = not(clk) & reg(clk);
+  automaton
+  | St1 ->
+    local x = x ^ reg x;
+    o = x & o;
+    until down_edge then restart St2
+  | St2 ->
+    local x = x ^ reg x;
+    o = x & o;
+    until front_edge then continue St1
+  end;
+
+  automaton
+  | St1 ->
+    local x = x ^ reg x;
+    o1 = x & o;
+    until down_edge then restart St2
+  | St2 ->
+    local x = x ^ reg x;
+    o1 = x & o;
+    until front_edge then continue St1
+  end
+end where

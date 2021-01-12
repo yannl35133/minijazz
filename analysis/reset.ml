@@ -6,8 +6,13 @@ let zero = { si_desc = EConst (VBit false);
              si_loc = Location.no_location;
              si_size = TNDim [Size (SInt 1)]}
 
-let rst (c:exp) (e:exp) =
-  { e with si_desc = ECall (relocalize e.si_loc "mux", [], [c; zero; e]) }
+let rst (c:exp) (exp:tritype_exp) =
+  match exp with
+  | Exp e ->
+     let si_desc = ECall (relocalize e.si_loc "mux", [], [c; zero; e]) in
+     Exp { e with si_desc }
+  | StateExp e -> StateExp { e with s_desc = ESReg e }
+  | StateTransitionExp _ -> assert false
 
 let mk_or (c1:exp) (c2:exp) =
   { c1 with si_desc = ECall (relocalize c1.si_loc "or", [], [c1; c2]) }
@@ -16,13 +21,9 @@ let fmap f lst = List.flatten @@ List.map f lst
 
 let rec decl (c:exp option) (d:decl) : decl list = match d.desc with
   | Deq (lv, e) ->
-     let e = match e with
-       | Exp e -> e
-       | StateExp _ -> assert false
-       | StateTransitionExp _ -> assert false in
      begin match c with
      | None -> [d]
-     | Some c -> [{ d with desc = Deq (lv, Exp (rst c e))}]
+     | Some c -> [{ d with desc = Deq (lv, rst c e)}]
      end
   | Dreset (e, ds) ->
      begin match c with
@@ -43,7 +44,7 @@ let rec decl (c:exp option) (d:decl) : decl list = match d.desc with
   | Dlocaleq (_, _) -> assert false
   | Dautomaton _ -> assert false
 
-let node (n:node) = { n with node_body = List.map (decl None) n.node_body }
+let node (n:node) = { n with node_body = fmap (decl None) n.node_body }
 
 (** [Reset.program p] produce a program with
     no automaton and produces a program

@@ -1,0 +1,5 @@
+main (i) = o where
+  reset
+    o = o & reg(o);
+  every i
+end where

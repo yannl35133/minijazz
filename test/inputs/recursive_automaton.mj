@@ -1,8 +1,12 @@
+type t1 = | Good | Bad
+type t2 = | St1 | St2
+
 main (clk, press) = o where
   front_edge = clk & not(reg(clk));
   down_edge = not(clk) & reg(clk);
   automaton
   | St1 ->
+    o = 1;
     automaton
     | Good -> x = 1 until down_edge then continue Bad
     | Bad  -> x = 0 until down_edge then restart Good

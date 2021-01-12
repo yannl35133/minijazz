@@ -104,9 +104,12 @@ let compile_impl filename =
 
     let sized_program = Netlist_sizer.program constrained_program in
 
-    (* let p = Automaton.program sized_program in
-     * Printers.ParserAst.print_program (Sizer_to_parser.program p)
-     *   Format.std_formatter; *)
+    let p = sized_program in
+    let p = Automaton.program p in
+    (* let p = Reset.program p in *)
+
+    Printers.ParserAst.print_program (Sizer_to_parser.program p)
+      Format.std_formatter;
 
     (* let _ = exit 0 in *)
 
