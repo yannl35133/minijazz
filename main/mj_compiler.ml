@@ -106,7 +106,8 @@ let compile_impl filename =
 
     let p = sized_program in
     let p = Automaton.program p in
-    (* let p = Reset.program p in *)
+    let p = Reset.program p in
+    let p = Matcher.program p in
 
     Printers.ParserAst.print_program (Sizer_to_parser.program p)
       Format.std_formatter;
