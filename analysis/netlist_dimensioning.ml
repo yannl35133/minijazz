@@ -41,6 +41,15 @@ let rec print_netlist_dimension = function
   | NDim n -> Format.dprintf "%d-dim" n
   | NProd l -> Format.dprintf "@[<hv2>%t@]" (Printers.CommonAst.print_list_naked (Format.dprintf " * ") print_netlist_dimension l)
 
+let print_ot = function
+  | OTNetlist Some thing -> print_netlist_dimension thing
+  | OTNetlist None -> Format.dprintf "netlist"
+  | OTState Some s -> Printers.CommonAst.print_enum_type s
+  | OTState None -> Format.dprintf "state"
+  | OTStateTransition Some s -> Format.dprintf "%t transition" @@ Printers.CommonAst.print_enum_type s
+  | OTStateTransition None -> Format.dprintf "state transition"
+
+
 let new_unknown_parameter () =
   SOIntExp (SUnknown (UIDUnknownStatic.get ()))
 
@@ -696,7 +705,19 @@ let node fun_env ({ node_inputs; node_outputs; node_body; node_variables; node_n
   }
 
 let program ({ p_nodes; p_enums; _ } as program) : program =
-  let fun_env = FunEnv.map fun_env p_nodes in
-  { program with
-    p_nodes = FunEnv.map (node (fun_env, p_enums)) p_nodes;
-  }
+  try
+    let fun_env = FunEnv.map fun_env p_nodes in
+    { program with
+      p_nodes = FunEnv.map (node (fun_env, p_enums)) p_nodes;
+    }
+  with
+  | WrongType (found, expected, loc, _) ->
+      Format.eprintf "%aType Error: This expression has type %t but an expression of type %t was expected@."
+      Location.print_location loc
+      (print_ot found)
+      (print_ot expected);
+      raise Errors.ErrorDetected
+  | Errors.WrongNumberArguments (found, loc, expected, fname) ->
+      Format.eprintf "%aType Error: Function %s has %i arguments but %i were given@."
+      Location.print_location loc fname expected found;
+      raise Errors.ErrorDetected

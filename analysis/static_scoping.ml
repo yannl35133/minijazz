@@ -330,5 +330,7 @@ let program ParserAST.{ p_enums; p_consts; p_nodes } : program =
     let p_nodes_order = List.map (fun node -> !!(node.ParserAST.node_name)) p_nodes in
     { p_enums = enum_constrs; p_consts; p_consts_order; p_nodes = p_nodes'; p_nodes_order }
   with
+  | MissingVariable (id, loc) ->
+      Format.eprintf "%aVariable %s is not declared in this part@." Location.print_location loc id; raise Errors.ErrorDetected
   | Errors.Scope_error (id, loc) ->
       Format.eprintf "%aVariable %s is not declared@." Location.print_location loc id; raise Errors.ErrorDetected

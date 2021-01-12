@@ -27,7 +27,7 @@ let tritype_of_exp = function
 
 let fun_env_find fun_env id =
   let reloc a = relocalize !@id a in
-  let regexp_slice = Str.regexp {|slice\(\(_\(all\|one\|to\|from\|fromto\)\)*\)|} in
+  let regexp_slice = Str.regexp {|slice\(\(_\(all\|one\|to\|from\|fromto\)\)+\)|} in
   let regexp_supop = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\|concat\|add_dim\)_\([0-9]+\)|} in
   if FunEnv.mem !!id fun_env then
     FunEnv.find !!id fun_env
