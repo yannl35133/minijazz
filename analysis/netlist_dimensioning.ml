@@ -220,7 +220,7 @@ let rec exp (fun_env: fun_env) dimensioned (e: StaticTypedAST.exp) = match !!e w
         in
         try
           Misc.fold_left_map2 f dimensioned dims_in args
-        with Not_found -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, List.length dims_in, !!fname)
+        with Invalid_argument _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, List.length dims_in, !!fname)
       in
       dimensioned, dimension (ECall (fname, params, dim_args)) !@e dims_out
   | EMem (mem_kind, (addr_size, word_size, input_file), args) ->
@@ -236,7 +236,7 @@ let rec exp (fun_env: fun_env) dimensioned (e: StaticTypedAST.exp) = match !!e w
         in
         try
           Misc.fold_left_map2 f dimensioned dims_in args
-        with Not_found -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, List.length dims_in, fname)
+        with Invalid_argument _ -> raise @@ Errors.WrongNumberArguments (List.length args, !@e, List.length dims_in, fname)
       in
       dimensioned, dimension (EMem (mem_kind, (addr_size, word_size, input_file), dim_args)) !@e dims_out
 
@@ -249,7 +249,7 @@ and assert_exp fun_env dim dimensioned e =
   | EConst _ -> failwith "Cannot fail to dimension a constant"
   | EConstr _
   | EContinue _
-  | ERestart _ -> failwith "Should aleady be excluded"
+  | ERestart _ -> failwith "Should already be excluded"
   | EVar id -> begin
       try
         match Env.find !**id dimensioned with
