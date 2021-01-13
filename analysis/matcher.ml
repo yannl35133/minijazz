@@ -137,6 +137,10 @@ let new_en_var _ =
              id_desc = "en" ^ (UIDIdent.to_string uid )} in
   id, size (EVar id) Location.no_location bit_type
 
+let is_native_fname s =
+  let regex = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\)_\([01]\)|} in
+  Str.string_match regex s 0
+
 let rec en_exp en (e:tritype_exp) = match e with
   | Exp e -> Exp (en_exp' en e)
   | StateExp se -> StateExp (en_sexp en se)
@@ -147,16 +151,14 @@ and en_exp_desc en (e:exp_desc) = match e with
   | EVar _ -> e
   | EReg e -> EReg (en_exp' en e)
   | EMem (st1, st2, es) -> EMem (st1, st2, List.map (en_exp' en) es)
-  | ECall ({ desc = "and"; _ }, _, _)
-    | ECall ({ desc = "not"; _ }, _, _)
-    | ECall ({ desc = "xor"; _ }, _, _)
-    | ECall ({ desc = "or"; _ }, _, _)
-    | ECall ({ desc = "concat"; _ }, _, _)
-    | ECall ({ desc = "slice_one"; _ }, _, _)
+  | ECall ({ desc = fname; _ }, _, _) when is_native_fname fname -> e
+  | ECall ({ desc = "slice_one"; _ }, _, _)
+    | ECall ({ desc = "slice_all"; _ }, _, _)
     | ECall ({ desc = "slice_from"; _ }, _, _)
     | ECall ({ desc = "slice_to"; _ }, _, _)
     | ECall ({ desc = "slice_fromto"; _ }, _, _)
-    | ECall ({ desc = "slice_all"; _ }, _, _) -> e
+    | ECall ({ desc = "add_dim_0"; _ }, _, _)
+    | ECall ({ desc = "concat_1"; _ }, _, _)  -> e
   | ECall (fname, ps, args) ->
      ECall (fname, ps, en :: List.map (en_exp' en) args)
 

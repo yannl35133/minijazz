@@ -113,8 +113,6 @@ let compile_impl filename =
     Printers.ParserAst.print_program (Sizer_to_parser.program p)
       Format.std_formatter;
 
-    (* let _ = exit 0 in *)
-
     Format.printf "done typing@.";
 
     let p = Sized_to_old.program p in
