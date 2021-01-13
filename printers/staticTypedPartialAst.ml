@@ -36,7 +36,7 @@ let rec print_int_exp_desc = function
         (print_int_unop sunop)
         (print_int_exp se)
   | SIBinOp (sop, se1, se2) ->
-      dprintf "%t%t%t"
+      dprintf "@[%t%t%t@]"
         (print_int_exp se1)
         (binop_sep (print_int_op sop))
         (print_int_exp se2)
@@ -55,7 +55,7 @@ and print_bool_exp_desc = function
         (print_bool_unop sunop)
         (print_bool_exp se)
   | SBBinOp (sop, se1, se2) ->
-      dprintf "%t%t%t"
+      dprintf "@[%t%t%t@]"
         (print_bool_exp se1)
         (binop_sep (print_bool_op sop))
         (print_bool_exp se2)

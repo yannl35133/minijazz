@@ -77,6 +77,7 @@ let const_of_int loc i =
 /** Tools **/
 let slist  (x, sep) == separated_list (sep, x)
 let snlist (x, sep) == separated_nonempty_list (sep, x)
+let s2list (x, sep) == hd=x; sep; tl=separated_nonempty_list (sep, x); < (::) >
 let stuple  (x, o, c) == o; ~=slist  (x, ","); c; <>
 let sntuple (x, o, c) == o; ~=snlist (x, ","); c; <>
 let tuple (x) == stuple(x, "(", ")")
@@ -158,11 +159,13 @@ let static_typed_ident :=
 // Netlist expressions
 
 let value :=
-  | b=BOOL;     { VBit b }
-  | i=INT;      { const_of_int (Loc $sloc) i }
-  | "["; "]";   { VNDim [] }
+  | b=BOOL;                           { VBit b }
+  | i=INT;                            { const_of_int (Loc $sloc) i }
+  | "["; "]";                         { VNDim [] }
+  | "["; ~=s2list(value, ","); "]";   < VNDim >
 
 let slice_param :=
+  | idx=opt_static_exp;                                                       < SliceOne >
   |                    "..";                                                  { SliceAll }
   | lo=opt_static_exp; "..";                                                  { SliceFrom lo }
   |                    ".."; hi=opt_static_exp;                               { SliceTo hi }
@@ -203,7 +206,6 @@ let exp_desc :=
   | _b="["; e=exp; "]";                                                       { ESupOp (localize $loc(_b) "add_dim", [e])}
   | e1=exp; _c="."; e2=exp;                                                   { ESupOp (localize $loc(_c) "concat", [e1; e2]) }
   | e1=simple_exp; slice=sntuple(slice_param, "[", "]")+;                     { ESlice (List.flatten slice, e1) }
-  | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESlice (List.map (fun e -> SliceOne e) (List.flatten idx), e1) }
   | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
       word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);    { EMem  (ro, (addr_size, word_size, input_file), a) }
 

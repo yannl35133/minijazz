@@ -711,6 +711,11 @@ let program ({ p_nodes; p_enums; _ } as program) : program =
       p_nodes = FunEnv.map (node (fun_env, p_enums)) p_nodes;
     }
   with
+  | Errors.SliceTooMuch (found, expected, loc) ->
+    Format.eprintf "%aType Error: This expression has dimension %i but it is sliced %i times@."
+    Location.print_location loc
+    found expected;
+    raise Errors.ErrorDetected
   | WrongType (found, expected, loc, _) ->
       Format.eprintf "%aType Error: This expression has type %t but an expression of type %t was expected@."
       Location.print_location loc

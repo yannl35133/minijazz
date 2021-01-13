@@ -174,7 +174,6 @@ let print_const_dec ff cd =
   fprintf ff "const %a = %a@\n@."
     print_name cd.c_name  print_static_exp cd.c_value
 
-let print_program oc p =
-  let ff = formatter_of_out_channel oc in
-    List.iter (print_const_dec ff) p.p_consts;
-    List.iter (print_node ff) p.p_nodes
+let print_program ff p =
+  List.iter (print_const_dec ff) p.p_consts;
+  List.iter (print_node ff) p.p_nodes

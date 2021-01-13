@@ -125,8 +125,8 @@ rule token = parse
   | "<="            { LEQ }
   | ">="            { GEQ }
   | "->"            { ARROW }
-  | "."             { DOT }
   | ".."            { DOTDOT }
+  | "."             { DOT }
   | constructor as id {CONSTRUCTOR id }
   | ident as id     { try Hashtbl.find keyword_table id
                       with Not_found -> IDENT id }

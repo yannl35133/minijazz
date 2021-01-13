@@ -171,7 +171,7 @@ let rec print_presize = function
         (print_list brak comma_sep Printers.StaticTypedPartialAst.print_unknown_exp params)
 
 let print_constraints l =
-  print_list (dprintf "%t") (dprintf "@.") (fun (a, b) -> dprintf "@[%t =@ %t@]" (print_presize a) (print_presize b)) l
+  print_list (dprintf "%t") (dprintf "@.") (fun (a, b) -> dprintf "@[%t =@;<1 2>%t@]" (print_presize a) (print_presize b)) l
 
 (* ---------------------------------------------------------------------------------- *)
 
@@ -395,7 +395,9 @@ let rec maybe_equal_int = function
   | UIUnOp (SNeg, se1), UIUnOp (SNeg, se2) -> maybe_equal_int (!!se1, !!se2)
   | UIBinOp (op, se1, se2), UIBinOp (op', se1', se2') -> if op <> op' then Maybe else maybe_equal_int (!!se1, !!se1') &&? maybe_equal_int (!!se2, !!se2')
   | UIIf (c, se1, se2), UIIf (c', se1', se2') -> maybe_equal_bool (!!c, !!c') &&? maybe_equal_int (!!se1, !!se2) &&? maybe_equal_int (!!se1', !!se2')
-  | UISum l1, UISum l2 -> List.fold_left (&&?) Yes @@ List.map maybe_equal_int @@ List.combine (List.map (!!) l1) (List.map (!!) l2)
+  | UISum l1, UISum l2 ->
+    if List.length l1 <> List.length l2 then Maybe else
+    List.fold_left (&&?) Yes @@ List.map maybe_equal_int @@ List.combine (List.map (!!) l1) (List.map (!!) l2)
   | _ -> Maybe
 
 and maybe_equal_bool = function

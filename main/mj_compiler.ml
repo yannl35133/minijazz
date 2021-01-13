@@ -90,7 +90,7 @@ let compile_impl filename =
     Format.printf "parsing %s@." filename;
     base_path := Filename.dirname filename;
 
-    let pp = Printer.print_program stdout in
+    let pp = Printer.print_program Format.std_formatter in
     (* Parsing of the file *)
     let parsing_ast = parse lexbuf in
 
@@ -105,18 +105,23 @@ let compile_impl filename =
     let sized_program = Netlist_sizer.program constrained_program in
 
     let p = sized_program in
+    let p' = Dedimension.program p in
+    let p  = p' in
+    (* Format.eprintf "V1: @,%t@.@." (Printers.NetlistSizedAst.print_program p); *)
     let p = Automaton.program p in
     let p = Reset.program p in
     let p = Matcher.program p in
 
-    Printers.ParserAst.print_program (Sizer_to_parser.program p)
-      Format.std_formatter;
+    (* Printers.ParserAst.print_program (Sizer_to_parser.program p)
+      Format.std_formatter; *)
+    (* Printers.NetlistSizedAst.print_program p *)
+
 
     (* let _ = exit 0 in *)
 
     Format.printf "done typing@.";
 
-    let p = Sized_to_old.program sized_program in
+    let p = Sized_to_old.program p' in
 
     let p = pass "Scoping" true Scoping.program p pp in
 

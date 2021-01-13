@@ -36,7 +36,7 @@ let rec print_sexp_desc = function
         (print_sunop sunop)
         (print_sexp se)
   | SBinOp (sop, se1, se2) ->
-      dprintf "%t%t%t"
+      par @@ dprintf "%t%t%t"
         (print_sexp se1)
         (binop_sep (print_sop sop))
         (print_sexp se2)
