@@ -12,22 +12,24 @@ module M = Map.Make(struct type t = ident
 (* one bit encoding of enum *)
 let build f lst = List.fold_left f ConstructEnv.empty lst
 
-let gen_lv prefix (e:NetlistSizedAST.tritype_exp) =
+let rec gen_lv prefix (lv:lvalue) =
   let uid = UIDIdent.get () in
-  match e with
-  | Exp e ->
+  match lv.b_desc with
+  | LValDrop -> [None]
+  | LValId id ->
      let ident = { id_uid  = uid;
-                   id_desc = prefix ^ (UIDIdent.to_string uid);
-                   id_loc  = e.si_loc} in
-     tritype (LValId ident) e.si_loc (BNetlist e.si_size),
-     Exp (size (EVar ident) e.si_loc e.si_size)
-  | StateExp e ->
-     let ident = { id_uid  = uid;
-                   id_desc = prefix ^ (UIDIdent.to_string uid);
-                   id_loc  = e.s_loc} in
-     tritype (LValId ident) e.s_loc (BState e.s_type),
-     StateExp (state_type (ESVar ident) e.s_loc e.s_type)
-  | _ -> assert false
+                   id_desc = prefix ^ id.id_desc ^ (UIDIdent.to_string uid);
+                   id_loc  = id.id_loc } in
+     let lvvar, var = match lv.b_type with
+       | BNetlist sz ->
+          Exp (size (EVar id) id.id_loc sz),
+          Exp (size (EVar ident) id.id_loc sz)
+       | BState st ->
+          StateExp (state_type (ESVar id) id.id_loc st),
+          StateExp (state_type (ESVar ident) id.id_loc st)
+       | BStateTransition _ -> assert false in
+     [Some (lv, lvvar, tritype (LValId ident) id.id_loc lv.b_type, var)]
+  | LValTuple lvs -> fmap (gen_lv prefix) lvs
 
 let mux (e:exp) (e1:tritype_exp) e2 = match e1, e2 with
   | Exp e1, Exp e2 ->
@@ -169,10 +171,20 @@ and en_sexp_desc en (e:exp state_exp_desc) = match e with
 and en_sexp en (e:exp state_exp) = re_state_type e (en_sexp_desc en e.s_desc)
 
 and en_decl en (d:decl) = match d.desc with
+  | Deq ({ b_desc = LValDrop; _ }, _) -> []
   | Deq (lv, e) ->
-     let tmp_lv, tmp_var = gen_lv "tmp" e in
-     [relocalize d.loc @@ Deq (tmp_lv, en_exp en e);
-      relocalize d.loc @@ Deq (lv, (mux en tmp_var (reg tmp_var)))]
+     let lst = gen_lv "tmp" lv in
+     let lst_lv, lst_eq =
+       List.fold_right (fun x (lst_lv, lst_eq)  ->
+           match x with
+           | Some (lv, var_lv, tmp_lv, tmp_var) ->
+              let eq = Deq (lv, (mux en tmp_var (reg var_lv))) in
+              tmp_lv :: lst_lv, (relocalize d.loc @@ eq) :: lst_eq
+           | None -> (tritype LValDrop lv.b_loc lv.b_type) :: lst_lv, lst_eq)
+         lst ([],[])
+     in
+     let tuple = tritype (LValTuple lst_lv) lv.b_loc lv.b_type in
+     (relocalize d.loc @@ Deq (tuple, en_exp en e)):: lst_eq
   | Dif (sc, b1, b2) ->
      let b1 = fmap (en_decl en) b1 in
      let b2 = fmap (en_decl en) b2 in

@@ -77,6 +77,14 @@ let lexbuf_from_file file_name =
       { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = file_name };
   ic, lexbuf
 
+let type_program parsing_ast =
+  let static_scoped_ast = Static_scoping.program parsing_ast in
+  let static_typed_ast = Static_typer.program static_scoped_ast in
+  let dimensioned_program = Netlist_dimensioning.program static_typed_ast in
+  let constrained_program = Netlist_constrain.program dimensioned_program in
+  let sized_program = Netlist_sizer.program constrained_program in
+  sized_program
+
 let compile_impl filename =
   (* input and output files *)
   if not (Filename.check_suffix filename "mj") then begin
@@ -92,19 +100,12 @@ let compile_impl filename =
 
     let pp = Printer.print_program stdout in
     (* Parsing of the file *)
-    let parsing_ast = parse lexbuf in
+    let p = parse lexbuf in
 
     if !print_parsing_ast then
-      Printers.ParserAst.print_program parsing_ast Format.std_formatter;
+      Printers.ParserAst.print_program p Format.std_formatter;
 
-    let static_scoped_ast = Static_scoping.program parsing_ast in
-    let static_typed_ast = Static_typer.program static_scoped_ast in
-    let dimensioned_program = Netlist_dimensioning.program static_typed_ast in
-    let constrained_program = Netlist_constrain.program dimensioned_program in
-
-    let sized_program = Netlist_sizer.program constrained_program in
-
-    let p = sized_program in
+    let p = type_program p in
     let p = Automaton.program p in
     let p = Reset.program p in
     let p = Matcher.program p in
@@ -116,7 +117,7 @@ let compile_impl filename =
 
     Format.printf "done typing@.";
 
-    let p = Sized_to_old.program sized_program in
+    let p = Sized_to_old.program p in
 
     let p = pass "Scoping" true Scoping.program p pp in
 

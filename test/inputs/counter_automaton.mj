@@ -20,10 +20,10 @@ main (clk) = (c1:[4], c2:[4]) where
   front_edge = clk & not(reg(clk));
   down_edge = not(clk) & reg(clk);
   automaton
-  | Up   -> c1 = adder<4>(reg c1, 0b0001);
+  | Up   -> (c1, _) = adder<4>(reg c1, 0b0001, 0);
             c2 = reg c2;
             until down_edge then continue Down
-  | Down -> c2 = adder<4>(reg c2, 0b0001);
+  | Down -> (c2, _) = adder<4>(reg c2, 0b0001, 0);
             c1 = reg c1;
             until front_edge then continue Up
   end
