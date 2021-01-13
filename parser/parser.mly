@@ -61,6 +61,7 @@ let const_of_int loc i =
 %token <int * int> INT
 %token <bool> BOOL
 
+%nonassoc ELSE
 %left LEQ GEQ EQUAL NEQ LANGLE RANGLE
 %left DOT
 %left OR NOR PLUS MINUS
@@ -144,6 +145,7 @@ let static_exp_desc :=
   | se1=static_exp; op=int_op;      se2=static_exp;             { SBinOp (op, se1, se2) }
   | se1=static_exp; op=int_bool_op; se2=static_exp;             { SBinOp (op, se1, se2) }
   | se1=static_exp; op=bool_op;     se2=static_exp;             { SBinOp (op, se1, se2) }
+  | IF; c=static_exp; THEN; se1=static_exp; ELSE; se2=static_exp; { SIf (c, se1 , se2) }
 
 let opt_static_exp == localize(optional_static_exp_desc)
 let optional_static_exp_desc :=
