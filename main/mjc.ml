@@ -35,7 +35,8 @@ let main () =
         "-m", Arg.Set_string main_node, doc_main_node;
         "-S", Arg.Set netlist_simplify, doc_netlist_simplify;
         "-print-types", Arg.Set print_types, doc_full_type_info;
-        "-print-parsing-ast", Arg.Set print_parsing_ast, doc_parsing_ast
+        "-print-parsing-ast", Arg.Set print_parsing_ast, doc_parsing_ast;
+        "-no-netlist", Arg.Set no_netlist, doc_no_netlist
       ]
       compile_impl
       errmsg

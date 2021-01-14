@@ -39,24 +39,24 @@ let separateur = "\n*********************************************\
 let comment ?(sep=separateur) s =
   if !verbose then Format.printf "%s%s@." sep s
 
-let do_pass d f p pp =
-  comment (d^" ...\n");
-  let r = f p in
-  if !verbose then pp r;
-  comment ~sep:"*** " (d^" done.");
+let do_pass pass_name f program printer =
+  comment (pass_name ^ " ...\n");
+  let r = f program in
+  if !verbose then printer r;
+  comment ~sep:"*** " (pass_name ^ " done.");
   r
 
-let do_silent_pass d f p = do_pass d f p (fun _ -> ())
+let do_silent_pass pass_name f program = do_pass pass_name f program (fun _ -> ())
 
-let pass d enabled f p pp =
+let pass pass_name enabled f program printer =
   if enabled
-  then do_pass d f p pp
-  else p
+  then do_pass pass_name f program printer
+  else program
 
-let silent_pass d enabled f p =
+let silent_pass pass_name enabled f program =
   if enabled
-  then do_silent_pass d f p
-  else p
+  then do_silent_pass pass_name f program
+  else program
 
 let parse lexbuf =
   try
@@ -67,14 +67,13 @@ let parse lexbuf =
     | Parser.Error ->
         let pos1 = Lexing.lexeme_start_p lexbuf
         and pos2 = Lexing.lexeme_end_p lexbuf in
-        let l = Loc (pos1,pos2) in
+        let l = Loc (pos1, pos2) in
         syntax_error l
 
 let lexbuf_from_file file_name =
   let ic = open_in file_name in
   let lexbuf = Lexing.from_channel ic in
-  lexbuf.Lexing.lex_curr_p <-
-      { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = file_name };
+  Lexing.set_filename lexbuf file_name;
   ic, lexbuf
 
 let compile_impl filename =
@@ -86,62 +85,45 @@ let compile_impl filename =
 
   let ic, lexbuf = lexbuf_from_file filename in
   let net_name = (Filename.chop_suffix filename ".mj") ^ ".net" in
-  try
-    Format.printf "parsing %s@." filename;
-    base_path := Filename.dirname filename;
 
-    let pp = Printer.print_program Format.std_formatter in
-    (* Parsing of the file *)
-    let parsing_ast = parse lexbuf in
+  try
+    let printer_sized prog = Printers.NetlistSizedAst.print_program prog Format.std_formatter in
+    let printer_original =   Printer.print_program Format.std_formatter in
+
+
+    let parsed_program = parse lexbuf in
 
     if !print_parsing_ast then
-      Printers.ParserAst.print_program parsing_ast Format.std_formatter;
+      Printers.ParserAst.print_program parsed_program Format.std_formatter;
 
-    let static_scoped_ast = Static_scoping.program parsing_ast in
-    let static_typed_ast = Static_typer.program static_scoped_ast in
-    let dimensioned_program = Netlist_dimensioning.program static_typed_ast in
+    let scoped_program = Static_scoping.program parsed_program in
+    let static_typed_program = Static_typer.program scoped_program in
+    let dimensioned_program = Netlist_dimensioning.program static_typed_program in
     let constrained_program = Netlist_constrain.program dimensioned_program in
-
     let sized_program = Netlist_sizer.program constrained_program in
 
     let p = sized_program in
-    let p' = Dedimension.program p in
-    let p  = p' in
-    (* Format.eprintf "V1: @,%t@.@." (Printers.NetlistSizedAst.print_program p); *)
-    let p = Automaton.program p in
-    let p = Reset.program p in
-    let p = Matcher.program p in
+    let p = pass "dedimension" true Dedimension.program p printer_sized in
+    let p = pass "deautomaton" true Automaton.program   p printer_sized in
+    let p = pass "dereset"     true Reset.program       p printer_sized in
+    let p = pass "dematch"    false Matcher.program     p printer_sized in
 
-    (* Printers.ParserAst.print_program (Sizer_to_parser.program p)
-      Format.std_formatter; *)
-    (* Printers.NetlistSizedAst.print_program p *)
+    let p = Sized_to_old.program p in
 
-
-    (* let _ = exit 0 in *)
-
-    Format.printf "done typing@.";
-
-    let p = Sized_to_old.program p' in
-
-    let p = pass "Scoping" true Scoping.program p pp in
-
-    let p = pass "Typing" true Typing.program p pp in
-
-    let p = pass "Normalize" true Normalize.program p pp in
-
-    let p = pass "Callgraph" true Callgraph.program p pp in
-
-    let p = pass "Simplify" true Simplify.program p pp in
+    let p = pass "Scoping"     true Scoping.program     p printer_original in
+    let p = pass "Typing"      true Typing.program      p printer_original in
+    let p = pass "Normalize"   true Normalize.program   p printer_original in
+    let p = pass "Callgraph"   true Callgraph.program   p printer_original in
+    let p = pass "Simplify"    true Simplify.program    p printer_original in
 
     let p = Mj2net.program p in
 
-    let p = if !netlist_simplify
-             then Netlist_simplify.simplify p
-             else p in
+    let p = silent_pass "Simplify netlist" !netlist_simplify Netlist_simplify.simplify p in
 
-
-    let net = open_out net_name in
-    Netlist_printer.print_program net p;
-    close_out net
+    if not !no_netlist then begin
+      let net = open_out net_name in
+      Netlist_printer.print_program net p;
+      close_out net
+    end
   with
   | x -> close_in ic; raise x
