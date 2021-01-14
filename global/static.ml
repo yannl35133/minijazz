@@ -30,7 +30,7 @@ module NameEnv = Map.Make (struct type t = name let compare = compare end)
 
 type sop =
   | SAdd | SMinus | SMult | SDiv | SPower (*int*)
-  | SEqual | SLess | SLeq | SGreater | SGeq (*bool*)
+  | SEqual | SNeq | SLess | SLeq | SGreater | SGeq (*bool*)
 
 type static_exp_desc =
   | SInt of int

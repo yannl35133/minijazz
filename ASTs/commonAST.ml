@@ -229,5 +229,4 @@ type ('static_type, 'static_exp, 'size, 'decl, 'var_info) program = {
   p_consts: 'static_exp const Env.t;
   p_consts_order: UIDIdent.t list;
   p_nodes:  ('static_type, 'size, 'decl, 'var_info) node FunEnv.t;
-  p_nodes_order: ident_desc list
 }

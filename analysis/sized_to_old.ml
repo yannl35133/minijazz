@@ -17,7 +17,7 @@ let binop : int_op -> sop = function
   | SPower -> SPower
 
 let bool_binop : int_bool_op -> sop = function
-  | SEq -> SEqual | SNeq -> assert false
+  | SEq -> SEqual | SNeq -> SNeq
   | SLt -> SLess | SLeq -> SLeq
   | SGt -> SGreater | SGeq -> SGeq
 
@@ -33,9 +33,9 @@ and static_int_exp e = mk_static_exp ~loc:!@e (static_int_exp_desc !!e)
 
 and static_bool_exp_desc : static_bool_exp_desc -> static_exp_desc = function
   | SBool b -> SBool b
-  | SBParam id -> assert false
-  | SBConst id -> assert false
-  | SBUnOp (SNot, se) -> assert false
+  | SBParam _ -> assert false
+  | SBConst _ -> assert false
+  | SBUnOp (SNot, _) -> assert false
   | SBBinOp _ -> assert false
   | SBBinIntOp (op, se1, se2) -> SBinOp (bool_binop op, static_int_exp se1, static_int_exp se2)
   | SBIf (c, se1, se2) -> SIf (static_bool_exp c, static_bool_exp se1, static_bool_exp se2)
@@ -134,9 +134,9 @@ let node { node_name; node_loc; node_params; node_inline; node_inputs; node_outp
   n_params = params node_params; n_constraints = [];
   n_body = body node_body; n_probes = [] }
 
-let program ({ p_enums; p_consts; p_consts_order; p_nodes; p_nodes_order }: NetlistSizedAST.program) : program =
+let program ({ p_enums; p_consts; p_consts_order; p_nodes }: NetlistSizedAST.program) : program =
   assert (p_enums = ConstructEnv.empty);
-  let p_nodes = List.map (fun name -> node @@ FunEnv.find name p_nodes) p_nodes_order in
+  let p_nodes = List.map snd @@ List.of_seq @@ FunEnv.to_seq @@ FunEnv.map node p_nodes in
   let p_consts = List.map (fun uid -> const @@ Env.find uid p_consts) p_consts_order in
   { p_nodes; p_consts }
 

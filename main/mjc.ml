@@ -41,6 +41,7 @@ let main () =
       compile_impl
       errmsg
   with
-    | Errors.ErrorDetected -> exit 2;;
+    | Errors.Error -> exit 4
+    | Errors.ErrorDetected -> exit 2
 
 let () = main ()

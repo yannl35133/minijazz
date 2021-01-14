@@ -209,14 +209,8 @@ let slice_flat n : node FunEnv.t =
 let node ({ node_inputs; node_outputs; node_body; _ } as node) =
   { node with node_inputs = starput node_inputs; node_outputs = starput node_outputs; node_body = block node_body }
 
-let program ({ p_nodes; p_nodes_order; _ } as program) =
+let program ({ p_nodes; _ } as program) =
   let p_nodes0 = FunEnv.map node p_nodes in
   let p_nodes1 = slice_flat !max_slice in
-  let p_nodes_order = p_nodes1
-    |> FunEnv.to_seq
-    |> List.of_seq
-    |> List.map (fun (n, _) -> n)
-    |> fun l -> l @ p_nodes_order
-  in
-  { program with p_nodes = FunEnv.union (fun _ a _ -> Some a) p_nodes0 p_nodes1; p_nodes_order }
+  { program with p_nodes = FunEnv.union (fun _ a _ -> Some a) p_nodes0 p_nodes1 }
 
