@@ -44,13 +44,13 @@ let print_lvalue = print_lvalue print_type
 
 let rec print_decl_desc = function
   | Deq (lv, exp) ->
-      dprintf "@[<h>%t%t%t@]%t"
+      dprintf "@[%t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_tritype_exp exp)
         (semicolon_sep)
   | Dlocaleq (lv, exp) ->
-      dprintf "@[<h>local %t%t%t@]%t"
+      dprintf "@[local %t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_tritype_exp exp)

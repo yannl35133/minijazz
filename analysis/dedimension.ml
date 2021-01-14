@@ -168,7 +168,7 @@ let slice_flat n : node FunEnv.t =
     let out_size = String.concat " * " @@ List.init n (fun i -> Format.sprintf "(to%i - from%i + 1)" i i) in
     let recall_params = Format.sprintf "dim0, %s, from0 + 1, to0, %s" dims_params1 actions1 in
 
-    let slice_param = Format.sprintf "from0 * %s .. (from0 + 1) * %s - 1" dims_mult dims_mult in
+    let slice_param = Format.sprintf "from0 * %s .. from0 * %s + %s - 1" dims_mult dims_mult dims_mult in
     if n = 2 then
       "slice_flat_2<dim0, dim1, from0, to0, from1, to1>(i:[dim0 * dim1]) = o:[(to0 - from0 + 1) * (to1 - from1 + 1)] where
           if from0 = to0 then

@@ -9,7 +9,7 @@ let rec other_context fname loc ctxt = function
 
 let rec eq_to_constraints c1 c2 = match c1, c2 with
   | TProd l1, TProd l2 -> List.flatten @@ List.rev_map2 eq_to_constraints l1 l2
-  | TNDim l1, TNDim l2 ->  List.combine l1 l2
+  | TNDim l1, TNDim l2 -> List.combine (List.init (List.length l1) (fun _ -> no_localize (SBool true))) @@ List.combine l1 l2
   | TNDim _,  TProd _
   | TProd _,  TNDim _ ->   failwith "Misdimensioned value"
 
@@ -190,6 +190,9 @@ let rec lvalue var_env lval = match !?!lval with
       let size = List.map extract size_l in
       tritype (LValTuple size_l) !?@lval (BNetlist (TProd size))
 
+let add_guard g c = match !!g with
+  | SBool true -> c
+  | _ -> relocalize !@c (SBBinOp (SAnd, g, c))
 
 let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = match !!d with
   | Deq (lval, e) ->
@@ -203,9 +206,10 @@ let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = m
       let new_constraints = global_eq_to_constraints !??lval' (tritype_of_exp e') in
       new_constraints @ constraints, relocalize !@d @@ Dlocaleq (lval', e')
   | Dif (c, b1, b2) ->
-      let constraints, b1' = block env constraints b1 in
-      let constraints, b2' = block env constraints b2 in
-      constraints, relocalize !@d @@ Dif (c, b1', b2')
+      let new_constraints, b1' = block env [] b1 in
+      let new_constraints, b2' = block env new_constraints b2 in
+      let new_constraints = List.map (fun (g, e) -> add_guard g c, e) new_constraints in
+      new_constraints @ constraints, relocalize !@d @@ Dif (c, b1', b2')
   | Dreset (e, b) ->
       let constraints, e' = exp env constraints e in
       let constraints, b' = block env constraints b in

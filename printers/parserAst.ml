@@ -177,13 +177,13 @@ and print_automaton { a_handlers; _ } = print_list_naked dprint_newline print_au
 
 and print_decl_desc = function
   | Deq (lv, exp) ->
-      dprintf "@[<h>%t%t%t@]%t"
+      dprintf "@[%t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_exp exp)
         (semicolon_sep)
   | Dlocaleq (lv, exp) ->
-      dprintf "@[<h>local %t%t%t@]%t"
+      dprintf "@[local %t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_exp exp)

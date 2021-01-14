@@ -10,8 +10,10 @@ type presize =
   | PSConst of static_int_exp
   | PSOtherContext of ident_desc * Location.location * static_unknown_exp list * presize
 
+type guard = static_bool_exp
+
 type constraints =
-  (presize * presize) list
+  (guard * (presize * presize)) list
 
 
 type netlist_presize = presize CommonAST.netlist_type
