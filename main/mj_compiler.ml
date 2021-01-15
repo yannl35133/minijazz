@@ -108,6 +108,11 @@ let compile_impl filename =
     let p = type_program p in
     let p = Automaton.program p in
     let p = Reset.program p in
+
+    Format.printf "before match reduce@.";
+    Printers.ParserAst.print_program (Sizer_to_parser.program p)
+      Format.std_formatter;
+
     let p = Matcher.program p in
 
     Printers.ParserAst.print_program (Sizer_to_parser.program p)

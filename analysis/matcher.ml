@@ -4,10 +4,23 @@ open NetlistSizedAST
 
 let fmap f lst = List.flatten @@ List.map f lst
 
-module M = Map.Make(struct type t = ident
-                           let compare i1 i2 =
-                             UIDIdent.compare i1.id_uid i2.id_uid
-                    end)
+module M = Map.Make(struct
+               type t = lvalue
+
+               let rec fold lvs1 lvs2 = match lvs1, lvs2 with
+                 | [], [] -> assert false
+                 | [], _ | _, [] -> assert false
+                 | lv1 :: lvs1, lv2 :: lvs2 ->
+                    match compare lv1 lv2 with
+                    | 0 -> fold lvs1 lvs2
+                    | n -> n
+
+               and compare lv1 lv2 = match lv1.b_desc, lv2.b_desc with
+                 | LValId id1, LValId id2 ->
+                    UIDIdent.compare id1.id_uid id2.id_uid
+                 | LValTuple lvs1, LValTuple lvs2 -> fold lvs1 lvs2
+                 | _ -> assert false
+             end)
 
 (* one bit encoding of enum *)
 let build f lst = List.fold_left f ConstructEnv.empty lst
@@ -38,6 +51,9 @@ let mux (e:exp) (e1:tritype_exp) e2 = match e1, e2 with
      StateExp { e1 with s_desc = ESMux (e, e1, e2) }
   | _ -> assert false
 
+let exp_mux e e1 e2 =
+  { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e1; e2])}
+
 let reg (e:tritype_exp) = match e with
   | Exp e -> Exp { e with si_desc = EReg e }
   | StateExp e -> StateExp { e with s_desc = ESReg e }
@@ -57,74 +73,90 @@ let slice e i =
   let i = relocalize e.si_loc @@ SIntExp (SInt i) in
   { e with si_desc = ECall (relocalize e.si_loc "slice_one", [n; i], [e])}
 
-(* let constructor_tbl : (UIDConstructor.t, static_int_exp) Hashtbl.t =
- *   Hashtbl.create 16
- *
- * let index c = Hashtbl.find constructor_tbl c.id_uid
- *
- * (\* create bus of width #patterns and fill tbl *\)
- * let enum_to_bus loc e =
- *   let n = List.length e.enum_constructors_names in
- *   let id = UIDIdent.get () in
- *   let name = { id_loc = loc;
- *                id_desc = (e.enum_name.id_desc ^ "bus" ^ (UIDIdent.to_string id));
- *                id_uid  = id } in
- *   let bus = size (EVar name) loc (TNDim [Size (SInt n)]) in
- *   let _, index =
- *     List.fold_left
- *       (fun (i, index) c -> i+1, ConstructEnv.add c.id_uid (slice bus i) index)
- *       (0, ConstructEnv.empty) e.enum_constructors_names
- *   in
- *   bus, index
- *
- * let rec exp (_e:exp) = assert false
- *
- * let rec decl env (d:decl) = match d.desc with
- *   | Dmatch (_e, m) ->
- *      let _, index = enum_to_bus m.m_loc m.m_state_type in
- *
- *      let merge c (env: exp M.t) (acc: exp M.t) =
- *        M.fold (fun lv v acc ->
- *            let e = match M.find_opt lv acc with
- *              | None -> v
- *              | Some e' -> mux (ConstructEnv.find c index) v e' in
- *            M.add lv e acc) env acc
- *      in
- *
- *      (\* recursive calls on handlers *\)
- *      let map : exp M.t ConstructEnv.t =
- *        ConstructEnv.map
- *          (fun h ->
- *            List.fold_left
- *              (fun acc d -> union (decl env d) acc) M.empty h.m_body)
- *          m.m_handlers
- *      in
- *      ConstructEnv.fold merge map M.empty
- *
- *   | Deq ({ b_desc = LValDrop; _ }, _) -> env
- *   | Deq ({ b_desc = LValId id; _ }, e) ->
- *      M.add id (match e with
- *                | Exp exp -> exp
- *                | StateExp st -> fst @@ enum_to_bus st.s_loc st.s_type
- *                | StateTransitionExp _ -> assert false) env
- *   | Deq ({ b_desc = LValTuple _lvs; _}, _e) -> assert false
- *   | Dif (_c, _b1, _b2) -> assert false (\* TODO *\)
- *
- *   (\* can't occur *\)
- *   | Dreset (_, _) -> assert false
- *   | Dlocaleq (_, _) -> assert false
- *   | Dautomaton _ -> assert false
- *
- * let env2list env =
- *   M.fold (fun id (e:exp) lst ->
- *       let ty =  BNetlist (e.si_size) in
- *       let lv = tritype (LValId id) id.id_loc ty in
- *       (relocalize e.si_loc @@ Deq (lv, Exp e)) :: lst) env []
- *
- * let node (n:node) =
- *   let b = List.map (decl M.empty) n.node_body in
- *   let b = fmap env2list b in
- *   { n with node_body = b } *)
+let enum_tbl : (UIDIdent.t, int) Hashtbl.t = Hashtbl.create 16
+let constr_tbl : (UIDConstructor.t, int) Hashtbl.t = Hashtbl.create 16
+
+let enum_size (e:enum) = Hashtbl.find enum_tbl e.enum_name.id_uid
+let index c = Hashtbl.find constr_tbl c.id_uid
+
+let union = M.union (fun _ _ _ -> assert false)
+
+let rec exp (e:exp state_exp) =
+  let ty_sz = enum_size e.s_type in
+  let desc = match e.s_desc with
+    | ESConstr c ->
+       let i = index c in
+       EConst (VNDim (List.init ty_sz (fun j -> VBit (i = j))))
+    | ESVar v -> EVar v
+    | ESReg e -> EReg (exp e)
+    | ESMux (ce, e1, e2) ->
+       ECall (relocalize e.s_loc "mux", [], [ce; exp e1; exp e2])
+  in
+  size desc e.s_loc (TNDim [Size (SInt ty_sz)])
+
+and rename_lv (c:UIDConstructor.t) (env: ident Env.t) (lv:lvalue) =
+  let env, b_desc = match lv.b_desc with
+    | LValDrop -> env, lv.b_desc
+    | LValId id ->
+       let nid = { id with
+                   id_uid  = UIDIdent.get ();
+                   id_desc =  id.id_desc ^ (UIDConstructor.to_string c) } in
+       Env.add id.id_uid nid env, LValId nid
+    | LValTuple lvs ->
+       let env, lvs =
+         List.fold_left (fun (env, lvs) lv ->
+             let env, lv = rename_lv c env lv in
+             env, lv :: lvs) (env, []) lvs in
+       env, LValTuple lvs
+  in
+  env, { lv with b_desc }
+
+and decl env (d:decl) = match d.desc with
+  | Dmatch (e, m) ->
+     let _e = exp e in
+     (* TODO enable *)
+     (* c is block constructor, b is block equation lists
+        acc_b is accumulated equation of the new block and
+        defs maps original idents to new block names *)
+     let merge c (b: exp M.t) ((acc_b, defs): exp M.t * ident Env.t) =
+       Format.printf "Constructor %s@." (UIDConstructor.to_string c);
+       M.fold (fun lv eq (acc_b, defs) ->
+           let defs, lv = rename_lv c defs lv in
+           M.add lv eq acc_b, defs)
+         b (acc_b, defs)
+     in
+
+     (* recursive calls on handlers *)
+     let map : exp M.t ConstructEnv.t =
+       ConstructEnv.map
+         (fun h ->
+           List.fold_left
+             (fun acc d -> union (decl env d) acc) M.empty h.m_body)
+         m.m_handlers
+     in
+     let b, _defs = ConstructEnv.fold merge map (M.empty, Env.empty) in
+     b (* defs ? *)
+
+  | Deq ({ b_desc = LValDrop; _ }, _) -> env
+  | Deq (lv, Exp e) -> M.add lv e env
+  | Deq (lv, StateExp e) -> M.add lv (exp e) env
+  | Deq (_, StateTransitionExp _) -> assert false
+
+  | Dif (_c, _b1, _b2) -> assert false (* TODO *)
+
+  (* can't occur *)
+  | Dreset (_, _) -> assert false
+  | Dlocaleq (_, _) -> assert false
+  | Dautomaton _ -> assert false
+
+let env2list env =
+  M.fold (fun lv (e:exp) lst ->
+      (relocalize e.si_loc @@ Deq (lv, Exp e)) :: lst) env []
+
+let node (n:node) =
+  let b = List.map (decl M.empty) n.node_body in
+  let b = fmap env2list b in
+  { n with node_body = b }
 
 (** enable
     must be done __after__ removing state expressions *)
@@ -207,13 +239,16 @@ let en_node (n:node) =
   let node_inputs = { ti_name = id;
                       ti_type = no_localize @@ BNetlist bit_type;
                       ti_loc = Location.no_location } :: n.node_inputs in
-  { n with node_inputs; node_body = fmap (en_decl en) n.node_body }
+  let node_body = fmap (en_decl en) n.node_body in
+
+  { n with node_inputs; node_body }
 
 (** [Matcher.program p] compiles match from a automaton-reset-free ast *)
 let program (p:program) =
-  (* ConstructEnv.iter (fun _ e ->
-   *     List.iteri (fun i c ->
-   *         let si = no_localize (SInt i) in
-   *         Hashtbl.replace constructor_tbl c.id_uid si)
-   *       e.enum_constructors_names) p.p_enums; *)
-  { p with p_nodes = FunEnv.map en_node p.p_nodes }
+  ConstructEnv.iter (fun _ e ->
+      let sz = List.length e.enum_constructors_names in
+      Hashtbl.replace enum_tbl e.enum_name.id_uid sz;
+      List.iteri (fun i c -> Hashtbl.replace constr_tbl c.id_uid i)
+        e.enum_constructors_names)
+    p.p_enums;
+  { p with p_nodes = FunEnv.map (fun n -> node n) p.p_nodes }
