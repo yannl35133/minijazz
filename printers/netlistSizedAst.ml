@@ -2,19 +2,15 @@ open Format
 open CommonAST
 open CommonAst
 open StaticTypedPartialAst
-open NetlistDimensionedAST
+open NetlistSizedAST
 
 
 (* Netlist expressions *)
-let print_size = print_opt_int_exp
+let print_size (Size e) = print_int_exp_desc e
 
-let rec print_dim = function
-  | NDim n ->
-      dprintf "%id" n
-  | NProd l ->
-      print_list par star_sep print_dim l
+let print_netlist_size = print_netlist_type print_size
 
-let print_type = print_bitype print_dim
+let print_type = print_bitype print_netlist_size
 
 
 let rec print_exp_desc = function
@@ -24,19 +20,19 @@ let rec print_exp_desc = function
   | ECall (fname, params, args) ->
       dprintf "%t@[<hv4>%t@,%t@]"
         (print_funname fname)
-        (print_list_if_nonempty chev comma_sep print_unknown_exp params)
+        (print_list_if_nonempty chev comma_sep print_bitype_exp params)
         (print_list par comma_sep print_exp args)
   | EMem (memkind, (addr_size, word_size, _), args) ->
       dprintf "%t<%t, %t>(%t)"
         (print_mem_kind memkind)
-        (print_opt_int_exp addr_size)
-        (print_opt_int_exp word_size)
+        (print_int_exp addr_size)
+        (print_int_exp word_size)
         (print_list_naked comma_sep print_exp args)
 
 and print_exp exp =
   par (dprintf "%t: %t"
-    (print_exp_desc !%!exp)
-    (print_dim !%%exp))
+    (print_exp_desc !$!exp)
+    (print_netlist_size !$$exp))
 
 let print_tritype_exp = print_tritype_exp print_exp
 
@@ -44,13 +40,13 @@ let print_lvalue = print_lvalue print_type
 
 let rec print_decl_desc = function
   | Deq (lv, exp) ->
-      dprintf "@[%t%t%t@]%t"
+      dprintf "@[%t%t@;<1 4>%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_tritype_exp exp)
         (semicolon_sep)
   | Dlocaleq (lv, exp) ->
-      dprintf "@[local %t%t%t@]%t"
+      dprintf "@[local %t%t@;<1 4>%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_tritype_exp exp)

@@ -47,14 +47,20 @@ let print_list_nlr print lp sep rp ff = function
 
 let print_bool ff b =
   if b then
+    fprintf ff "true"
+  else
+    fprintf ff "false"
+
+let print_wire ff b =
+  if b then
     fprintf ff "1"
   else
     fprintf ff "0"
 
 let print_const ff v = match v with
-  | VBit b -> print_bool ff b
+  | VBit b -> print_wire ff b
   | VBitArray a when Array.length a = 0 -> fprintf ff "[]"
-  | VBitArray l -> Array.iter (print_bool ff) l
+  | VBitArray l -> Array.iter (print_wire ff) l
 
 let rec print_static_exp ff se = match se.se_desc with
   | SInt i -> fprintf ff "%d" i
@@ -64,7 +70,8 @@ let rec print_static_exp ff se = match se.se_desc with
     let op_str = match op with
       | SAdd -> "+" | SMinus -> "-"
       | SMult -> "*" | SDiv -> "/"
-      | SPower -> "^" | SEqual -> "="
+      | SPower -> "^"
+      | SEqual -> "=" | SNeq -> "<>"
       | SLess -> "<" | SLeq -> "<="
       | SGreater -> ">" | SGeq -> ">=" in
       fprintf ff "(%a %s %a)" print_static_exp se1  op_str  print_static_exp se2
@@ -85,7 +92,7 @@ let rec print_type ff ty = match ty with
 
 let print_call_params ff params = match params with
   | [] -> ()
-  | _ -> print_list_r print_static_exp "<<"","">>" ff params
+  | _ -> print_list_r print_static_exp "<"","">" ff params
 
 let rec print_exp ff e =
   if !Cli_options.print_types then
@@ -155,7 +162,7 @@ let print_param ff p =
 
 let print_params ff params = match params with
   | [] -> ()
-  | _ -> print_list_r print_param "<<"","">>" ff params
+  | _ -> print_list_r print_param "<"","">" ff params
 
 let print_constraints ff cl =
   if !Cli_options.print_types then
@@ -174,7 +181,6 @@ let print_const_dec ff cd =
   fprintf ff "const %a = %a@\n@."
     print_name cd.c_name  print_static_exp cd.c_value
 
-let print_program oc p =
-  let ff = formatter_of_out_channel oc in
-    List.iter (print_const_dec ff) p.p_consts;
-    List.iter (print_node ff) p.p_nodes
+let print_program ff p =
+  List.iter (print_const_dec ff) p.p_consts;
+  List.iter (print_node ff) p.p_nodes

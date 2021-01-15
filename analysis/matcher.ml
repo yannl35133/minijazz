@@ -51,13 +51,21 @@ let mux (e:exp) (e1:tritype_exp) e2 = match e1, e2 with
      StateExp { e1 with s_desc = ESMux (e, e1, e2) }
   | _ -> assert false
 
-let exp_mux e e1 e2 =
+let emux e e1 e2 =
   { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e1; e2])}
+
+let ereg e = { e with si_desc = EReg e }
 
 let reg (e:tritype_exp) = match e with
   | Exp e -> Exp { e with si_desc = EReg e }
   | StateExp e -> StateExp { e with s_desc = ESReg e }
   | StateTransitionExp _ -> assert false
+
+let id_to_var ty id =
+  let sz = match ty with
+    | BNetlist sz -> sz
+    | _ -> assert false in
+  size (EVar id) id.id_loc sz
 
 let one =
   size (EConst (VBit true)) (Location.no_location) (TNDim [Size (SInt 1)])
@@ -77,7 +85,7 @@ let enum_tbl : (UIDIdent.t, int) Hashtbl.t = Hashtbl.create 16
 let constr_tbl : (UIDConstructor.t, int) Hashtbl.t = Hashtbl.create 16
 
 let enum_size (e:enum) = Hashtbl.find enum_tbl e.enum_name.id_uid
-let index c = Hashtbl.find constr_tbl c.id_uid
+let index c = Hashtbl.find constr_tbl c
 
 let union = M.union (fun _ _ _ -> assert false)
 
@@ -85,7 +93,7 @@ let rec exp (e:exp state_exp) =
   let ty_sz = enum_size e.s_type in
   let desc = match e.s_desc with
     | ESConstr c ->
-       let i = index c in
+       let i = index c.id_uid in
        EConst (VNDim (List.init ty_sz (fun j -> VBit (i = j))))
     | ESVar v -> EVar v
     | ESReg e -> EReg (exp e)
@@ -111,18 +119,32 @@ and rename_lv (c:UIDConstructor.t) (env: ident Env.t) (lv:lvalue) =
   in
   env, { lv with b_desc }
 
+and mux_lv cond defs b lv new_lv : exp M.t =
+  match lv.b_desc, new_lv.b_desc with
+  | LValDrop, LValDrop -> b
+  | LValId id, LValId nid ->
+     let var = id_to_var lv.b_type nid in
+     begin match Env.find_opt id.id_uid defs with
+     | None -> M.add lv var b
+     | Some id2 -> M.add lv (emux cond var (id_to_var lv.b_type id2)) b
+     end
+  | LValTuple lvs, LValTuple new_lvs ->
+     List.fold_left2 (mux_lv cond defs) b lvs new_lvs
+  | _ -> assert false
+
 and decl env (d:decl) = match d.desc with
   | Dmatch (e, m) ->
-     let _e = exp e in
-     (* TODO enable *)
+     let e = exp e in
+     (* TODO update enable *)
      (* c is block constructor, b is block equation lists
         acc_b is accumulated equation of the new block and
         defs maps original idents to new block names *)
      let merge c (b: exp M.t) ((acc_b, defs): exp M.t * ident Env.t) =
-       Format.printf "Constructor %s@." (UIDConstructor.to_string c);
        M.fold (fun lv eq (acc_b, defs) ->
-           let defs, lv = rename_lv c defs lv in
-           M.add lv eq acc_b, defs)
+           let new_defs, new_lv = rename_lv c defs lv in
+           let cond = slice e (index c) in
+           let acc_b = mux_lv cond defs acc_b lv new_lv in
+           M.add new_lv eq acc_b, new_defs)
          b (acc_b, defs)
      in
 
@@ -134,12 +156,13 @@ and decl env (d:decl) = match d.desc with
              (fun acc d -> union (decl env d) acc) M.empty h.m_body)
          m.m_handlers
      in
-     let b, _defs = ConstructEnv.fold merge map (M.empty, Env.empty) in
-     b (* defs ? *)
+     fst @@ ConstructEnv.fold merge map (M.empty, Env.empty)
 
   | Deq ({ b_desc = LValDrop; _ }, _) -> env
   | Deq (lv, Exp e) -> M.add lv e env
-  | Deq (lv, StateExp e) -> M.add lv (exp e) env
+  | Deq (lv, StateExp e) ->
+     let e = exp e in
+     M.add { lv with b_type = BNetlist e.si_size } e env
   | Deq (_, StateTransitionExp _) -> assert false
 
   | Dif (_c, _b1, _b2) -> assert false (* TODO *)
@@ -251,4 +274,6 @@ let program (p:program) =
       List.iteri (fun i c -> Hashtbl.replace constr_tbl c.id_uid i)
         e.enum_constructors_names)
     p.p_enums;
-  { p with p_nodes = FunEnv.map (fun n -> node n) p.p_nodes }
+  { p with
+    p_enums = ConstructEnv.empty;
+    p_nodes = FunEnv.map (fun n -> node n) p.p_nodes }

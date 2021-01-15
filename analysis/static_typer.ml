@@ -121,7 +121,7 @@ let optional_static_int_exp static_env e : optional_static_int_exp = match !!e w
       let res = static_int_exp_full static_env (relocalize !@e ed) in
       relocalize !@res (SExp !!res)
 
-let static_params types static_env fname params : static_unknown_exp list =
+let static_params loc types static_env fname params : static_unknown_exp list =
   let typed_params = List.map (optional_static_unknown_exp static_env) params in
   let static_param el ty = match !!el, ty with
     | SExp SIntExp e1,  TInt ->  relocalize !@el (SOIntExp  (SExp e1))
@@ -131,7 +131,13 @@ let static_params types static_env fname params : static_unknown_exp list =
     | SExp SIntExp _,   TBool -> raise @@ Errors.WrongTypeParam ("int", "bool", !@el, !!fname, List.map static_type_to_string types)
     | SExp SBoolExp _,  TInt ->  raise @@ Errors.WrongTypeParam ("bool", "int", !@el, !!fname, List.map static_type_to_string types)
   in
-  List.map2 static_param typed_params types
+  if typed_params = [] then
+    List.map (function
+      | TInt -> relocalize loc (SOIntExp (SUnknown (UIDUnknownStatic.get ())))
+      | TBool -> relocalize loc (SOBoolExp (SUnknown (UIDUnknownStatic.get ())))
+      ) types
+  else
+    List.map2 static_param typed_params types
 
 let slice_param static_env = function
   | SliceAll ->       SliceAll
@@ -155,7 +161,7 @@ let rec exp ((fun_env: fun_env), static_env as env) =
       EReg (exp env e)
   | StaticScopedAST.ECall (fname, params, args) ->
       let types = Misc.option_get ~error:(Failure "Unscoped node") @@ FunEnv.find_opt !!fname fun_env in
-      let static_typed_params = static_params types static_env fname params in
+      let static_typed_params = static_params !@fname types static_env fname params in
       ECall (fname, static_typed_params, List.map (exp env) args)
   | StaticScopedAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
       let addr_size = optional_static_int_exp static_env addr_size in
@@ -226,7 +232,7 @@ let node fun_env consts_env ({ node_params; node_inputs; node_outputs; node_body
 let const consts_env ({ const_decl; _ } as const) =
   { const with const_decl = static_bitype_exp consts_env const_decl }
 
-let program ({ p_enums; p_consts; p_consts_order; p_nodes; p_nodes_order } : StaticScopedAST.program) : program =
+let program ({ p_enums; p_consts; p_consts_order; p_nodes } : StaticScopedAST.program) : program =
   try
     let type_const { const_decl; _ } = match !!const_decl with
       | SIntExp _ -> TInt
@@ -241,8 +247,7 @@ let program ({ p_enums; p_consts; p_consts_order; p_nodes; p_nodes_order } : Sta
       p_enums;
       p_consts = Env.map (const consts_env) p_consts;
       p_consts_order;
-      p_nodes = FunEnv.map (node fun_env consts_env) p_nodes;
-      p_nodes_order
+      p_nodes = FunEnv.map (node fun_env consts_env) p_nodes
     }
       with Errors.WrongType (s1, s2, loc) ->
         Format.eprintf "%aType Error: This expression has type %s but an expression of type %s was expected@."

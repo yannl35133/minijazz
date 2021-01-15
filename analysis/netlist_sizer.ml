@@ -8,7 +8,7 @@ type union_find = Constraints_solver.union_find
 let find_opt = Constraints_solver.find_opt
 
 exception CouldNotSize of ident * int
-exception CouldNotInfer of ident_desc * Location.location * int
+exception CouldNotInfer of ident_desc * Location.location * int * UIDUnknownStatic.t
 
 let assert_int = function
   | SIntExp se -> se
@@ -38,9 +38,9 @@ and substitute_bool var_env params = function
 
 
 let param var_env fname loc i = relocalize_fun @@ function
-  | SOIntExp SUnknown uid -> SIntExp (assert_int @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i)) @@ find_opt uid var_env)
+  | SOIntExp SUnknown uid -> SIntExp (assert_int @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i, uid)) @@ find_opt uid var_env)
   | SOIntExp SExp se -> SIntExp se
-  | SOBoolExp SUnknown uid -> SBoolExp (assert_bool @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i)) @@ find_opt uid var_env)
+  | SOBoolExp SUnknown uid -> SBoolExp (assert_bool @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i, uid)) @@ find_opt uid var_env)
   | SOBoolExp SExp se -> SBoolExp se
 
 let rec presize_to_size var_env = function
@@ -67,7 +67,7 @@ let resize_fun f var_env e =
   size (f !&!e) !&@e @@ netlist_presize_to_netlist_size var_env !&&e
 
 let memparam var_env fname loc i = relocalize_fun @@ function
-  | SUnknown uid -> (assert_int @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i)) @@ find_opt uid var_env)
+  | SUnknown uid -> (assert_int @@ Misc.option_get ~error:(CouldNotInfer (fname, loc, i, uid)) @@ find_opt uid var_env)
   | SExp se -> se
 
 let rec exp var_env e =
@@ -171,5 +171,5 @@ let program ({ p_nodes; _ } as program, constraints) : program =
   with
     | CouldNotSize (id, i) ->
         Format.eprintf "%aCould not size dimension %i of variable %s@." Location.print_location !*@id i !*!id; raise Errors.ErrorDetected
-    | CouldNotInfer (fname, loc, i) ->
-        Format.eprintf "%aCould not infer the value of parameter number %i of function %s@." Location.print_location loc i fname; raise Errors.ErrorDetected
+    | CouldNotInfer (fname, loc, i, uid) ->
+        Format.eprintf "%aCould not infer the value of parameter number %i of function %s (uid %a)@." Location.print_location loc i fname UIDUnknownStatic.print uid; raise Errors.ErrorDetected

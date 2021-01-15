@@ -6,4 +6,4 @@
 (library
  (name analysis)
  (wrapped false)
- (libraries str global asts printers))
+ (libraries str global parser asts printers))

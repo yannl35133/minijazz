@@ -9,7 +9,7 @@ let rec other_context fname loc ctxt = function
 
 let rec eq_to_constraints c1 c2 = match c1, c2 with
   | TProd l1, TProd l2 -> List.flatten @@ List.rev_map2 eq_to_constraints l1 l2
-  | TNDim l1, TNDim l2 ->  List.combine l1 l2
+  | TNDim l1, TNDim l2 -> List.combine (List.init (List.length l1) (fun _ -> no_localize (SBool true))) @@ List.combine l1 l2
   | TNDim _,  TProd _
   | TProd _,  TNDim _ ->   failwith "Misdimensioned value"
 
@@ -27,7 +27,7 @@ let tritype_of_exp = function
 
 let fun_env_find fun_env id =
   let reloc a = relocalize !@id a in
-  let regexp_slice = Str.regexp {|slice\(\(_\(all\|one\|to\|from\|fromto\)\)*\)|} in
+  let regexp_slice = Str.regexp {|slice\(\(_\(all\|one\|to\|fromto\|from\)\)+\)|} in
   let regexp_supop = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\|concat\|add_dim\)_\([0-9]+\)|} in
   if FunEnv.mem !!id fun_env then
     FunEnv.find !!id fun_env
@@ -38,12 +38,17 @@ let fun_env_find fun_env id =
       reloc (SIParam (identify !@id ("dim_" ^ string_of_int i) i))
     in
     let dims_in = List.init dim (fun i -> PSConst (params_dim i)) in
+    let add se1 se2 = reloc (SIBinOp (SAdd, se1, se2)) in
+    let add_one se = add se (reloc (SInt 1)) in
+    let minus se1 se2 = reloc (SIBinOp (SMinus, se1, se2)) in
+    let minus_one se = minus se (reloc (SInt 1)) in
+    let param loc name nb = reloc (SIParam (identify loc name nb)) in
     let rec aux idim_in idim_out iparam = function
       | "all"  :: tl ->   PSConst (params_dim idim_out) :: aux (idim_in+1) (idim_out+1) iparam tl
-      | "one"  :: tl ->                                    aux (idim_in+1) idim_out (iparam+1) tl
-      | "from" :: tl ->   PSConst (reloc (SIBinOp (SAdd, reloc (SIBinOp (SMinus, reloc (SIBinOp (SMinus, params_dim idim_out, reloc (SInt 1))), reloc (SIParam (identify !@id ("from_" ^ string_of_int idim_in) iparam)))), reloc (SInt 1)))) :: aux (idim_in+1) (idim_out+1) (iparam+1) tl
-      | "to"   :: tl ->   PSConst (reloc (SIBinOp (SAdd, reloc (SIParam (identify !@id ("to_" ^ string_of_int idim_in) iparam)), reloc (SInt 1)))) :: aux (idim_in+1) (idim_out+1) (iparam+1) tl
-      | "fromto" :: tl -> PSConst (reloc (SIBinOp (SAdd, reloc (SIBinOp (SMinus, reloc (SIParam (identify !@id ("fromto_from_" ^ string_of_int idim_in) (iparam+1))), reloc (SIParam (identify !@id ("fromto_to_" ^ string_of_int idim_in) iparam)))), reloc (SInt 1)))) :: aux (idim_in+1) (idim_out+1) (iparam+2) tl
+      | "one"  :: tl ->                                    aux idim_in (idim_out+1) (iparam+1) tl
+      | "from" :: tl ->   PSConst (add_one (minus (minus_one (params_dim idim_out)) (param !@id ("from_" ^ string_of_int idim_in) iparam))) :: aux (idim_in+1) (idim_out+1) (iparam+1) tl
+      | "to"   :: tl ->   PSConst (add_one (param !@id ("to_" ^ string_of_int idim_in) iparam)) :: aux (idim_in+1) (idim_out+1) (iparam+1) tl
+      | "fromto" :: tl -> PSConst (add_one (minus (param !@id ("fromto_to_" ^ string_of_int idim_in) (iparam+1)) (param !@id ("fromto_from_" ^ string_of_int idim_in) iparam))) :: aux (idim_in+1) (idim_out+1) (iparam+2) tl
       | [] -> []
       | _ -> failwith "Miscounted arguments in slice"
     in
@@ -185,6 +190,9 @@ let rec lvalue var_env lval = match !?!lval with
       let size = List.map extract size_l in
       tritype (LValTuple size_l) !?@lval (BNetlist (TProd size))
 
+let add_guard g c = match !!g with
+  | SBool true -> c
+  | _ -> relocalize !@c (SBBinOp (SAnd, g, c))
 
 let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = match !!d with
   | Deq (lval, e) ->
@@ -198,9 +206,10 @@ let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = m
       let new_constraints = global_eq_to_constraints !??lval' (tritype_of_exp e') in
       new_constraints @ constraints, relocalize !@d @@ Dlocaleq (lval', e')
   | Dif (c, b1, b2) ->
-      let constraints, b1' = block env constraints b1 in
-      let constraints, b2' = block env constraints b2 in
-      constraints, relocalize !@d @@ Dif (c, b1', b2')
+      let new_constraints, b1' = block env [] b1 in
+      let new_constraints = List.map (fun (g, e) -> add_guard g c, e) new_constraints in
+      let new_constraints, b2' = block env new_constraints b2 in
+      new_constraints @ constraints, relocalize !@d @@ Dif (c, b1', b2')
   | Dreset (e, b) ->
       let constraints, e' = exp env constraints e in
       let constraints, b' = block env constraints b in

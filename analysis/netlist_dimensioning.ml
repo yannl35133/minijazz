@@ -41,6 +41,15 @@ let rec print_netlist_dimension = function
   | NDim n -> Format.dprintf "%d-dim" n
   | NProd l -> Format.dprintf "@[<hv2>%t@]" (Printers.CommonAst.print_list_naked (Format.dprintf " * ") print_netlist_dimension l)
 
+let print_ot = function
+  | OTNetlist Some thing -> print_netlist_dimension thing
+  | OTNetlist None -> Format.dprintf "netlist"
+  | OTState Some s -> Printers.CommonAst.print_enum_type s
+  | OTState None -> Format.dprintf "state"
+  | OTStateTransition Some s -> Format.dprintf "%t transition" @@ Printers.CommonAst.print_enum_type s
+  | OTStateTransition None -> Format.dprintf "state transition"
+
+
 let new_unknown_parameter () =
   SOIntExp (SUnknown (UIDUnknownStatic.get ()))
 
@@ -145,7 +154,7 @@ let rec exp (fun_env: fun_env) dimensioned (e: StaticTypedAST.exp) = match !!e w
         | _, NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@arg2, ProdOp !!op)
         | NDim n1, NDim n2 ->
             if abs (n1 - n2) > 1 then
-              raise @@ (* Errors. *)WrongDimension (!%%arg1, !%%arg2, !%@arg2, ErOp (!!op, !%@arg1))
+              raise @@ (* Errors. *)WrongDimension (!%%arg2, !%%arg1, !%@arg2, ErOp (!!op, !%@arg1))
             else n1, n2
       in
       dimensioned, concat op !@e (arg1, n1) (arg2, n2)
@@ -696,7 +705,30 @@ let node fun_env ({ node_inputs; node_outputs; node_body; node_variables; node_n
   }
 
 let program ({ p_nodes; p_enums; _ } as program) : program =
-  let fun_env = FunEnv.map fun_env p_nodes in
-  { program with
-    p_nodes = FunEnv.map (node (fun_env, p_enums)) p_nodes;
-  }
+  try
+    let fun_env = FunEnv.map fun_env p_nodes in
+    { program with
+      p_nodes = FunEnv.map (node (fun_env, p_enums)) p_nodes;
+    }
+  with
+  | Errors.SliceTooMuch (found, expected, loc) ->
+    Format.eprintf "%aType Error: This expression has dimension %i but it is sliced %i times@."
+    Location.print_location loc
+    found expected;
+    raise Errors.ErrorDetected
+  | WrongType (found, expected, loc, _) ->
+      Format.eprintf "%aType Error: This expression has type %t but an expression of type %t was expected@."
+      Location.print_location loc
+      (print_ot found)
+      (print_ot expected);
+      raise Errors.ErrorDetected
+  | WrongDimension (found, expected, loc, _) ->
+      Format.eprintf "%aType Error: This expression has type %t but an expression of type %t was expected@."
+      Location.print_location loc
+      (print_netlist_dimension found)
+      (print_netlist_dimension expected);
+      raise Errors.ErrorDetected
+  | Errors.WrongNumberArguments (found, loc, expected, fname) ->
+      Format.eprintf "%aType Error: Function %s has %i arguments but %i were given@."
+      Location.print_location loc fname expected found;
+      raise Errors.ErrorDetected

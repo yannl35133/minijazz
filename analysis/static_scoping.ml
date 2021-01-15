@@ -322,13 +322,14 @@ let program ParserAST.{ p_enums; p_consts; p_nodes } : program =
     let (enum_env, enum_constrs, constrs_uids) = List.fold_left enum (StringEnv.empty, ConstructEnv.empty, StringEnv.empty) p_enums in
     let (consts_uids, p_consts), p_consts_order = List.fold_left_map const (StringEnv.empty, Env.empty) p_consts in
     let fun_set = List.fold_left (fun set ParserAST.{ node_name; _ } -> StringSet.add !!node_name set) StringSet.empty p_nodes in
-    let p_nodes' = List.fold_left (
+    let p_nodes = List.fold_left (
       fun env (ParserAST.{ node_name; _ } as node0) ->
         FunEnv.add !!node_name (node (enum_env, enum_constrs, constrs_uids, consts_uids, fun_set) node0) env
       ) FunEnv.empty p_nodes
     in
-    let p_nodes_order = List.map (fun node -> !!(node.ParserAST.node_name)) p_nodes in
-    { p_enums = enum_constrs; p_consts; p_consts_order; p_nodes = p_nodes'; p_nodes_order }
+    { p_enums = enum_constrs; p_consts; p_consts_order; p_nodes }
   with
+  | MissingVariable (id, loc) ->
+      Format.eprintf "%aVariable %s is not declared in this part@." Location.print_location loc id; raise Errors.ErrorDetected
   | Errors.Scope_error (id, loc) ->
       Format.eprintf "%aVariable %s is not declared@." Location.print_location loc id; raise Errors.ErrorDetected

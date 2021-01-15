@@ -239,7 +239,7 @@ let rec type_static_exp se = match se.se_desc with
       expect_static_exp se1 STInt;
       expect_static_exp se2 STInt;
       STInt
-    | SBinOp((SEqual | SLess | SLeq | SGreater | SGeq), se1, se2) ->
+    | SBinOp((SEqual | SNeq | SLess | SLeq | SGreater | SGeq), se1, se2) ->
       expect_static_exp se1 STInt;
       expect_static_exp se2 STInt;
       STBool
@@ -399,7 +399,7 @@ let ty_repr_block env b =
 
 let node n =
   try
-    Modules.add_node n [];
+    (* Modules.add_node n []; *)
     let env = build IdentEnv.empty n.n_inputs in
     let env = build env n.n_outputs in
     let body = type_block env n.n_body in
@@ -412,5 +412,8 @@ let node n =
       Typing_error k -> message n.n_loc k; raise Error
 
 let program p =
+  let () = List.iter (fun n -> Modules.add_node n []) p.p_nodes in
+  (* Do it once to have some constraints for recursive / out-of-order function calls *)
+  let () = ignore (List.map node p.p_nodes) in
   let p_nodes = List.map node p.p_nodes in
     { p with p_nodes = p_nodes }

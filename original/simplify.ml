@@ -65,6 +65,3 @@ let node n =
 
 let program p =
     { p with p_nodes = List.map node p.p_nodes }
-
-let program p =
-    { p with p_nodes = List.map node p.p_nodes }

@@ -9,9 +9,9 @@ main (clk, press) = o where
     o = 1;
     automaton
     | Good -> x = 1 until down_edge then continue Bad
-    | Bad  -> x = 0 until down_edge then restart Good
+    | Bad  -> x = 0 until down_edge then continue Good
     end
-    until down_edge then St2
-  | St2 -> o = 1 until front_edge then St1
+    until down_edge then continue St2
+  | St2 -> o = 1 until front_edge then continue St1
   end
 end where

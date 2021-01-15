@@ -29,6 +29,7 @@ let version = "0.3.0"
 let verbose = ref false
 let print_types = ref false
 let no_inline_all = ref false
+let no_netlist = ref false
 let netlist_simplify = ref false
 let main_node = ref "main"
 
@@ -40,6 +41,7 @@ let show_version () =
   Format.printf "The MiniJazz compiler, version %s @." version
 let errmsg = "Options are:"
 
+let doc_no_netlist = "\t\tDo not produce a netlist output"
 let doc_verbose = "\t\t\tSet verbose mode"
 and doc_version = "\t\tThe version of the compiler"
 and doc_full_type_info = "\t\tPrint full type information"

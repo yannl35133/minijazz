@@ -1,0 +1,5 @@
+#include "include2.mj"
+
+main(i:[a]) = o:[a] where
+    o = i;
+end where

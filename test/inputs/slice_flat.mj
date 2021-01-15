@@ -1,0 +1,23 @@
+slice_flat_2<dim0, dim1, from0, to0, from1, to1>(i:[dim0 * dim1])
+    = o:[(to0 - from0 + 1) * (to1 - from1 + 1)] where
+  if from0 = to0 then
+        o = i[from0 * dim1 + from1 .. from0 * dim1 + to1]
+  else
+        o = i[from0 * dim1 + from1 .. from0 * dim1 + to1] . slice_flat_2<dim0, dim1, from0+1, to0, from1, to1>(i)
+  end if
+end where
+
+
+slice_flat_3<dim0, dim1, dim2, from0, to0, from1, to1, from2, to2>(i:[dim0 * dim1 * dim2])
+    = o:[(to0 - from0 + 1) * (to1 - from1 + 1) * (to2 - from2 + 1)] where
+  if from0 = to0 then
+    o = slice_flat_2<dim1, dim2, from1, to1, from2, to2>(i[from0 * dim1 * dim2 .. from0 * dim1 * dim2 + dim1 * dim2 - 1])
+  else
+    o = slice_flat_2<dim1, dim2, from1, to1, from2, to2>(i[from0 * dim1 * dim2 .. from0 * dim1 * dim2 + dim1 * dim2 - 1]) . slice_flat_3<dim0, dim1, dim2, from0 + 1, to0, from1, to1, from2, to2>(i)
+  end if
+end where
+
+
+
+main() = () where
+end where

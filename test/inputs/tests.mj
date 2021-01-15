@@ -1,3 +1,19 @@
+mux_n<n, p>(switch:[n], cases:[2^n, p]) = o:[_] where
+    if n = 0 then
+        o = cases[0];
+    else
+        o = mux(switch[0], mux_n(switch[1..], cases[..2^n-1]), mux_n(switch[1..], cases[2^n..]));
+    end if
+end where
+
+(*
+main() = () where
+  i = [[0b100, 0b001]];
+  o = i[0, .. , 0..1];
+  a = recursive<4, 2>(0b0101)
+end where
+
+
 fulladder(a,b,c) = (s, r) where
   s = (a xor b) xor c;
   r = (a and b) or ((a xor b) and c)
@@ -18,5 +34,11 @@ clk2() = (o) where
   c = not (reg (o))
 end where
 
-main() = () where
+recursive<n, p>(i:[n]) = o where
+  if p >= n then
+    o = i[p-1]
+  else
+    o = recursive<n, p+1>(i)
+  end if
 end where
+*)

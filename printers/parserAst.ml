@@ -36,7 +36,7 @@ let rec print_sexp_desc = function
         (print_sunop sunop)
         (print_sexp se)
   | SBinOp (sop, se1, se2) ->
-      dprintf "%t%t%t"
+      par @@ dprintf "%t%t%t"
         (print_sexp se1)
         (binop_sep (print_sop sop))
         (print_sexp se2)
@@ -177,13 +177,13 @@ and print_automaton { a_handlers; _ } = print_list_naked dprint_newline print_au
 
 and print_decl_desc = function
   | Deq (lv, exp) ->
-      dprintf "@[<h>%t%t%t@]%t"
+      dprintf "@[%t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_exp exp)
         (semicolon_sep)
   | Dlocaleq (lv, exp) ->
-      dprintf "@[<h>local %t%t%t@]%t"
+      dprintf "@[local %t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_exp exp)

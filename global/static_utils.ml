@@ -43,7 +43,7 @@ let fun_of_op op = match op with
   | _ -> assert false
 
 let fun_of_comp_op op = match op with
-  | SEqual -> (=) | SLeq -> (<=)  | SLess -> (<)
+  | SEqual -> (=) | SLeq -> (<=)  | SLess -> (<) | SGeq -> (>=) | SGreater -> (>)
   | _ -> assert false
 
 let rec simplify env se = match se.se_desc with
@@ -62,7 +62,7 @@ let rec simplify env se = match se.se_desc with
           | (SAdd | SMinus | SDiv  | SMult | SPower), SInt i1, SInt i2 ->
               let f = fun_of_op op in
               SInt (f i1 i2)
-        | (SEqual | SLess | SLeq | SGreater | SGeq), SInt i1, SInt i2 ->
+        | (SEqual | SNeq | SLess | SLeq | SGreater | SGeq), SInt i1, SInt i2 ->
             let f = fun_of_comp_op op in
             SBool (f i1 i2)
         | _, _, _ -> SBinOp(op, se1, se2)

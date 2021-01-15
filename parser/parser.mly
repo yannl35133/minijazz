@@ -55,12 +55,14 @@ let const_of_int loc i =
 %token PLUS "+" MINUS "-" STAR "*" SLASH "/" CIRCUMFLEX "^"
 %token LEQ "<=" GEQ ">=" NEQ "<>"
 %token WILDCARD "_" EOF
+%token <ParserAST.program> INCLUDE
 %token <string> IDENT
 %token <string> CONSTRUCTOR
 %token <string> STRING
 %token <int * int> INT
 %token <bool> BOOL
 
+%nonassoc ELSE
 %left LEQ GEQ EQUAL NEQ LANGLE RANGLE
 %left DOT
 %left OR NOR PLUS MINUS
@@ -77,6 +79,7 @@ let const_of_int loc i =
 /** Tools **/
 let slist  (x, sep) == separated_list (sep, x)
 let snlist (x, sep) == separated_nonempty_list (sep, x)
+let s2list (x, sep) == hd=x; sep; tl=separated_nonempty_list (sep, x); < (::) >
 let stuple  (x, o, c) == o; ~=slist  (x, ","); c; <>
 let sntuple (x, o, c) == o; ~=snlist (x, ","); c; <>
 let tuple (x) == stuple(x, "(", ")")
@@ -143,6 +146,7 @@ let static_exp_desc :=
   | se1=static_exp; op=int_op;      se2=static_exp;             { SBinOp (op, se1, se2) }
   | se1=static_exp; op=int_bool_op; se2=static_exp;             { SBinOp (op, se1, se2) }
   | se1=static_exp; op=bool_op;     se2=static_exp;             { SBinOp (op, se1, se2) }
+  | IF; c=static_exp; THEN; se1=static_exp; ELSE; se2=static_exp; { SIf (c, se1 , se2) }
 
 let opt_static_exp == localize(optional_static_exp_desc)
 let optional_static_exp_desc :=
@@ -158,11 +162,13 @@ let static_typed_ident :=
 // Netlist expressions
 
 let value :=
-  | b=BOOL;     { VBit b }
-  | i=INT;      { const_of_int (Loc $sloc) i }
-  | "["; "]";   { VNDim [] }
+  | b=BOOL;                           { VBit b }
+  | i=INT;                            { const_of_int (Loc $sloc) i }
+  | "["; "]";                         { VNDim [] }
+  | "["; ~=s2list(value, ","); "]";   < VNDim >
 
 let slice_param :=
+  | idx=opt_static_exp;                                                       < SliceOne >
   |                    "..";                                                  { SliceAll }
   | lo=opt_static_exp; "..";                                                  { SliceFrom lo }
   |                    ".."; hi=opt_static_exp;                               { SliceTo hi }
@@ -203,7 +209,6 @@ let exp_desc :=
   | _b="["; e=exp; "]";                                                       { ESupOp (localize $loc(_b) "add_dim", [e])}
   | e1=exp; _c="."; e2=exp;                                                   { ESupOp (localize $loc(_c) "concat", [e1; e2]) }
   | e1=simple_exp; slice=sntuple(slice_param, "[", "]")+;                     { ESlice (List.flatten slice, e1) }
-  | e1=simple_exp; idx=sntuple(opt_static_exp, "[", "]")+;                    { ESlice (List.map (fun e -> SliceOne e) (List.flatten idx), e1) }
   | ro=rom_or_ram; "<"; addr_size=opt_static_exp; ",";
       word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);    { EMem  (ro, (addr_size, word_size, input_file), a) }
 
@@ -305,8 +310,16 @@ let const :=
       { { const_left; const_right; const_loc = Loc $sloc } }
 
 let program :=
-  | p_enums = enum*; p_consts = const*; p_nodes = node*; EOF;
-      { { p_enums; p_consts; p_nodes } }
+  | ~=enum; ~=program;
+      { { program with p_enums = enum :: program.p_enums } }
+  | ~=const; ~=program;
+      { { program with p_consts = const :: program.p_consts } }
+  | ~=node; ~=program;
+      { { program with p_nodes = node :: program.p_nodes } }
+  | p2=INCLUDE; ~=program;
+      { { p_enums = p2.p_enums @ program.p_enums; p_consts = p2.p_consts @ program.p_consts; p_nodes = p2.p_nodes @ program.p_nodes } }
+  | EOF;
+      { { p_enums = []; p_consts = []; p_nodes = [] } }
 
 
 %%
