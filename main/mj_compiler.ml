@@ -64,6 +64,8 @@ let parse lexbuf =
   with
     | Lexical_error (err, l) ->
         lexical_error err l
+    | Parser_error_deep loc ->
+        syntax_error loc
     | Parser.Error ->
         let pos1 = Lexing.lexeme_start_p lexbuf
         and pos2 = Lexing.lexeme_end_p lexbuf in
