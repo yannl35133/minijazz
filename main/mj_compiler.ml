@@ -108,10 +108,11 @@ let compile_impl filename =
     let sized_program = Netlist_sizer.program constrained_program in
 
     let p = sized_program in
-    let p = pass "dedimension" true Dedimension.program p dbg_printer in
-    let p = pass "deautomaton" true Automaton.program   p dbg_printer in
-    let p = pass "dereset"     true Reset.program       p dbg_printer in
-    let p = pass "dematch"     true Matcher.program     p dbg_printer in
+    let p = pass "dedimension"  true Dedimension.program      p dbg_printer in
+    let p = pass "rename_local" true Automaton.rename_program p dbg_printer in
+    let p = pass "deautomaton"  true Automaton.program        p dbg_printer in
+    let p = pass "dereset"      true Reset.program            p dbg_printer in
+    let p = pass "dematch"      true Matcher.program          p dbg_printer in
 
     let p = Sized_to_old.program p in
 

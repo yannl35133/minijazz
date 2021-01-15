@@ -1,0 +1,24 @@
+type t1 = | Good | Bad
+type t2 = | St1 | St2
+
+main (clk, press) = o where
+  front_edge = clk & not(reg(clk));
+  down_edge = not(clk) & reg(clk);
+  automaton
+  | St1 ->
+    local a = 1;
+    o = 1;
+    automaton
+    | Good ->
+      local z = 1;
+      x = 1 until down_edge then continue Bad
+    | Bad  ->
+      local z = 0;
+      x = 0 until down_edge then continue Good
+    end
+    until down_edge then continue St2
+  | St2 ->
+    local y = 1;
+    o = 1 until front_edge then continue St1
+  end
+end where
