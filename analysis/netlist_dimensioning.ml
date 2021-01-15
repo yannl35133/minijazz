@@ -154,7 +154,7 @@ let rec exp (fun_env: fun_env) dimensioned (e: StaticTypedAST.exp) = match !!e w
         | _, NProd _ -> raise @@ (* Errors. *)UnexpectedProd (!%@arg2, ProdOp !!op)
         | NDim n1, NDim n2 ->
             if abs (n1 - n2) > 1 then
-              raise @@ (* Errors. *)WrongDimension (!%%arg1, !%%arg2, !%@arg2, ErOp (!!op, !%@arg1))
+              raise @@ (* Errors. *)WrongDimension (!%%arg2, !%%arg1, !%@arg2, ErOp (!!op, !%@arg1))
             else n1, n2
       in
       dimensioned, concat op !@e (arg1, n1) (arg2, n2)
