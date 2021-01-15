@@ -45,10 +45,10 @@ let fun_env_find fun_env id =
     let param loc name nb = reloc (SIParam (identify loc name nb)) in
     let rec aux idim_in idim_out iparam = function
       | "all"  :: tl ->   PSConst (params_dim idim_out) :: aux (idim_in+1) (idim_out+1) iparam tl
-      | "one"  :: tl ->                                    aux (idim_in+1) idim_out (iparam+1) tl
+      | "one"  :: tl ->                                    aux idim_in (idim_out+1) (iparam+1) tl
       | "from" :: tl ->   PSConst (add_one (minus (minus_one (params_dim idim_out)) (param !@id ("from_" ^ string_of_int idim_in) iparam))) :: aux (idim_in+1) (idim_out+1) (iparam+1) tl
       | "to"   :: tl ->   PSConst (add_one (param !@id ("to_" ^ string_of_int idim_in) iparam)) :: aux (idim_in+1) (idim_out+1) (iparam+1) tl
-      | "fromto" :: tl -> PSConst (add_one (minus (param !@id ("fromto_from_" ^ string_of_int idim_in) (iparam+1)) (param !@id ("fromto_to_" ^ string_of_int idim_in) iparam))) :: aux (idim_in+1) (idim_out+1) (iparam+2) tl
+      | "fromto" :: tl -> PSConst (add_one (minus (param !@id ("fromto_to_" ^ string_of_int idim_in) (iparam+1)) (param !@id ("fromto_from_" ^ string_of_int idim_in) iparam))) :: aux (idim_in+1) (idim_out+1) (iparam+2) tl
       | [] -> []
       | _ -> failwith "Miscounted arguments in slice"
     in
@@ -207,8 +207,8 @@ let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = m
       new_constraints @ constraints, relocalize !@d @@ Dlocaleq (lval', e')
   | Dif (c, b1, b2) ->
       let new_constraints, b1' = block env [] b1 in
-      let new_constraints, b2' = block env new_constraints b2 in
       let new_constraints = List.map (fun (g, e) -> add_guard g c, e) new_constraints in
+      let new_constraints, b2' = block env new_constraints b2 in
       new_constraints @ constraints, relocalize !@d @@ Dif (c, b1', b2')
   | Dreset (e, b) ->
       let constraints, e' = exp env constraints e in

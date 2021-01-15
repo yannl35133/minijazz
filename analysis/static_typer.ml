@@ -121,7 +121,7 @@ let optional_static_int_exp static_env e : optional_static_int_exp = match !!e w
       let res = static_int_exp_full static_env (relocalize !@e ed) in
       relocalize !@res (SExp !!res)
 
-let static_params types static_env fname params : static_unknown_exp list =
+let static_params loc types static_env fname params : static_unknown_exp list =
   let typed_params = List.map (optional_static_unknown_exp static_env) params in
   let static_param el ty = match !!el, ty with
     | SExp SIntExp e1,  TInt ->  relocalize !@el (SOIntExp  (SExp e1))
@@ -131,7 +131,13 @@ let static_params types static_env fname params : static_unknown_exp list =
     | SExp SIntExp _,   TBool -> raise @@ Errors.WrongTypeParam ("int", "bool", !@el, !!fname, List.map static_type_to_string types)
     | SExp SBoolExp _,  TInt ->  raise @@ Errors.WrongTypeParam ("bool", "int", !@el, !!fname, List.map static_type_to_string types)
   in
-  List.map2 static_param typed_params types
+  if typed_params = [] then
+    List.map (function
+      | TInt -> relocalize loc (SOIntExp (SUnknown (UIDUnknownStatic.get ())))
+      | TBool -> relocalize loc (SOBoolExp (SUnknown (UIDUnknownStatic.get ())))
+      ) types
+  else
+    List.map2 static_param typed_params types
 
 let slice_param static_env = function
   | SliceAll ->       SliceAll
@@ -155,7 +161,7 @@ let rec exp ((fun_env: fun_env), static_env as env) =
       EReg (exp env e)
   | StaticScopedAST.ECall (fname, params, args) ->
       let types = Misc.option_get ~error:(Failure "Unscoped node") @@ FunEnv.find_opt !!fname fun_env in
-      let static_typed_params = static_params types static_env fname params in
+      let static_typed_params = static_params !@fname types static_env fname params in
       ECall (fname, static_typed_params, List.map (exp env) args)
   | StaticScopedAST.EMem (mem_kind, (addr_size, word_size, input_file), args) ->
       let addr_size = optional_static_int_exp static_env addr_size in

@@ -152,13 +152,9 @@ let rec print_presize = function
   | PSVar (id, i, uid) -> print_unknown (VarDim (id, i)) (Uid uid)
   | PSConst se -> Printers.StaticTypedPartialAst.print_int_exp se
   | PSOtherContext (fname, _loc, params, ps) ->
-      dprintf "%t%t"
-        (par
-          (dprintf "@[(* %s@ *)@]@ %t"
-            fname
-            (print_presize ps)
-          )
-        )
+      dprintf "@[<hv>(@;<0 2>(* %s *)@ %t@;<0 -2>)@]%t"
+        fname
+        (print_presize ps)
         (print_list brak comma_sep Printers.StaticTypedPartialAst.print_unknown_exp params)
 
 let print_guard = function
@@ -423,6 +419,9 @@ let rec remove_minus se =
         propagate_minus se
     | UInt _ | UIConst _ | UIParam _ | UIUnknown _ ->
         se
+    | UIBinOp (SMult | SDiv as op, se1, {desc = UIUnOp (SNeg, se2); loc = _})
+    | UIBinOp (SMult | SDiv as op, {desc = UIUnOp (SNeg, se1); loc = _}, se2) ->
+        propagate_minus @@ reloc @@ UIBinOp (op, remove_minus se1, remove_minus se2)
     | UIBinOp (op, se1, se2) ->
         reloc @@ UIBinOp (op, remove_minus se1, remove_minus se2)
     | UISum l ->
@@ -434,7 +433,8 @@ let rec remove_minus se =
 and propagate_minus se =
   let reloc = relocalize !@se in
   match !!se with
-    | UIBinOp (SMult | SDiv as op, se1, {desc = UIUnOp (SNeg, se2); loc = _}) ->
+    | UIBinOp (SMult | SDiv as op, se1, {desc = UIUnOp (SNeg, se2); loc = _})
+    | UIBinOp (SMult | SDiv as op, {desc = UIUnOp (SNeg, se1); loc = _}, se2) ->
         reloc @@ UIBinOp (op, remove_minus se1, remove_minus se2)
     | UIBinOp (SMult | SDiv as op, se1, se2) ->
         reloc @@ UIUnOp (SNeg, reloc @@ UIBinOp (op, remove_minus se1, remove_minus se2))
@@ -456,6 +456,8 @@ and propagate_minus se =
 let combine_order a b = if a <> 0 then a else b
 
 let rec order a b = match !!a, !!b with
+  | UIUnOp (_, s), s' -> order s (no_localize s')
+  | s, UIUnOp (_, s') -> order (no_localize s) s'
   | UInt n, UInt n' -> n - n'
   | UInt _, _ -> -1
   | _, UInt _ -> 1
@@ -468,15 +470,16 @@ let rec order a b = match !!a, !!b with
   | UIUnknown (_, n), UIUnknown (_, n') -> UIDUnknownStatic.compare (extract_uid n) (extract_uid n')
   | UIUnknown _, _ -> -1
   | _, UIUnknown _ -> 1
-  | UIUnOp (_, s), s' -> order s (no_localize s')
-  | s, UIUnOp (_, s') -> order (no_localize s) s'
+
   | UIBinOp (op, s1, s2), UIBinOp (op', s1', s2') -> combine_order (compare op op') @@ combine_order (order s1 s1') (order s2 s2')
   | UIBinOp _, _ -> -1
   | _, UIBinOp _ -> 1
   | a, b -> compare a b
 
 let sum_list l =
+  (* Format.eprintf "Sum_list0: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l); *)
   let l' = (List.sort order l) in
+  (* Format.eprintf "Sum_list1: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
   let rec eat_ints = function
   | { desc = UInt 0; _ } :: tl -> tl
   | se' :: { desc = UIUnOp (SNeg, se); _ } :: tl when maybe_equal_int (!!se, !!se') = Yes -> tl
@@ -491,9 +494,9 @@ let sum_list l =
   | [] -> acc
   in
   let l = eat_ints l' in
-  (* Format.eprintf "Sum_list: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l); *)
+  (* Format.eprintf "Sum_list2: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l); *)
   let l' = cancel [] l in
-  (* Format.eprintf "Sum_list2: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
+  (* Format.eprintf "Sum_list3: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
   match l' with
   | [e] -> !!e
   | l -> UISum (List.rev l)
@@ -509,6 +512,9 @@ let rec sums se =
         !!se
     | UIBinOp (SAdd, se1, se2) ->
         (sum_list (add_sum se1 @ add_sum se2))
+    | UIBinOp (SMult, se1, se2) ->
+        sum_list @@
+          List.concat_map (fun se2 -> List.map (fun se1 -> relocalize !@se @@ UIBinOp (SMult, se1, se2)) (add_sum se1)) (add_sum se2)
     | UIBinOp (op, se1, se2) ->
         UIBinOp (op, sums se1, sums se2)
     | UISum l ->
@@ -527,12 +533,15 @@ and add_sum se =
         [se]
     | UIBinOp (SAdd, se1, se2) ->
         (add_sum (sums se1) @ add_sum (sums se2))
+    | UIBinOp (SMult, se1, se2) ->
+        List.concat_map (fun se2 -> List.map (fun se1 -> reloc @@ UIBinOp (SMult, se1, se2)) (add_sum se1)) (add_sum se2)
     | UIBinOp (op, se1, se2) ->
         [reloc @@ UIBinOp (op, sums se1, sums se2)]
     | UISum l ->
         l
     | UIIf (c, se1, se2) ->
         [reloc @@ UIIf (c, sums se1, sums se2)]
+
 
 
 let rec evaluate_consts s se =
@@ -559,6 +568,8 @@ let rec evaluate_consts s se =
         | UInt n, UInt n2 -> reloc @@ UInt (f_of_op op n n2)
         | UInt 1, _ when op = SMult -> se2'
         | _, UInt 1 when op = SMult || op = SDiv -> se1'
+        | UInt (-1), _ when op = SMult -> reloc @@ UIUnOp (SNeg, se2')
+        | _, UInt (-1) when op = SMult || op = SDiv -> reloc @@ UIUnOp (SNeg, se1')
         | UInt 0, _ when op = SMult || op = SDiv -> reloc @@ UInt 0
         | _, UInt 0 when op = SMult  -> reloc @@ UInt 0
         | _ -> reloc @@ UIBinOp (op, se1', se2')
@@ -586,12 +597,12 @@ let rec extract_guard = function
 
 
 
-  let pre_treatment guard (a, b) =
-    let s = extract_guard guard in
-    let one_treatment e = sums @@ remove_minus @@ evaluate_consts s e in
-    let enough_treatments e = one_treatment @@ one_treatment e in
-    let (a', b') = enough_treatments a, enough_treatments b in
-    a', b'
+let pre_treatment guard (a, b) =
+  let s = extract_guard guard in
+  let one_treatment e = sums @@ remove_minus @@ evaluate_consts s e in
+  let enough_treatments e = one_treatment @@ one_treatment e in
+  let (a', b') = enough_treatments a, enough_treatments b in
+  a', b'
 
 
 
