@@ -160,7 +160,7 @@ rule token = parse
           let c = open_in true_filename in
           Hashtbl.add includes_table true_filename ();
           let lb = Lexing.from_channel c in
-          Lexing.set_filename lexbuf true_filename;
+          Lexing.set_filename lb true_filename;
           let p = Parser.program token lb in
           INCLUDE p
       }
