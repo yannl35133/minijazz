@@ -68,7 +68,7 @@ let rec slice funname params args =
   end
 
 and exp e =
-  let regex = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\)_\([01]\)|} in
+  let regex = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\)_\([0-9]+\)|} in
   let regex2 = Str.regexp {|add_dim_[0-9]+|} in
   let regex3 = Str.regexp {|concat_\([0-9]+\)|} in
   let regexp_slice = Str.regexp {|slice\(\(_\(all\|one\|to\|fromto\|from\)\)+\)|} in

@@ -1,3 +1,4 @@
+(*
 mux_n<n, p>(switch:[n], cases:[2^n, p]) = o:[_] where
     if n = 0 then
         o = cases[0];
@@ -5,7 +6,34 @@ mux_n<n, p>(switch:[n], cases:[2^n, p]) = o:[_] where
         o = mux(switch[0], mux_n(switch[1..], cases[..2^n-1]), mux_n(switch[1..], cases[2^n..]));
     end if
 end where
+*)
 
+update_addr<n, p>(addr:[n], data:[p], mem:[2^n, p]) = mem2:[2^n, p] where
+    if n = 0 then
+        mem2 = [data];
+    else
+        mem2 = mux(addr[0],
+            update_addr(addr[1..], data, mem[..2^(n-1) - 1]) . mem[2^(n-1) .. ],
+            mem[..2^(n-1) - 1]) . update_addr(addr[1..], data, mem[2^(n-1) .. ])
+    end if
+end where
+
+(*
+main(clk1) = (o2) where
+  front_edge3 = clk1 && not(reg clk1);
+  down_edge4 = not(clk1) && reg clk1;
+
+  o110 = 1;
+  o08 = 0;
+  o2 = mux(reg nx_stateauto1st0[1], o110, o08);
+
+  nx_stateauto1st19 = mux(front_edge3, 10, 01);
+  nx_stateauto1st07 = mux(down_edge4, 01, 10);
+  nx_stateauto1st0 = mux(reg nx_stateauto1st0[1],
+                             nx_stateauto1st19,
+                             nx_stateauto1st07)
+end where;
+*)
 (*
 main() = () where
   i = [[0b100, 0b001]];
