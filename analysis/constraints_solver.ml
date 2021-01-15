@@ -310,6 +310,7 @@ let rec substitute_env_int env se =
       | Some SBoolExp _ ->  failwith "Static type error"
       | Some SIntExp se ->
         let p_list = extract_params [] nc in
+        substitute_env_int env @@
         substitute_params_int p_list (reloc @@ to_uiexp se)
     end
   | UIUnOp (op, se) ->            reloc @@ UIUnOp (op, substitute_env_int env se)
@@ -329,6 +330,7 @@ and substitute_env_bool env se =
       | Some SIntExp _ -> failwith "Static type error"
       | Some SBoolExp se ->
         let p_list = extract_params [] nc in
+        substitute_env_bool env @@
         substitute_params_bool p_list (reloc @@ to_ubexp se)
     end
   | UBUnOp (op, se) ->            reloc @@ UBUnOp (op, substitute_env_bool env se)
@@ -367,21 +369,21 @@ and from_ubexp = function
   | UBBinIntOp (op, se1, se2) -> SBBinIntOp (op, relocalize_fun from_uiexp se1, relocalize_fun from_uiexp se2)
   | UBIf (c, se1, se2) -> SBIf (relocalize_fun from_ubexp c, relocalize_fun from_ubexp se1, relocalize_fun from_ubexp se2)
 
-let rec no_free_variable_int env = function
+let rec no_free_variable_int env e = match !!e with
   | UInt _ | UIConst _ | UIParam _ -> true
-  | UIUnknown (_, nc) -> mem (extract_uid nc) env
-  | UIUnOp (_, se) -> no_free_variable_int env !!se
-  | UIBinOp (_, se1, se2) -> no_free_variable_int env !!se1 && no_free_variable_int env !!se2
-  | UISum l -> List.for_all (fun e -> no_free_variable_int env !!e) l
-  | UIIf (c, se1, se2) -> no_free_variable_bool env !!c && no_free_variable_int env !!se1 && no_free_variable_int env !!se2
+  | UIUnknown (_, nc) -> if mem (extract_uid nc) env then no_free_variable_int env @@ substitute_env_int env @@ e else false
+  | UIUnOp (_, se) -> no_free_variable_int env se
+  | UIBinOp (_, se1, se2) -> no_free_variable_int env se1 && no_free_variable_int env se2
+  | UISum l -> List.for_all (fun e -> no_free_variable_int env e) l
+  | UIIf (c, se1, se2) -> no_free_variable_bool env c && no_free_variable_int env se1 && no_free_variable_int env se2
 
-and no_free_variable_bool env = function
+and no_free_variable_bool env e = match !!e with
   | UBool _ | UBConst _ | UBParam _ -> true
-  | UBUnknown (_, nc) -> mem (extract_uid nc) env
-  | UBUnOp (_, se) -> no_free_variable_bool env !!se
-  | UBBinOp (_, se1, se2) -> no_free_variable_bool env !!se1 && no_free_variable_bool env !!se2
-  | UBBinIntOp (_, se1, se2) -> no_free_variable_int env !!se1 && no_free_variable_int env !!se2
-  | UBIf (c, se1, se2) -> no_free_variable_bool env !!c && no_free_variable_bool env !!se1 && no_free_variable_bool env !!se2
+  | UBUnknown (_, nc) -> if mem (extract_uid nc) env then no_free_variable_bool env @@ substitute_env_bool env @@ e else false
+  | UBUnOp (_, se) -> no_free_variable_bool env se
+  | UBBinOp (_, se1, se2) -> no_free_variable_bool env se1 && no_free_variable_bool env se2
+  | UBBinIntOp (_, se1, se2) -> no_free_variable_int env se1 && no_free_variable_int env se2
+  | UBIf (c, se1, se2) -> no_free_variable_bool env c && no_free_variable_bool env se1 && no_free_variable_bool env se2
 
 
 let rec maybe_equal_int = function
@@ -594,15 +596,33 @@ let rec extract_guard = function
   | SBBinIntOp _ -> IntEnv.empty
 
 
+let rec count_unknowns env e = match !!e with
+  | UInt _ | UIParam _ | UIConst _ -> 0
+  | UIUnknown (_, u) -> if mem (extract_uid u) env then 0 else 1
+  | UIUnOp (SNeg, s) -> count_unknowns env s
+  | UIBinOp (_, s, s') -> count_unknowns env s + count_unknowns env s'
+  | UIIf (_, _, _) -> 30 (* I don't want to work with these *)
+  | UISum _ -> 40 (* Should be impossible *)
 
+let balance env (a, b) = match !!a, !!b with
+  | UISum l, _ when List.fold_left (+) 0 @@ List.map (count_unknowns env) l = 1 ->
+      let u, l' = List.partition (fun s -> match !!s with UIUnknown (_, u) -> not @@ mem (extract_uid u) env | _ -> false) l in
+      let u = match u with [u] -> u | _ -> assert false in
+      u, relocalize !@b (UIBinOp (SMinus, b, relocalize !@a @@ UISum l'))
+  | _, UISum l when List.fold_left (+) 0 @@ List.map (count_unknowns env) l = 1 ->
+      let u, l' = List.partition (fun s -> match !!s with UIUnknown (_, u) -> not @@ mem (extract_uid u) env | _ -> false) l in
+      let u = match u with [u] -> u | _ -> assert false in
+      relocalize !@a (UIBinOp (SMinus, a, relocalize !@a @@ UISum l')), u
+  | _ -> a, b
 
-
-let pre_treatment guard (a, b) =
+let pre_treatment env guard (a, b) =
   let s = extract_guard guard in
   let one_treatment e = sums @@ remove_minus @@ evaluate_consts s e in
   let enough_treatments e = one_treatment @@ one_treatment e in
-  let (a', b') = enough_treatments a, enough_treatments b in
-  a', b'
+  let (a, b) = enough_treatments a, enough_treatments b in
+  let (a, b) = balance env (a, b) in
+  let (a, b) = enough_treatments a, enough_treatments b in
+  a, b
 
 
 
@@ -629,24 +649,24 @@ let analyze_result ue1 ue2 = function
 
 
 let solve_constraint_one env guard (a, b) =
-  (* Format.eprintf "%t et@;<1 2>%t@.@." (print_int_exp a) (print_int_exp b); *)
-  let a', b' = pre_treatment (SBool true) (a, b) in
-  (* Format.eprintf "==> %t et@;<1 2>%t@.@." (print_int_exp a') (print_int_exp b'); *)
+  (* Format.eprintf "@[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b); *)
+  let a', b' = pre_treatment env (SBool true) (a, b) in
+  (* Format.eprintf "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b'); *)
   match !!a', !!b' with
   | UIUnknown (d, Uid uid), UIUnknown (_, Uid uid') when not (mem uid env) ->
       add uid (Link (d, uid')) env, true
   | UIUnknown (_, Uid uid'), UIUnknown (d, Uid uid) when not (mem uid env) ->
       add uid (Link (d, uid')) env, true
-  | UIUnknown (_, Uid uid), ue when not (mem uid env) && no_free_variable_int env ue ->
+  | UIUnknown (_, Uid uid), _ when not (mem uid env) && no_free_variable_int env b ->
       add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ substitute_env_int env @@ b))) env, true
-  | ue, UIUnknown (_, Uid uid) when not (mem uid env) && no_free_variable_int env ue ->
+  | _, UIUnknown (_, Uid uid) when not (mem uid env) && no_free_variable_int env a ->
       add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ substitute_env_int env @@ a))) env, true
-  | ue1, ue2 when no_free_variable_int env ue1 && no_free_variable_int env ue2 ->
-      let se1 = substitute_env_int env @@ a in
-      let se2 = substitute_env_int env @@ b in
-      (* Format.eprintf "| %t et@;<1 2>%t@.@." (print_int_exp se1) (print_int_exp se2); *)
-      let (se1', se2') = pre_treatment !!guard (se1, se2) in
-      (* Format.eprintf "| ==> %t et@;<1 2>%t@.@." (print_int_exp se1') (print_int_exp se2'); *)
+  | _ when no_free_variable_int env a && no_free_variable_int env b ->
+      let se1 = substitute_env_int env a in
+      let se2 = substitute_env_int env b in
+      (* Format.eprintf "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2); *)
+      let (se1', se2') = pre_treatment env !!guard (se1, se2) in
+      (* Format.eprintf "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2'); *)
       analyze_result a b @@ maybe_equal_int (!!se1', !!se2');
       env, true
   | _ ->
