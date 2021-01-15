@@ -649,24 +649,24 @@ let analyze_result ue1 ue2 = function
 
 
 let solve_constraint_one env guard (a', b') =
-  Format.eprintf "@[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b');
+  (* Format.eprintf "@[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b'); *)
   let a, b = pre_treatment env (SBool true) (a', b') in
-  Format.eprintf "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b);
-  match !!a', !!b' with
+  (* Format.eprintf "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b); *)
+  match !!a, !!b with
   | UIUnknown (d, Uid uid), UIUnknown (_, Uid uid') when not (mem uid env) ->
       add uid (Link (d, uid')) env, true
   | UIUnknown (_, Uid uid'), UIUnknown (d, Uid uid) when not (mem uid env) ->
       add uid (Link (d, uid')) env, true
   | UIUnknown (_, Uid uid), _ when not (mem uid env) && no_free_variable_int env b ->
-      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ substitute_env_int env @@ b))) env, true
+      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ evaluate_consts IntEnv.empty @@ substitute_env_int env @@ b))) env, true
   | _, UIUnknown (_, Uid uid) when not (mem uid env) && no_free_variable_int env a ->
-      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ substitute_env_int env @@ a))) env, true
+      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ evaluate_consts IntEnv.empty @@ substitute_env_int env @@ a))) env, true
   | _ when no_free_variable_int env a && no_free_variable_int env b ->
       let se1 = substitute_env_int env a in
       let se2 = substitute_env_int env b in
-      Format.eprintf "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2);
+      (* Format.eprintf "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2); *)
       let (se1', se2') = pre_treatment env !!guard (se1, se2) in
-      Format.eprintf "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2');
+      (* Format.eprintf "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2'); *)
       analyze_result a' b' @@ maybe_equal_int (!!se1', !!se2');
       env, true
   | _ ->
@@ -681,6 +681,9 @@ let solve_constraints (l: NetlistConstrainedAST.constraints) =
     | [] -> env, acc
     | (guard, hd) :: tl ->
         let env, ok = solve_constraint_one env guard @@ presize_to_uiexp2 hd in
+        (* Format.eprintf "Found equalities@."; *)
+        (* UIDEnv.iter (fun uid union -> Format.eprintf "%t@." (print_env uid union)) env; *)
+        (* Format.eprintf "@."; *)
         if ok then
           one_round env acc tl
         else
@@ -704,6 +707,7 @@ let solve_constraints (l: NetlistConstrainedAST.constraints) =
   let env = repeat env l in
   (* Format.eprintf "Found equalities@."; *)
   (* UIDEnv.iter (fun uid union -> Format.eprintf "%t@." (print_env uid union)) env; *)
+  (* Format.eprintf "@."; *)
   env
 
 
