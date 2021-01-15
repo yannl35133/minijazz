@@ -649,21 +649,24 @@ let analyze_result ue1 ue2 = function
 
 
 let solve_constraint_one env guard (a', b') =
+  let trivial_guard = !!guard = SBool true in
+  (* Format.eprintf "Under @[%t (%b)@] @." (Printers.StaticTypedPartialAst.print_bool_exp guard) trivial_guard; *)
   (* Format.eprintf "@[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b'); *)
   let a, b = pre_treatment env (SBool true) (a', b') in
   (* Format.eprintf "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b); *)
+  let check = trivial_guard || (!!a = !!a' && !!b = !!b') in
   match !!a, !!b with
-  | UIUnknown (d, Uid uid), UIUnknown (_, Uid uid') when not (mem uid env) ->
+  | UIUnknown (d, Uid uid), UIUnknown (_, Uid uid') when check && not (mem uid env) ->
       add uid (Link (d, uid')) env, true
-  | UIUnknown (_, Uid uid'), UIUnknown (d, Uid uid) when not (mem uid env) ->
+  | UIUnknown (_, Uid uid'), UIUnknown (d, Uid uid) when check && not (mem uid env) ->
       add uid (Link (d, uid')) env, true
-  | UIUnknown (_, Uid uid), _ when not (mem uid env) && no_free_variable_int env b ->
+  | UIUnknown (_, Uid uid), _ when check && not (mem uid env) && no_free_variable_int env b ->
       add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ evaluate_consts IntEnv.empty @@ substitute_env_int env @@ b))) env, true
-  | _, UIUnknown (_, Uid uid) when not (mem uid env) && no_free_variable_int env a ->
+  | _, UIUnknown (_, Uid uid) when check && not (mem uid env) && no_free_variable_int env a ->
       add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ evaluate_consts IntEnv.empty @@ substitute_env_int env @@ a))) env, true
-  | _ when no_free_variable_int env a && no_free_variable_int env b ->
-      let se1 = substitute_env_int env a in
-      let se2 = substitute_env_int env b in
+  | _ when no_free_variable_int env a' && no_free_variable_int env b' ->
+      let se1 = substitute_env_int env a' in
+      let se2 = substitute_env_int env b' in
       (* Format.eprintf "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2); *)
       let (se1', se2') = pre_treatment env !!guard (se1, se2) in
       (* Format.eprintf "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2'); *)
