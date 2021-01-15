@@ -34,6 +34,9 @@ type lexical_error =
 
 exception Lexical_error of lexical_error * Location.location
 
+(** error happening in an included file, we have to pass the location explicitly *)
+exception Parser_error_deep of Location.location
+
 (** name of undefined constant *)
 exception Scope_error of string * Location.location
 

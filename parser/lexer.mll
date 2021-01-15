@@ -72,6 +72,10 @@ let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
   "done", DONE *)
 ]
 
+let get_location lexbuf =
+  let pos1 = Lexing.lexeme_start_p lexbuf
+  and pos2 = Lexing.lexeme_end_p lexbuf in
+  Loc (pos1, pos2)
 
 let char_for_backslash = function
     'n' -> '\n'
@@ -152,17 +156,18 @@ rule token = parse
   | "#include" space+ '"' (ascii* as filename) '"'
       {
         if Hashtbl.mem includes_table filename then
-          raise (Lexical_error (Circular_includes,
-                      Loc (Lexing.lexeme_start_p lexbuf,
-                      Lexing.lexeme_end_p lexbuf)))
-        else
+          raise (Lexical_error (Circular_includes, get_location lexbuf))
+        else begin
           let true_filename = Filename.concat (Filename.dirname lexbuf.lex_curr_p.pos_fname) filename in
           let c = open_in true_filename in
           Hashtbl.add includes_table true_filename ();
           let lb = Lexing.from_channel c in
           Lexing.set_filename lb true_filename;
-          let p = Parser.program token lb in
-          INCLUDE p
+          try
+            let p = Parser.program token lb in
+            INCLUDE p
+          with Parser.Error -> raise (Parser_error_deep (get_location lb))
+        end
       }
   | "#" " "* (['0'-'9']+ as line) " "*
     '"' (ascii* as file) '"'
@@ -182,9 +187,7 @@ rule token = parse
   | eof
       { EOF }
   | _
-      { raise (Lexical_error (Illegal_character,
-                      Loc (Lexing.lexeme_start_p lexbuf,
-                      Lexing.lexeme_end_p lexbuf))) }
+      { raise (Lexical_error (Illegal_character, get_location lexbuf)) }
 
 and multi_comment comment_start = parse
   | "(*"
@@ -223,8 +226,7 @@ and string string_start buf = parse
       { Buffer.add_char buf (char_for_decimal_code code);
          string string_start buf lexbuf }
   | '\\'
-      { raise (Lexical_error (Illegal_character,
-                    Loc (string_start, Lexing.lexeme_start_p lexbuf))) }
+      { raise (Lexical_error (Illegal_character, get_location lexbuf)) }
   | '\n' | eof
       { raise (Lexical_error (Unterminated_string,
                     Loc (string_start, Lexing.lexeme_start_p lexbuf))) }
