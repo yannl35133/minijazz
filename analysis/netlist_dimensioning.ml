@@ -722,6 +722,12 @@ let program ({ p_nodes; p_enums; _ } as program) : program =
       (print_ot found)
       (print_ot expected);
       raise Errors.ErrorDetected
+  | WrongDimension (found, expected, loc, _) ->
+      Format.eprintf "%aType Error: This expression has type %t but an expression of type %t was expected@."
+      Location.print_location loc
+      (print_netlist_dimension found)
+      (print_netlist_dimension expected);
+      raise Errors.ErrorDetected
   | Errors.WrongNumberArguments (found, loc, expected, fname) ->
       Format.eprintf "%aType Error: Function %s has %i arguments but %i were given@."
       Location.print_location loc fname expected found;
