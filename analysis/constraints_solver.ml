@@ -648,10 +648,10 @@ let analyze_result ue1 ue2 = function
 
 
 
-let solve_constraint_one env guard (a, b) =
-  (* Format.eprintf "@[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b); *)
-  let a', b' = pre_treatment env (SBool true) (a, b) in
-  (* Format.eprintf "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b'); *)
+let solve_constraint_one env guard (a', b') =
+  Format.eprintf "@[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b');
+  let a, b = pre_treatment env (SBool true) (a', b') in
+  Format.eprintf "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b);
   match !!a', !!b' with
   | UIUnknown (d, Uid uid), UIUnknown (_, Uid uid') when not (mem uid env) ->
       add uid (Link (d, uid')) env, true
@@ -664,10 +664,10 @@ let solve_constraint_one env guard (a, b) =
   | _ when no_free_variable_int env a && no_free_variable_int env b ->
       let se1 = substitute_env_int env a in
       let se2 = substitute_env_int env b in
-      (* Format.eprintf "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2); *)
+      Format.eprintf "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2);
       let (se1', se2') = pre_treatment env !!guard (se1, se2) in
-      (* Format.eprintf "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2'); *)
-      analyze_result a b @@ maybe_equal_int (!!se1', !!se2');
+      Format.eprintf "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2');
+      analyze_result a' b' @@ maybe_equal_int (!!se1', !!se2');
       env, true
   | _ ->
       env, false
