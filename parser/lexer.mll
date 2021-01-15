@@ -29,6 +29,8 @@ open Lexing
 open Parser
 open Errors
 
+let includes_table = (Hashtbl.create 17 : (string, unit) Hashtbl.t)
+
 let keyword_table = ((Hashtbl.create 149) : (string, token) Hashtbl.t)
 
 let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
@@ -147,6 +149,21 @@ rule token = parse
       { string lexbuf.lex_start_p (Buffer.create 16) lexbuf }
   | "(*"
       { multi_comment lexbuf.lex_curr_p lexbuf; token lexbuf }
+  | "#include" space+ '"' (ascii* as filename) '"'
+      {
+        if Hashtbl.mem includes_table filename then
+          raise (Lexical_error (Circular_includes,
+                      Loc (Lexing.lexeme_start_p lexbuf,
+                      Lexing.lexeme_end_p lexbuf)))
+        else
+          let true_filename = Filename.concat (Filename.dirname lexbuf.lex_curr_p.pos_fname) filename in
+          let c = open_in true_filename in
+          Hashtbl.add includes_table true_filename ();
+          let lb = Lexing.from_channel c in
+          Lexing.set_filename lexbuf true_filename;
+          let p = Parser.program token lb in
+          INCLUDE p
+      }
   | "#" " "* (['0'-'9']+ as line) " "*
     '"' (ascii* as file) '"'
      [' ' '0'-'9']* newline

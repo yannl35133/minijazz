@@ -55,6 +55,7 @@ let const_of_int loc i =
 %token PLUS "+" MINUS "-" STAR "*" SLASH "/" CIRCUMFLEX "^"
 %token LEQ "<=" GEQ ">=" NEQ "<>"
 %token WILDCARD "_" EOF
+%token <ParserAST.program> INCLUDE
 %token <string> IDENT
 %token <string> CONSTRUCTOR
 %token <string> STRING
@@ -309,8 +310,16 @@ let const :=
       { { const_left; const_right; const_loc = Loc $sloc } }
 
 let program :=
-  | p_enums = enum*; p_consts = const*; p_nodes = node*; EOF;
-      { { p_enums; p_consts; p_nodes } }
+  | ~=enum; ~=program;
+      { { program with p_enums = enum :: program.p_enums } }
+  | ~=const; ~=program;
+      { { program with p_consts = const :: program.p_consts } }
+  | ~=node; ~=program;
+      { { program with p_nodes = node :: program.p_nodes } }
+  | p2=INCLUDE; ~=program;
+      { { p_enums = p2.p_enums @ program.p_enums; p_consts = p2.p_consts @ program.p_consts; p_nodes = p2.p_nodes @ program.p_nodes } }
+  | EOF;
+      { { p_enums = []; p_consts = []; p_nodes = [] } }
 
 
 %%

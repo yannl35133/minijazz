@@ -30,6 +30,7 @@ type lexical_error =
   | Unterminated_comment
   | Unterminated_string
   | Nonbinary_base
+  | Circular_includes
 
 exception Lexical_error of lexical_error * Location.location
 
@@ -91,6 +92,7 @@ let lexical_error err loc =
   | Unterminated_comment  -> "unterminated comment"
   | Unterminated_string   -> "unterminated string"
   | Nonbinary_base        -> "base unadapted to binary"
+  | Circular_includes     -> "circular includes"
   );
   raise ErrorDetected
 
