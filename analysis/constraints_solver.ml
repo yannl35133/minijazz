@@ -478,9 +478,9 @@ let rec order a b = match !!a, !!b with
   | _, UIBinOp _ -> 1
   | a, b -> compare a b
 
-let sum_list l =
+let rec sum_list l =
   (* Format.eprintf "Sum_list0: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l); *)
-  let l' = (List.sort order l) in
+  let l = (List.sort order l) in
   (* Format.eprintf "Sum_list1: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
   let rec eat_ints = function
   | { desc = UInt 0; _ } :: tl -> tl
@@ -495,16 +495,32 @@ let sum_list l =
   | hd :: tl -> cancel (hd :: acc) tl
   | [] -> acc
   in
-  let l = eat_ints l' in
+  let rec powers_of_2 acc = function
+  | {desc=UIBinOp(SPower,{desc = UInt 2; _},n1);loc} :: {desc=UIBinOp(SPower,{desc = UInt 2; _},n2);_} :: tl
+      when maybe_equal_int (!!n1, !!n2) = Yes ->
+        powers_of_2 [] (List.rev_append acc
+        ({desc=UIBinOp(SPower,{desc = UInt 2; loc},{desc=UIBinOp(SAdd,n1,{desc=UInt 1;loc});loc});loc} :: tl))
+  | {desc=UIUnOp(SNeg,({desc=UIBinOp(SPower,{desc = UInt 2; _},n1);_} as se));loc} :: {desc=UIBinOp(SPower,{desc = UInt 2; _},n2);_} :: tl
+      when maybe_equal_int ((!!) @@ single_treatment (relocalize loc (UIBinOp (SMinus, n2, n1))), UInt 1) = Yes ->
+        powers_of_2 [] (List.rev_append acc (se :: tl))
+  | {desc=UIBinOp(SPower,{desc = UInt 2; _},n2);_} :: {desc=UIUnOp(SNeg,({desc=UIBinOp(SPower,{desc = UInt 2; _},n1);_} as se));loc} :: tl
+      when maybe_equal_int ((!!) @@ single_treatment (relocalize loc (UIBinOp (SMinus, n2, n1))), UInt 1) = Yes ->
+        powers_of_2 [] (List.rev_append acc (se :: tl))
+  | hd :: tl -> powers_of_2 (hd :: acc) tl
+  | [] -> acc
+  in
+  let l = eat_ints l in
   (* Format.eprintf "Sum_list2: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l); *)
-  let l' = cancel [] l in
+  let l = cancel [] l in
   (* Format.eprintf "Sum_list3: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
-  match l' with
+  let l = powers_of_2 [] l in
+  (* Format.eprintf "Sum_list3: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
+  match l with
   | [e] -> !!e
-  | l -> UISum (List.rev l)
+  | l -> UISum (List.rev @@ List.sort order l)
 
 
-let rec sums se =
+and sums se =
   relocalize !@se @@
   match !!se with
     | UIBinOp (SMinus, _, _) -> failwith "Should have removed minus first"
@@ -546,7 +562,7 @@ and add_sum se =
 
 
 
-let rec evaluate_consts s se =
+and evaluate_consts s se =
   let f_of_op = function
   | SAdd -> (+) | SMinus -> (-)
   | SMult -> ( * ) | SDiv -> (/) | SPower -> Misc.exp
@@ -585,6 +601,8 @@ let rec evaluate_consts s se =
     | UIIf (c, se1, se2) ->
         reloc @@ UIIf (c, evaluate_consts s se1, evaluate_consts s se2)
 
+and single_treatment a =
+  sums @@ remove_minus @@ evaluate_consts IntEnv.empty a
 
 let rec extract_guard = function
   | SBBinIntOp (SEq, {desc=SIParam i; _}, {desc; _})
@@ -615,8 +633,7 @@ let balance env (a, b) = match !!a, !!b with
       relocalize !@a (UIBinOp (SMinus, a, relocalize !@a @@ UISum l')), u
   | _ -> a, b
 
-let single_treatment a =
-  sums @@ remove_minus @@ evaluate_consts IntEnv.empty a
+
 
 let pre_treatment env guard (a, b) =
   let s = extract_guard guard in
