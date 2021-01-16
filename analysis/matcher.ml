@@ -6,8 +6,8 @@ module M = Map.Make(struct
   type t = lvalue
 
   let rec fold lvs1 lvs2 = match lvs1, lvs2 with
-    | [], [] -> assert false
-    | [], _ | _, [] -> assert false
+    | [], [] -> -1
+    | [], _ | _, [] -> -1
     | lv1 :: lvs1, lv2 :: lvs2 ->
       match compare lv1 lv2 with
       | 0 -> fold lvs1 lvs2
@@ -17,7 +17,7 @@ module M = Map.Make(struct
     | LValId id1, LValId id2 ->
       UIDIdent.compare id1.id_uid id2.id_uid
     | LValTuple lvs1, LValTuple lvs2 -> fold lvs1 lvs2
-    | _ -> assert false
+    | _ -> -1
 end)
 
 module I = Map.Make(Int)
@@ -178,20 +178,30 @@ and lv_to_output env (lv:lvalue) = match lv.b_desc with
 
 (*****)
 
-and rename_lv (c:UIDConstructor.t) (env: ident Env.t) (lv:lvalue) =
+let env_to_list (env:exp M.t) =
+  M.fold (fun lv exp b -> (relocalize lv.b_loc @@ Deq (lv, Exp exp)) :: b)
+    env []
+
+let list_to_env (b: decl list) =
+  List.fold_left (fun env d ->
+      match d.desc with
+      | Deq (lv, Exp exp) -> M.add lv exp env
+      | _ -> assert false) M.empty b
+
+let rec rename_lv px (env: ident Env.t) (lv:lvalue) =
   let env, b_desc = match lv.b_desc with
     | LValDrop -> env, lv.b_desc
     | LValId id ->
        let nid = { id with
                    id_uid  = UIDIdent.get ();
-                   id_desc =  id.id_desc ^ (UIDConstructor.to_string c) } in
+                   id_desc = px ^ id.id_desc } in
        Env.add id.id_uid nid env, LValId nid
     | LValTuple lvs ->
        let env, lvs =
          List.fold_left (fun (env, lvs) lv ->
-             let env, lv = rename_lv c env lv in
+             let env, lv = rename_lv px env lv in
              env, lv :: lvs) (env, []) lvs in
-       env, LValTuple lvs
+       env, LValTuple (List.rev lvs)
   in
   env, { lv with b_desc }
 
@@ -208,7 +218,7 @@ and mux_lv cond defs b lv new_lv : exp M.t =
      List.fold_left2 (mux_lv cond defs) b lvs new_lvs
   | _ -> assert false
 
-and ti_to_lv (szs, lvs) t =
+let rec ti_to_lv (szs, lvs) t =
   match (t.ti_type).desc with
   | BNetlist ty ->
      ty :: szs,
@@ -230,7 +240,6 @@ and node_of_block_global n =
       ([], I.empty, Env.empty, Env.empty) n.node_body in
   Hashtbl.replace program_nodes_tbl (UIDIdent.get ())
     { n with node_body }
-
 
 and node_of_block px env loc ds =
   let node_body, node_params, node_inputs, node_outputs =
@@ -261,17 +270,18 @@ and decl px env (b, p, i, o) (d:decl) = match d.desc with
        ConstructEnv.fold
          (fun c h (lvs, b, defs, _p, _i, _o) ->
            let px = px ^ h.m_state.id_desc in
-           let lv, eq, p, i, o =
+           let lv, exp, p, i, o =
               node_of_block px env h.m_hloc h.m_body in
-           let new_defs, new_lv = rename_lv c defs lv in
+           let new_defs, new_lv = rename_lv px defs lv in
            let cond = slice e (index c) in
-           let _b = mux_lv cond defs M.empty lv new_lv in
-           lv :: lvs, (relocalize h.m_hloc @@ Deq (lv, Exp eq)) :: b,
+           let b = mux_lv cond defs b lv new_lv in
+           lv :: lvs,
+           M.add new_lv exp b,
            new_defs, p, i, o)
-         m.m_handlers ([], b, Env.empty, p, i, o)
+         m.m_handlers ([], list_to_env b, Env.empty, p, i, o)
      in
-     (* TODO finish branching + enable *)
-     b, p, i, o
+     (* TODO enable *)
+     env_to_list b, p, i, o
 
   | Deq ({ b_desc = LValDrop; _ }, _) -> b, p, i, o
   | Deq (lv, Exp e) ->
