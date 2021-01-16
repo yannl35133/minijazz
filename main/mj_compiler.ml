@@ -26,6 +26,7 @@
 open Errors
 open Cli_options
 open Location
+open Printers
 
 type stop_exec =
   | Parsing
@@ -42,11 +43,12 @@ let comment ?(sep=separateur) s =
 let do_pass pass_name f program printer =
   comment (pass_name ^ " ...\n");
   let r = f program in
-  if !verbose then printer r;
+  if !verbose then
+    Format.printf "%t" (printer r);
   comment ~sep:"*** " (pass_name ^ " done.");
   r
 
-let do_silent_pass pass_name f program = do_pass pass_name f program (fun _ -> ())
+let do_silent_pass pass_name f program = do_pass pass_name f program (fun _ -> CommonAst.dprint_nop)
 
 let pass pass_name enabled f program printer =
   if enabled
@@ -79,8 +81,7 @@ let lexbuf_from_file file_name =
   ic, lexbuf
 
 let dbg_printer p =
-  Printers.ParserAst.print_program (Sizer_to_parser.program p)
-    Format.std_formatter
+  ParserAst.print_program (Sizer_to_parser.program p)
 
 let compile_impl filename =
   (* input and output files *)
@@ -94,33 +95,32 @@ let compile_impl filename =
 
   try
     let _printer_sized prog = Printers.NetlistSizedAst.print_program prog Format.std_formatter in
-    let printer_original =   Printer.print_program Format.std_formatter in
+    let printer_original = (fun p fmt -> Printer.print_program fmt p) in
 
-    let parsed_program = parse lexbuf in
+    let p = do_pass "Parsing"                        parse lexbuf ParserAst.print_program in
 
     if !print_parsing_ast then
-      Printers.ParserAst.print_program parsed_program Format.std_formatter;
+      Printers.ParserAst.print_program p Format.std_formatter;
 
-    let scoped_program = Static_scoping.program parsed_program in
-    let static_typed_program = Static_typer.program scoped_program in
-    let dimensioned_program = Netlist_dimensioning.program static_typed_program in
-    let constrained_program = Netlist_constrain.program dimensioned_program in
-    let sized_program = Netlist_sizer.program constrained_program in
+    let p = do_pass "Scoping"                Static_scoping.program p (fun _ _ -> ()) (* StaticScopedAst.print_program *) in
+    let p = do_pass "Typing static"            Static_typer.program p StaticTypedAst.print_program in
+    let p = do_pass "Dimensioning"     Netlist_dimensioning.program p NetlistDimensionedAst.print_program in
+    let p = do_pass "Constraining"        Netlist_constrain.program p (fun _ _ -> ()) (* NetlistConstrainedAst.print_program *) in
+    let p = do_pass "Sizing"                  Netlist_sizer.program p NetlistSizedAst.print_program in
 
-    let p = sized_program in
-    let p = pass "dedimension"  true Dedimension.program      p dbg_printer in
-    let p = pass "rename_local" true Automaton.rename_program p dbg_printer in
-    let p = pass "deautomaton"  true Automaton.program        p dbg_printer in
-    let p = pass "dereset"      true Reset.program            p dbg_printer in
-    let p = pass "dematch"      true Matcher.program          p dbg_printer in
+    let p = pass "dedimension"  true            Dedimension.program p dbg_printer in
+    let p = pass "rename_local" true       Automaton.rename_program p dbg_printer in
+    let p = pass "deautomaton"  true              Automaton.program p dbg_printer in
+    let p = pass "dereset"      true                  Reset.program p dbg_printer in
+    let p = pass "dematch"      false               Matcher.program p dbg_printer in
 
-    let p = Sized_to_old.program p in
+    let p = do_pass "Translate to MJ original" Sized_to_old.program p printer_original in
 
-    let p = pass "Scoping"     true Scoping.program     p printer_original in
-    let p = pass "Typing"      true Typing.program      p printer_original in
-    let p = pass "Normalize"   true Normalize.program   p printer_original in
-    let p = pass "Callgraph"   true Callgraph.program   p printer_original in
-    let p = pass "Simplify"    true Simplify.program    p printer_original in
+    let p = pass "Scoping"      true                Scoping.program p printer_original in
+    let p = pass "Typing"       true                 Typing.program p printer_original in
+    let p = pass "Normalize"    true              Normalize.program p printer_original in
+    let p = pass "Callgraph"    true              Callgraph.program p printer_original in
+    let p = pass "Simplify"     true               Simplify.program p printer_original in
 
     let p = Mj2net.program p in
 

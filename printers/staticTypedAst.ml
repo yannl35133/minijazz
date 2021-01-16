@@ -78,12 +78,12 @@ let is_lval_bit ti_type =
   | _ -> false
 
 let print_lvalue { lval; lval_type } =
-  dprintf "@[<hv2>%t%t@]"
+  par (dprintf "%t%t"
     (print_lvalue0 lval)
-    (dprint_if (not (is_lval_bit lval_type)) @@
-      dprintf ":%t"
-        (print_global_type (Option.get !!lval_type))
-    )
+    (dprint_opt
+      (fun ti -> dprintf ": %t" @@
+        print_global_type ti)
+      !!lval_type))
 
 let rec print_decl_desc = function
   | Deq (lv, exp) ->

@@ -42,9 +42,12 @@ and print_exp exp =
 let print_tritype_exp = print_tritype_exp print_exp
 
 let print_lvalue { lval; lval_type } =
-  dprintf "@[<hv2>%t:%t@]"
+  dprintf "@[<hv2>%t%t@]"
     (StaticTypedPartialAst.print_lvalue0 print_type lval)
-    (dprint_opt print_type' !!lval_type)
+    (dprint_opt
+      (fun ti -> dprintf ": %t" @@
+        print_type' ti)
+      !!lval_type)
 
 
 let rec print_decl_desc = function
