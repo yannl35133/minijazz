@@ -6,5 +6,5 @@ main (clk) = o where
   automaton
   | St1 -> o = 0 until down_edge then continue St2
   | St2 -> o = 1 until front_edge then continue St1
-  end
+  end;
 end where
