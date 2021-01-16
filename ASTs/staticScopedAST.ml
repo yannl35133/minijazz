@@ -26,6 +26,7 @@ type static_typed_ident = static_type CommonAST.static_typed_ident
 type size = optional_static_exp
 
 type netlist_type = size CommonAST.netlist_type
+type global_type = size CommonAST.global_type
 
 type slice_param = size CommonAST.slice_param
 
@@ -45,12 +46,10 @@ type exp_desc = (* Removed EPar *)
 
 and exp = exp_desc localized
 
-type lvalue_desc =
-  | LValDrop
-  | LValId of ident
-  | LValTuple of lvalue list
-
-and lvalue = lvalue_desc localized
+type lvalue = {
+  lval: lvalue0;
+  lval_type: global_type option localized
+}
 
 type typed_ident = size CommonAST.typed_ident
 

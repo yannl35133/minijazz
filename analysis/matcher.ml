@@ -2,25 +2,23 @@ open CommonAST
 open StaticTypedPartialAST
 open NetlistSizedAST
 
-let fmap f lst = List.flatten @@ List.map f lst
-
 module M = Map.Make(struct
-               type t = lvalue
+  type t = lvalue
 
-               let rec fold lvs1 lvs2 = match lvs1, lvs2 with
-                 | [], [] -> assert false
-                 | [], _ | _, [] -> assert false
-                 | lv1 :: lvs1, lv2 :: lvs2 ->
-                    match compare lv1 lv2 with
-                    | 0 -> fold lvs1 lvs2
-                    | n -> n
+  let rec fold lvs1 lvs2 = match lvs1, lvs2 with
+    | [], [] -> assert false
+    | [], _ | _, [] -> assert false
+    | lv1 :: lvs1, lv2 :: lvs2 ->
+      match compare lv1 lv2 with
+      | 0 -> fold lvs1 lvs2
+      | n -> n
 
-               and compare lv1 lv2 = match lv1.b_desc, lv2.b_desc with
-                 | LValId id1, LValId id2 ->
-                    UIDIdent.compare id1.id_uid id2.id_uid
-                 | LValTuple lvs1, LValTuple lvs2 -> fold lvs1 lvs2
-                 | _ -> assert false
-             end)
+  and compare lv1 lv2 = match lv1.b_desc, lv2.b_desc with
+    | LValId id1, LValId id2 ->
+      UIDIdent.compare id1.id_uid id2.id_uid
+    | LValTuple lvs1, LValTuple lvs2 -> fold lvs1 lvs2
+    | _ -> assert false
+end)
 
 module I = Map.Make(Int)
 
@@ -44,7 +42,7 @@ let rec gen_lv prefix (lv:lvalue) =
           StateExp (state_type (ESVar ident) id.id_loc st)
        | BStateTransition _ -> assert false in
      [Some (lv, lvvar, tritype (LValId ident) id.id_loc lv.b_type, var)]
-  | LValTuple lvs -> fmap (gen_lv prefix) lvs
+  | LValTuple lvs -> List.concat_map (gen_lv prefix) lvs
 
 let mux (e:exp) (e1:tritype_exp) e2 = match e1, e2 with
   | Exp e1, Exp e2 ->
@@ -277,10 +275,6 @@ and decl px env (b, p, i, o) (d:decl) = match d.desc with
 
   | Deq ({ b_desc = LValDrop; _ }, _) -> b, p, i, o
   | Deq (lv, Exp e) ->
-     let _ = match lv.b_desc with
-       | LValDrop -> ()
-       | LValId id -> Format.printf "lv id %s@." id.id_desc
-       | LValTuple _ -> () in
      let p, i = exp (p, i) e in
      d :: b, p, i, lv_to_output o lv
   | Deq (lv, StateExp e) ->
@@ -295,16 +289,12 @@ and decl px env (b, p, i, o) (d:decl) = match d.desc with
      let b1, p, i1, o1 = List.fold_left (decl px env) ([], p, i, o) b1 in
      let b2, p, i2, o2 = List.fold_left (decl px env) ([], p, i, o) b2 in
      [relocalize d.loc @@ Dif (c, b1, b2)], p,
-     union i1 i2, inter o1 o2
+     union i1 i2, inter o1 o2 (* TODO probably incorrect or useless *)
 
   (* can't occur *)
   | Dreset (_, _) -> assert false
   | Dlocaleq (_, _) -> assert false
   | Dautomaton _ -> assert false
-
-let env2list env =
-  M.fold (fun lv (e:exp) lst ->
-      (relocalize e.si_loc @@ Deq (lv, Exp e)) :: lst) env []
 
 (** enable
     must be done __after__ removing state expressions *)
@@ -368,13 +358,13 @@ and en_decl en (d:decl) = match d.desc with
      let tuple = tritype (LValTuple lst_lv) lv.b_loc lv.b_type in
      (relocalize d.loc @@ Deq (tuple, en_exp en e)):: lst_eq
   | Dif (sc, b1, b2) ->
-     let b1 = fmap (en_decl en) b1 in
-     let b2 = fmap (en_decl en) b2 in
+     let b1 = List.concat_map (en_decl en) b1 in
+     let b2 = List.concat_map (en_decl en) b2 in
      [relocalize d.loc @@ Dif (sc, b1, b2)]
   | Dmatch (e, m) ->
      let m_handlers =
        ConstructEnv.map
-         (fun h -> { h with m_body = fmap (en_decl en) h.m_body })
+         (fun h -> { h with m_body = List.concat_map (en_decl en) h.m_body })
          m.m_handlers in
      [relocalize d.loc @@ Dmatch (en_sexp en e, { m with m_handlers })]
 
@@ -387,7 +377,7 @@ let en_node (n:node) =
   let node_inputs = { ti_name = id;
                       ti_type = no_localize @@ BNetlist bit_type;
                       ti_loc = Location.no_location } :: n.node_inputs in
-  let node_body = fmap (en_decl en) n.node_body in
+  let node_body = List.concat_map (en_decl en) n.node_body in
 
   { n with node_inputs; node_body }
 

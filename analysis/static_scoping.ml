@@ -70,11 +70,29 @@ let rec exp_desc (constrs_uids, fun_set, vars_uids, static_env as env) = functio
 
 and exp env e = relocalize_fun (exp_desc env) e
 
-let rec lvalue vars_uids = relocalize_fun @@ function
-  | ParserAST.LValTuple l -> LValTuple (List.map (lvalue vars_uids) l)
+let rec fun_netlist_type static_env: ParserAST.netlist_type -> 'a = function
+  | TProd l -> TProd (List.map (fun_netlist_type static_env) l)
+  | TNDim l -> TNDim (List.map (optional_static_exp static_env) l)
+
+let fun_global_type (enum_env, static_env): ParserAST.global_type -> global_type  = function
+  | BNetlist ti -> BNetlist (fun_netlist_type static_env ti)
+  | BState s -> BState (
+      match StringEnv.find_opt !!s enum_env with
+      | Some s -> s
+      | None -> raise (Errors.Scope_error (!!s, !@s)))
+  | BStateTransition s -> BStateTransition (
+      match StringEnv.find_opt !!s enum_env with
+      | Some s -> s
+      | None -> raise (Errors.Scope_error (!!s, !@s)))
+
+
+let rec lvalue0 vars_uids = relocalize_fun @@ function
+  | ParserAST.LValTuple l -> LValTuple (List.map (lvalue0 vars_uids) l)
   | ParserAST.LValDrop ->    LValDrop
   | ParserAST.LValId id ->   LValId (re_identify id (StringEnv.find !!id vars_uids))
 
+let lvalue vars_uids env ParserAST.{ lval; lval_type } =
+  { lval = lvalue0 vars_uids lval; lval_type = relocalize_fun (Option.map (fun_global_type env)) lval_type }
 
 let merge_uids_sets : ident Env.t -> ident Env.t -> ident Env.t = Env.union (fun _ a b -> if !**a <> !**b then failwith "Non-unique uid" else Some a)
 let merge_string_sets : UIDIdent.t StringEnv.t -> UIDIdent.t StringEnv.t -> UIDIdent.t StringEnv.t = StringEnv.union (fun _ a b -> if a <> b then failwith "Error in add_vars" else Some a)
@@ -128,7 +146,7 @@ let rec same_vars_blocks already_declared (uids_set, minimal_vars, vars_uids) = 
 
 
 and add_vars_decl already_declared vars_envs decl = match !!decl with
-  | ParserAST.Deq (lv, _) ->                add_vars_lvalue3 already_declared vars_envs lv
+  | ParserAST.Deq (lv, _) ->                add_vars_lvalue3 already_declared vars_envs lv.lval
   | ParserAST.Dlocaleq (_, _) ->            vars_envs (* local eqs will be considered in the second pass, they are not global *)
   | ParserAST.Dreset (_, block) ->          add_vars_block already_declared vars_envs block
   | ParserAST.Dif (_, block1, block2) ->    same_vars_blocks already_declared vars_envs [block1; block2]
@@ -141,7 +159,7 @@ and add_vars_decl already_declared vars_envs decl = match !!decl with
 
 and add_vars_block already_declared vars_envs = List.fold_left (fun map decl -> add_vars_decl already_declared map decl) vars_envs
 
-let rec match_handler (constrs_uids, _, _, _, _, _ as env) ParserAST.{ m_state; m_hloc; m_body } =
+let rec match_handler (constrs_uids, _, _, _, _, _, _ as env) ParserAST.{ m_state; m_hloc; m_body } =
   let m_state =
     if StringEnv.mem !!m_state constrs_uids then
       re_identify m_state (StringEnv.find !!m_state constrs_uids)
@@ -152,7 +170,7 @@ let rec match_handler (constrs_uids, _, _, _, _, _ as env) ParserAST.{ m_state; 
   uids_set, { m_state; m_hloc; m_body }
 
 
-and matcher (_, enum_constrs, _, _, _, _ as env) ParserAST.{ m_handlers; m_loc } =
+and matcher (_, _, enum_constrs, _, _, _, _ as env) ParserAST.{ m_handlers; m_loc } =
   let uids_sets, handlers = List.split @@ List.map (match_handler env) m_handlers in
   let one_handler = match handlers with hd :: _ -> hd | [] -> raise (EmptySwitch m_loc) in
   let enum_type = Misc.option_get ~error:(Failure "enum_constrs") @@ ConstructEnv.find_opt !**(one_handler.m_state) enum_constrs in
@@ -165,15 +183,15 @@ and matcher (_, enum_constrs, _, _, _, _ as env) ParserAST.{ m_handlers; m_loc }
   let uids_set = List.fold_left merge_uids_sets Env.empty uids_sets in
   uids_set, { m_state_type = enum_type; m_loc; m_handlers }
 
-and automaton_handler (constrs_uids, enum_constrs, const_uids, fun_set, params_order, vars_uids)
+and automaton_handler (constrs_uids, enum_env, enum_constrs, const_uids, fun_set, params_order, vars_uids)
   ParserAST.{ a_state; a_hloc; a_body; a_weak_transition; a_strong_transition } =
   let uids_set, with_local_vars =
     List.fold_left
-      (fun vars_uids decl -> match !!decl with ParserAST.Dlocaleq (lv, _) -> add_vars_lvalue StringEnv.empty vars_uids lv | _ -> vars_uids)
+      (fun vars_uids decl -> match !!decl with ParserAST.Dlocaleq (lv, _) -> add_vars_lvalue StringEnv.empty vars_uids lv.lval | _ -> vars_uids)
       vars_uids a_body
   in
   let exp_env = constrs_uids, fun_set, with_local_vars, (const_uids, params_order) in
-  let uids_sets, a_body = List.split @@ List.map (decl (constrs_uids, enum_constrs, const_uids, fun_set, params_order, (uids_set, with_local_vars))) a_body in
+  let uids_sets, a_body = List.split @@ List.map (decl (constrs_uids, enum_env, enum_constrs, const_uids, fun_set, params_order, (uids_set, with_local_vars))) a_body in
   let a_state =
     if StringEnv.mem !!a_state constrs_uids then
       re_identify a_state (StringEnv.find !!a_state constrs_uids)
@@ -185,7 +203,7 @@ and automaton_handler (constrs_uids, enum_constrs, const_uids, fun_set, params_o
   let uids_set = List.fold_left merge_uids_sets uids_set uids_sets in
   uids_set, { a_state; a_hloc; a_body; a_weak_transition; a_strong_transition }
 
-and automaton (_, enum_constrs, _, _, _, _ as env) ParserAST.{ a_handlers; a_loc } =
+and automaton (_, _, enum_constrs, _, _, _, _ as env) ParserAST.{ a_handlers; a_loc } =
   let uids_sets, handlers = List.split @@ List.map (automaton_handler env) a_handlers in
   let fst_handler = match handlers with hd :: _ -> hd | [] -> raise (EmptySwitch a_loc) in
   let enum_type = Misc.option_get ~error:(Failure "enum_constrs") @@ ConstructEnv.find_opt !**(fst_handler.a_state) enum_constrs in
@@ -198,12 +216,12 @@ and automaton (_, enum_constrs, _, _, _, _ as env) ParserAST.{ a_handlers; a_loc
   let uids_set = List.fold_left merge_uids_sets Env.empty uids_sets in
   uids_set, { a_state_type = enum_type; a_fst_state = fst_handler.a_state; a_loc; a_handlers }
 
-and decl (constrs_uids, _, const_uids, fun_set, params_order, (uids_set, vars_uids) as env) : ParserAST.decl -> ident Env.t * decl =
+and decl (constrs_uids, enum_env, _, const_uids, fun_set, params_order, (uids_set, vars_uids) as env) : ParserAST.decl -> ident Env.t * decl =
   let static_env = const_uids, params_order in
   let exp_env = constrs_uids, fun_set, vars_uids, static_env in
   (fun f a -> let (b, c) = f !!a in b, relocalize !@a c) @@ function
-  | ParserAST.Deq (lv, e) ->                uids_set, Deq (lvalue vars_uids lv, exp exp_env e)
-  | ParserAST.Dlocaleq (lv, e) ->           uids_set, Dlocaleq (lvalue vars_uids lv, exp exp_env e)
+  | ParserAST.Deq (lv, e) ->                uids_set, Deq (lvalue vars_uids (enum_env, static_env) lv, exp exp_env e)
+  | ParserAST.Dlocaleq (lv, e) ->           uids_set, Dlocaleq (lvalue vars_uids (enum_env, static_env) lv, exp exp_env e)
   | ParserAST.Dreset (condition, eqs) ->
       let uids_set, eqs = block env eqs in
       uids_set, Dreset (exp exp_env condition, eqs)
@@ -218,16 +236,16 @@ and decl (constrs_uids, _, const_uids, fun_set, params_order, (uids_set, vars_ui
       let uids_set, auto = automaton env auto in
       uids_set, Dautomaton auto
 
-and block (constrs_uids, enum_constrs, const_uids, fun_set, params_order, vars_uids) lst =
+and block (constrs_uids, enum_env, enum_constrs, const_uids, fun_set, params_order, vars_uids) lst =
   let uids_set, with_local_vars =
     List.fold_left
-      (fun vars_uids decl -> match !!decl with ParserAST.Dlocaleq (lv, _) -> add_vars_lvalue StringEnv.empty vars_uids lv | _ -> vars_uids)
+      (fun vars_uids decl -> match !!decl with ParserAST.Dlocaleq (lv, _) -> add_vars_lvalue StringEnv.empty vars_uids lv.lval | _ -> vars_uids)
       vars_uids lst
   in
-  let uids_sets, b = List.split @@ List.map (decl (constrs_uids, enum_constrs, const_uids, fun_set, params_order, (uids_set, with_local_vars))) lst in
+  let uids_sets, b = List.split @@ List.map (decl (constrs_uids, enum_env, enum_constrs, const_uids, fun_set, params_order, (uids_set, with_local_vars))) lst in
   List.fold_left merge_uids_sets uids_set uids_sets, b
 
-let body (constrs_uids, enum_constrs, const_uids, fun_set, params_order, input_vars, output_vars) lst =
+let body (constrs_uids, enum_env, enum_constrs, const_uids, fun_set, params_order, input_vars, output_vars) lst =
   let merge_idents_uid key a b =
     match a, b with
     | Some _, Some _ -> raise (InputOutput (key, !@lst)) (* If we could unite them beforehand, this wouldn't be excluded *)
@@ -253,25 +271,10 @@ let body (constrs_uids, enum_constrs, const_uids, fun_set, params_order, input_v
     let pb, _ = StringEnv.choose @@ StringEnv.filter (fun el _ -> not @@ StringSet.mem el minimal_vars_uids) output_vars in
     raise (MissingVariable (pb, !@lst))
   with Not_found -> ();
-  block (constrs_uids, enum_constrs, const_uids, fun_set, params_order, (uids_set, vars_uids)) !!lst
+  block (constrs_uids, enum_env, enum_constrs, const_uids, fun_set, params_order, (uids_set, vars_uids)) !!lst
 
-let starput (enum_env, static_env) ParserAST.{ ti_name; ti_type; ti_loc } =
-  let rec fun_netlist_type: ParserAST.netlist_type -> 'a = function
-    | TProd l -> TProd (List.map fun_netlist_type l)
-    | TNDim l -> TNDim (List.map (optional_static_exp static_env) l)
-  in
-  let fun_global_type: ParserAST.global_type -> size global_type  = function
-    | BNetlist ti -> BNetlist (fun_netlist_type ti)
-    | BState s -> BState (
-        match StringEnv.find_opt !!s enum_env with
-        | Some s -> s
-        | None -> raise (Errors.Scope_error (!!s, !@s)))
-    | BStateTransition s -> BStateTransition (
-        match StringEnv.find_opt !!s enum_env with
-        | Some s -> s
-        | None -> raise (Errors.Scope_error (!!s, !@s)))
-  in
-  { ti_name = re_identify ti_name (UIDIdent.get ()); ti_loc; ti_type = relocalize_fun fun_global_type ti_type }
+let starput env ParserAST.{ ti_name; ti_type; ti_loc } =
+  { ti_name = re_identify ti_name (UIDIdent.get ()); ti_loc; ti_type = relocalize_fun (fun_global_type env) ti_type }
 
 
 let node (enum_env, enum_constrs, constrs_uids, consts_uids, fun_set)
@@ -282,7 +285,7 @@ let node (enum_env, enum_constrs, constrs_uids, consts_uids, fun_set)
   let node_inputs =  List.map (starput (enum_env, (consts_uids, params_order))) node_inputs in
   let node_outputs = List.map (starput (enum_env, (consts_uids, params_order))) node_outputs in
 
-  let node_variables, node_body = body (constrs_uids, enum_constrs, consts_uids, fun_set, params_order, node_inputs, node_outputs) node_body in
+  let node_variables, node_body = body (constrs_uids, enum_env, enum_constrs, consts_uids, fun_set, params_order, node_inputs, node_outputs) node_body in
   {
     node_inline;
     node_name;

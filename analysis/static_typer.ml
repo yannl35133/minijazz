@@ -169,6 +169,17 @@ let rec exp ((fun_env: fun_env), static_env as env) =
       let args = List.map (exp env) args in
       EMem (mem_kind, (addr_size, word_size, input_file), args)
 
+let rec fun_netlist_type static_env: StaticScopedAST.netlist_type -> 'a = function
+  | TProd l -> TProd (List.map (fun_netlist_type static_env) l)
+  | TNDim l -> TNDim (List.map (optional_static_int_exp static_env) l)
+
+let fun_global_type static_env: StaticScopedAST.global_type -> global_type  = function
+  | BNetlist ti -> BNetlist (fun_netlist_type static_env ti)
+  | BState s -> BState s
+  | BStateTransition s -> BStateTransition s
+
+let lvalue static_env StaticScopedAST.{ lval; lval_type } =
+  { lval; lval_type = relocalize_fun (Option.map (fun_global_type static_env)) lval_type }
 
 let rec match_handler env ({ m_body; _ } as handler) =
   { handler with m_body = List.map (decl env) m_body }
@@ -187,8 +198,8 @@ and automaton env ({ a_handlers; _ } as auto) =
   { auto with a_handlers = ConstructEnv.map (automaton_handler env) a_handlers }
 
 and decl (_, static_env as exp_env) = relocalize_fun @@ function
-  | StaticScopedAST.Deq (lv, e) ->          Deq (lv, exp exp_env e)
-  | StaticScopedAST.Dlocaleq (lv, e) ->     Dlocaleq (lv, exp exp_env e)
+  | StaticScopedAST.Deq (lv, e) ->          Deq (lvalue static_env lv, exp exp_env e)
+  | StaticScopedAST.Dlocaleq (lv, e) ->     Dlocaleq (lvalue static_env lv, exp exp_env e)
   | StaticScopedAST.Dreset (c, eqs) ->      Dreset (exp exp_env c, List.map (decl exp_env) eqs)
   | StaticScopedAST.Dif (c, b1, b2) ->      Dif (static_bool_exp_full static_env c, List.map (decl exp_env) b1, List.map (decl exp_env) b2)
   | StaticScopedAST.Dautomaton (auto) ->    Dautomaton (automaton exp_env auto)

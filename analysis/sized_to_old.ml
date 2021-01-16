@@ -139,4 +139,3 @@ let program ({ p_enums; p_consts; p_consts_order; p_nodes }: NetlistSizedAST.pro
   let p_nodes = List.map snd @@ List.of_seq @@ FunEnv.to_seq @@ FunEnv.map node p_nodes in
   let p_consts = List.map (fun uid -> const @@ Env.find uid p_consts) p_consts_order in
   { p_nodes; p_consts }
-

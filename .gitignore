@@ -7,3 +7,4 @@ _build/
 **.pdf
 *.net
 TODO
+log.txt

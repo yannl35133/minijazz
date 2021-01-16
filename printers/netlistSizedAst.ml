@@ -36,7 +36,7 @@ and print_exp exp =
 
 let print_tritype_exp = print_tritype_exp print_exp
 
-let print_lvalue = print_lvalue print_type
+let print_lvalue = print_lvalue0 print_type
 
 let rec print_decl_desc = function
   | Deq (lv, exp) ->
