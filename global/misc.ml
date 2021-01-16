@@ -142,7 +142,8 @@ let bool_list_of_int (nbits, v) =
 
 let exp a n =
   let rec aux a acc = function
-    | 0 -> a
+    | 0 -> acc
+    | 1 -> a * acc
     | n when n mod 2 = 1 ->
         aux (a * a) (a * acc) (n lsr 1)
     | n ->

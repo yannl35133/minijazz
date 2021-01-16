@@ -32,7 +32,7 @@ let rec print_int_exp_desc = function
   | SIParam i  -> dprintf "%s#%i" !*!i !**i
   | SIConst id -> print_ident id
   | SIUnOp (sunop, se) ->
-      dprintf "%t %t"
+      dprintf "%t%t"
         (print_int_unop sunop)
         (print_int_exp se)
   | SIBinOp (sop, se1, se2) ->

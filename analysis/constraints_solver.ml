@@ -90,7 +90,7 @@ and print_int_exp_desc = function
         print_unknown d nc
   | UIConst id -> print_ident id
   | UIUnOp (sunop, se) ->
-      par @@ dprintf "%t %t"
+      dprintf "%t%t"
         (print_int_unop sunop)
         (print_int_exp se)
   | UIBinOp (sop, se1, se2) ->
@@ -615,6 +615,9 @@ let balance env (a, b) = match !!a, !!b with
       relocalize !@a (UIBinOp (SMinus, a, relocalize !@a @@ UISum l')), u
   | _ -> a, b
 
+let single_treatment a =
+  sums @@ remove_minus @@ evaluate_consts IntEnv.empty a
+
 let pre_treatment env guard (a, b) =
   let s = extract_guard guard in
   let one_treatment e = sums @@ remove_minus @@ evaluate_consts s e in
@@ -629,26 +632,35 @@ let pre_treatment env guard (a, b) =
 
 
 
-let analyze_result ue1 ue2 = function
+let analyze_result ue1 ue2 se1 se2 = function
   | Yes -> ()
   | Maybe ->
-      Format.eprintf "%a(unfinished) warning: could not unite size@ %t with expected size@ %t, located here:@ %a@."
+      Format.eprintf
+        "%a@[<hv>Size warning: could not unite size @;<0 2>%t@;<0 -2>@]@ @[<hv>(simpl.@;<1 2>%t@;<1 -2>)@]@ \
+        @[<hv>with expected size @;<0 2>%t@;<0 -2>@]@ @[<hv>(simpl.@;<1 2>%t@;<1 -2>)@]@ located here:@ %a@."
         Location.print_location !@ue2
         (print_int_exp ue2)
+        (print_int_exp se2)
         (print_int_exp ue1)
+        (print_int_exp se1)
         Location.print_location !@ue1
   | No ->
-      Format.eprintf "%a(unfinished) error: could not unite size@ %t with expected size@ %t, located here:@ %a@."
-          Location.print_location !@ue2
-          (print_int_exp ue2)
-          (print_int_exp ue1)
-          Location.print_location !@ue1;
-          raise Errors.ErrorDetected
+      Format.eprintf
+        "%a@[<hv>Size error: could not unite size @;<0 2>%t@;<0 -2>@]@ @[<hv>(simpl.@;<1 2>%t@;<1 -2>)@]@ \
+        @[<hv>with expected size @;<0 2>%t@;<0 -2>@]@ @[<hv>(simpl.@;<1 2>%t@;<1 -2>)@]@ located here:@ %a@."
+        Location.print_location !@ue2
+        (print_int_exp ue2)
+        (print_int_exp se2)
+        (print_int_exp ue1)
+        (print_int_exp se1)
+        Location.print_location !@ue1;
+        raise Errors.ErrorDetected
 
 
 
 
 let solve_constraint_one env guard (a', b') =
+  (* Format.eprintf "%t@." (print_guard !!guard); *)
   (* Format.eprintf "@[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b'); *)
   let a, b = pre_treatment env (SBool true) (a', b') in
   (* Format.eprintf "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b); *)
@@ -658,16 +670,16 @@ let solve_constraint_one env guard (a', b') =
   | UIUnknown (_, Uid uid'), UIUnknown (d, Uid uid) when not (mem uid env) ->
       add uid (Link (d, uid')) env, true
   | UIUnknown (_, Uid uid), _ when not (mem uid env) && no_free_variable_int env b ->
-      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ evaluate_consts IntEnv.empty @@ substitute_env_int env @@ b))) env, true
+      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ single_treatment @@ substitute_env_int env @@ b))) env, true
   | _, UIUnknown (_, Uid uid) when not (mem uid env) && no_free_variable_int env a ->
-      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ evaluate_consts IntEnv.empty @@ substitute_env_int env @@ a))) env, true
+      add uid (Direct (relocalize !@b @@ SIntExp (from_uiexp @@ (!!) @@ single_treatment@@ substitute_env_int env @@ a))) env, true
   | _ when no_free_variable_int env a' && no_free_variable_int env b' ->
       let se1 = substitute_env_int env a' in
       let se2 = substitute_env_int env b' in
       (* Format.eprintf "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2); *)
       let (se1', se2') = pre_treatment env !!guard (se1, se2) in
       (* Format.eprintf "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2'); *)
-      analyze_result a' b' @@ maybe_equal_int (!!se1', !!se2');
+      analyze_result a' b' se1' se2' @@ maybe_equal_int (!!se1', !!se2');
       env, true
   | _ ->
       env, false
@@ -703,8 +715,11 @@ let solve_constraints (l: NetlistConstrainedAST.constraints) =
       env
     end
   in
-  (* Format.eprintf "@.All constraints:@.%t@.@." (print_constraints l); *)
-  let env = repeat env l in
+  let (l_unguarded, l_guarded) = List.partition (fun (g1, _) -> match !!g1 with | SBool true -> true | _ -> false) l in
+  (* Format.eprintf "@.All constraints:@.%t@.@." (print_constraints l_unguarded); *)
+  let env = repeat env l_unguarded in
+  (* Format.eprintf "@.All constraints:@.%t@.@." (print_constraints l_guarded); *)
+  let env = repeat env l_guarded in
   (* Format.eprintf "Found equalities@."; *)
   (* UIDEnv.iter (fun uid union -> Format.eprintf "%t@." (print_env uid union)) env; *)
   (* Format.eprintf "@."; *)
