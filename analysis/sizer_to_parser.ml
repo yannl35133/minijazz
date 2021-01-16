@@ -131,11 +131,16 @@ let rec cvt_lvalue_desc lv : ParserAST.lvalue_desc =
   match lv with
   | LValDrop -> LValDrop
   | LValId id -> LValId (cvt_ident id)
-  | LValTuple lvs -> LValTuple (List.map cvt_lvalue lvs)
+  | LValTuple lvs -> LValTuple (List.map cvt_lvalue0 lvs)
 
-and cvt_lvalue (lv:lvalue) : ParserAST.lvalue =
+and cvt_lvalue0 (lv:lvalue) : ParserAST.lvalue0 =
   relocalize lv.b_loc @@ cvt_lvalue_desc lv.b_desc
 
+let cvt_lvalue (lv:lvalue) : ParserAST.lvalue =
+  {
+    lval = relocalize !?@lv @@ cvt_lvalue_desc !?!lv;
+    lval_type = relocalize !?@lv (Some (cvt_global_type !??lv))
+  }
 (* convert expressions *)
 
 let rec cvt_exp_desc (e:exp_desc) : ParserAST.exp_desc =

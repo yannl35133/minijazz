@@ -127,21 +127,29 @@ let rec print_lvalue_desc lval_desc =
   match lval_desc with
   | LValDrop    -> dprintf "_"
   | LValId id   -> print_ident id
-  | LValTuple l -> print_list par comma_sep print_lvalue l
+  | LValTuple l -> print_list par comma_sep print_lvalue0 l
 
-and print_lvalue lval = print_lvalue_desc lval.desc
+and print_lvalue0 lval = print_lvalue_desc lval.desc
 
-
-let is_bit ti_type =
-  match !!ti_type with
+let is_bit = function
   | BNetlist TNDim [] -> true
   | _ -> false
+
+let print_lvalue { lval; lval_type } =
+  dprintf "@[<hv2>%t%t@]"
+    (print_lvalue0 lval)
+    (dprint_opt
+      (fun ti -> dprint_if (not (is_bit ti)) @@
+      dprintf ":%t"
+        (print_global_type ti))
+        !!lval_type
+    )
 
 
 let print_typed_ident { ti_name; ti_type; _ } =
   dprintf "@[<hv2>%t%t@]"
     (print_ident ti_name)
-    (dprint_if (not (is_bit ti_type)) @@
+    (dprint_if (not (is_bit !!ti_type)) @@
       dprintf ":%t"
         (print_global_type !!ti_type)
     )

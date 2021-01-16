@@ -26,6 +26,9 @@ let print_list_if_nonempty del sep printer l =
   | _  -> print_list del sep printer l
 
 let dprint_if b printer = if b then printer else dprint_nop
+let dprint_opt printer = function
+  | Some thing -> printer thing
+  | None -> dprint_nop
 let dprint_newline = dprintf "@ "
 
 

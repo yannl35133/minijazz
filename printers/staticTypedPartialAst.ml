@@ -125,12 +125,15 @@ let rec print_lvalue_desc print_netlist_type lval_desc =
   match lval_desc with
   | LValDrop    -> dprintf "_"
   | LValId id   -> print_ident id
-  | LValTuple l -> print_list par comma_sep (print_lvalue print_netlist_type) l
+  | LValTuple l -> print_list par comma_sep (print_lvalue0 print_netlist_type) l
 
-and print_lvalue print_netlist_type lval =
+and print_lvalue0 print_netlist_type lval =
   par (dprintf "%t: %t"
     (print_lvalue_desc print_netlist_type !?!lval)
     (print_netlist_type !??lval))
+
+let print_lvalue print_netlist_type { lval; _ } =
+  print_lvalue0 print_netlist_type lval
 
 
 let print_const = print_const print_bitype_exp

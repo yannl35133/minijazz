@@ -11,6 +11,7 @@ let print_slice_param = print_slice_param print_size
 (* Netlist expressions *)
 
 let print_netlist_type = print_netlist_type print_size
+let print_global_type = print_bitype print_netlist_type
 
 
 let rec print_exp_desc = function
@@ -63,13 +64,26 @@ and print_exp exp = print_exp_desc exp.desc
 
 let print_typed_ident = print_typed_ident print_size
 
-let rec print_lvalue_desc (lval_desc: StaticScopedAST.lvalue_desc) =
-  match lval_desc with
+let rec print_lvalue_desc = function
   | LValDrop    -> dprintf "_"
   | LValId id   -> print_ident id
-  | LValTuple l -> print_list par comma_sep print_lvalue l
+  | LValTuple l -> print_list par comma_sep print_lvalue0 l
 
-and print_lvalue lval = print_lvalue_desc !!lval
+and print_lvalue0 lval = print_lvalue_desc !!lval
+
+let is_lval_bit ti_type =
+  match !!ti_type with
+  | None -> true
+  | Some BNetlist TNDim [] -> true
+  | _ -> false
+
+let print_lvalue { lval; lval_type } =
+  dprintf "@[<hv2>%t%t@]"
+    (print_lvalue0 lval)
+    (dprint_if (not (is_lval_bit lval_type)) @@
+      dprintf ":%t"
+        (print_global_type (Option.get !!lval_type))
+    )
 
 let rec print_decl_desc = function
   | Deq (lv, exp) ->

@@ -15,6 +15,7 @@ let rec print_dim = function
       print_list par star_sep print_dim l
 
 let print_type = print_bitype print_dim
+let print_type' = print_bitype (print_netlist_type print_size)
 
 
 let rec print_exp_desc = function
@@ -40,7 +41,11 @@ and print_exp exp =
 
 let print_tritype_exp = print_tritype_exp print_exp
 
-let print_lvalue = print_lvalue print_type
+let print_lvalue { lval; lval_type } =
+  dprintf "@[<hv2>%t:%t@]"
+    (StaticTypedPartialAst.print_lvalue0 print_type lval)
+    (dprint_opt print_type' !!lval_type)
+
 
 let rec print_decl_desc = function
   | Deq (lv, exp) ->

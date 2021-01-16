@@ -213,11 +213,17 @@ let exp_desc :=
       word_size=opt_static_exp; input_file=input_file?; ">"; a=tuple(exp);    { EMem  (ro, (addr_size, word_size, input_file), a) }
 
 
-let lvalue == localize(lvalue_desc)
+let lvalue0 == localize(lvalue_desc)
 let lvalue_desc :=
   | WILDCARD;         { LValDrop }
   | ~=ident;          < LValId >
-  | ~=tuple(lvalue);  < LValTuple >
+  | ~=tuple(lvalue0); < LValTuple >
+
+let lvalue :=
+  | lval=lvalue0; { { lval; lval_type = localize $sloc None } }
+  | lval=lvalue0; ":"; type_ident=sntuple(opt_static_exp, "[", "]")+;
+    { { lval; lval_type = localize $loc(type_ident) (Some (BNetlist (TNDim (List.flatten type_ident)))) } }
+
 
 let typed_ident :=
   | ti_name=ident; { { ti_name; ti_loc = Loc $sloc; ti_type = localize $sloc (BNetlist (TNDim [])) } }

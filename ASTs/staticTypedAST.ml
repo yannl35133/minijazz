@@ -7,6 +7,7 @@ type size = optional_static_int_exp
 
 (* Netlist expressions *)
 type netlist_type = size CommonAST.netlist_type
+type global_type = size CommonAST.global_type
 
 type slice_param = size CommonAST.slice_param
 
@@ -26,13 +27,18 @@ type exp_desc =
 
 and exp = exp_desc localized
 
+type lvalue = {
+  lval: CommonAST.lvalue0;
+  lval_type: global_type option localized
+}
+
 type typed_ident = size CommonAST.typed_ident
 
 type automaton = ((exp * exp) list, decl) CommonAST.automaton
 
 and decl_desc =
-  | Deq        of StaticScopedAST.lvalue * exp (* p = e *)
-  | Dlocaleq   of StaticScopedAST.lvalue * exp (* local p = e *)
+  | Deq        of lvalue * exp (* p = e *)
+  | Dlocaleq   of lvalue * exp (* local p = e *)
   | Dreset     of exp * decl list (* reset eq every e *)
   | Dautomaton of automaton
   | Dmatch     of exp * decl matcher

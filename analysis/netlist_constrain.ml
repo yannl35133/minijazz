@@ -7,7 +7,7 @@ let rec other_context fname loc ctxt = function
   | TProd l -> TProd (List.map (other_context fname loc ctxt) l)
   | TNDim l -> TNDim (List.map (fun p -> PSOtherContext (fname, loc, ctxt, p)) l)
 
-let rec eq_to_constraints c1 c2 = match c1, c2 with
+let rec eq_to_constraints c1 c2 : constraints = match c1, c2 with
   | TProd l1, TProd l2 -> List.flatten @@ List.rev_map2 eq_to_constraints l1 l2
   | TNDim l1, TNDim l2 -> List.combine (List.init (List.length l1) (fun _ -> no_localize (SBool true))) @@ List.combine l1 l2
   | TNDim _,  TProd _
@@ -175,20 +175,73 @@ let global_to_blank_presize name = function
   | BState s -> BState s
   | BStateTransition s -> BStateTransition s
 
-let rec lvalue var_env lval = match !?!lval with
+let rec lvalue0 var_env lval = match !?!lval with
   | LValDrop ->
       tritype LValDrop !?@lval (global_to_blank_presize (identify !?@lval "_" (UIDIdent.get ())) !??lval)
   | LValId id ->
       let size = Misc.option_get ~error:(Failure "Undefined variable in presizing") @@ Env.find_opt !**id var_env in
       tritype (LValId id) !?@lval size
   | LValTuple l ->
-      let size_l = List.map (lvalue var_env) l in
+      let size_l = List.map (lvalue0 var_env) l in
       let extract dim = match !??dim with
       | BNetlist n -> n
       | _ -> failwith "Not implemented mixed state / netlist tuples"
       in
       let size = List.map extract size_l in
       tritype (LValTuple size_l) !?@lval (BNetlist (TProd size))
+
+let rec size_to_presize name = function
+  | TNDim l -> TNDim (List.mapi (fun i { desc; loc } ->
+      match desc with
+      | SUnknown uid -> PSVar (name, i, uid)
+      | SExp e -> PSConst (relocalize loc e)) l)
+  | TProd l -> TProd (List.map (size_to_presize name) l)
+and global_size_to_presize name = function
+  | BNetlist ti -> BNetlist (size_to_presize name ti)
+  | BState s -> BState s
+  | BStateTransition s -> BStateTransition s
+
+let rec assert_dim_to_presize loc = function
+  | TNDim l, NDim n when List.length l = n -> ()
+  | TProd l, NProd l' -> List.iter (assert_dim_to_presize loc) (List.combine l l')
+  | TNDim l, NDim n ->   raise (Errors.WrongDimension (List.length l, n, loc))
+  | TProd _, NDim _ ->   raise (Errors.WrongType ("variable", "tuple", loc))
+  | TNDim _, NProd _ ->  raise (Errors.WrongType ("tuple", "variable", loc))
+
+let assert_global_to_presize loc = function
+  | BNetlist ti1, BNetlist ti2 -> assert_dim_to_presize loc (ti1, ti2)
+  | BState s1, BState s2 when s1 = s2 -> ()
+  | BStateTransition s1, BStateTransition s2 when s1 = s2 -> ()
+  | _ -> failwith "No state type hints implemented"
+
+let rec assert_lvalue0 var_env constraints ti lval =
+  assert_global_to_presize !?@lval (ti, !??lval);
+  match !?!lval with
+  | LValDrop ->
+      let ps = global_size_to_presize (identify !?@lval "_" (UIDIdent.get ())) ti in
+      constraints, tritype LValDrop !?@lval ps
+  | LValId id ->
+      let ps = global_size_to_presize id ti in
+      let size = Misc.option_get ~error:(Failure "Undefined variable in presizing") @@ Env.find_opt !**id var_env in
+      let new_constraints = global_eq_to_constraints ps size in
+      new_constraints @ constraints, tritype (LValId id) !?@lval ps
+  | LValTuple l ->
+      let l' = match ti with BNetlist TProd l -> List.map (fun t -> BNetlist t) l | _ -> assert false in
+      let constraints, size_l = Misc.fold_left_map2 (assert_lvalue0 var_env) constraints l' l in
+      let extract dim = match !??dim with
+      | BNetlist n -> n
+      | _ -> failwith "Not implemented mixed state / netlist tuples"
+      in
+      let size = List.map extract size_l in
+      constraints, tritype (LValTuple size_l) !?@lval (BNetlist (TProd size))
+
+let lvalue var_env constraints { lval; lval_type } =
+  let constraints, lval' = match !!lval_type with
+  | Some ti -> assert_lvalue0 var_env constraints ti lval
+  | None -> constraints, lvalue0 var_env lval
+  in
+  constraints, { lval = lval'; lval_loc = !@lval_type }
+
 
 let add_guard g c = match !!g with
   | SBool true -> c
@@ -197,13 +250,13 @@ let add_guard g c = match !!g with
 let rec decl (_, var_env as env) constraints (d: NetlistDimensionedAST.decl) = match !!d with
   | Deq (lval, e) ->
       let constraints, e' = tritype_exp env constraints e in
-      let lval' = lvalue var_env lval in
-      let new_constraints = global_eq_to_constraints !??lval' (tritype_of_exp e') in
+      let constraints, lval' = lvalue var_env constraints lval in
+      let new_constraints = global_eq_to_constraints !??(lval'.lval) (tritype_of_exp e') in
       new_constraints @ constraints, relocalize !@d @@ Deq (lval', e')
   | Dlocaleq (lval, e) ->
       let constraints, e' = tritype_exp env constraints e in
-      let lval' = lvalue var_env lval in
-      let new_constraints = global_eq_to_constraints !??lval' (tritype_of_exp e') in
+      let constraints, lval' = lvalue var_env constraints lval in
+      let new_constraints = global_eq_to_constraints !??(lval'.lval) (tritype_of_exp e') in
       new_constraints @ constraints, relocalize !@d @@ Dlocaleq (lval', e')
   | Dif (c, b1, b2) ->
       let new_constraints, b1' = block env [] b1 in

@@ -151,6 +151,13 @@ let tritype desc loc ty =
 
 (* Netlist expressions *)
 
+type lvalue_desc =
+  | LValDrop
+  | LValId of ident
+  | LValTuple of lvalue0 list
+
+and lvalue0 = lvalue_desc localized
+
 type value =
   | VNDim of value list
   | VBit of bool

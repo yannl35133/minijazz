@@ -86,6 +86,11 @@ type 'exp tritype_exp =
 type 'netlist_type lvalue_desc =
   | LValDrop
   | LValId of ident
-  | LValTuple of 'netlist_type lvalue list
+  | LValTuple of 'netlist_type lvalue0 list
 
-and 'netlist_type lvalue = ('netlist_type lvalue_desc, 'netlist_type) trityped
+and 'netlist_type lvalue0 = ('netlist_type lvalue_desc, 'netlist_type) trityped
+
+type 'netlist_type lvalue = {
+  lval: 'netlist_type lvalue0;
+  lval_loc: Location.location
+}

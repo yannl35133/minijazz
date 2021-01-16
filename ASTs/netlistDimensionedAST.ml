@@ -12,6 +12,7 @@ type netlist_dimension =
   | NDim of int
 
 type global_type = netlist_dimension CommonAST.tritype
+type global_type' = size CommonAST.global_type
 
 type 'a global_typed = ('a, netlist_dimension) CommonAST.trityped
 
@@ -42,7 +43,10 @@ and exp = exp_desc dimensioned
 
 type tritype_exp = exp StaticTypedPartialAST.tritype_exp
 
-type lvalue = netlist_dimension StaticTypedPartialAST.lvalue
+type lvalue = {
+  lval: netlist_dimension lvalue0;
+  lval_type: global_type' option localized
+}
 
 type typed_ident = size CommonAST.typed_ident
 

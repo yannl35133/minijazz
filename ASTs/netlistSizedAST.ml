@@ -42,7 +42,7 @@ and exp = exp_desc sized
 
 type tritype_exp = exp StaticTypedPartialAST.tritype_exp
 
-type lvalue = netlist_size StaticTypedPartialAST.lvalue
+type lvalue = netlist_size StaticTypedPartialAST.lvalue0
 
 type typed_ident = size CommonAST.typed_ident
 

@@ -114,9 +114,9 @@ let rec lvalue var_env =
 let rec decl var_env : NetlistConstrainedAST.decl -> decl =
   (relocalize_fun: 'a -> NetlistConstrainedAST.decl -> decl) @@ function
   | Deq (lval, e) ->
-      Deq (lvalue var_env lval, tritype_exp var_env e)
+      Deq (lvalue var_env lval.lval, tritype_exp var_env e)
   | Dlocaleq (lval, e) ->
-      Dlocaleq (lvalue var_env lval, tritype_exp var_env e)
+      Dlocaleq (lvalue var_env lval.lval, tritype_exp var_env e)
   | Dif (c, b1, b2) ->
       Dif (c, block var_env b1, block var_env b2)
   | Dreset (e, b) ->

@@ -102,9 +102,14 @@ and exp = exp_desc localized
 type lvalue_desc =
   | LValDrop
   | LValId of ident
-  | LValTuple of lvalue list
+  | LValTuple of lvalue0 list
 
-and lvalue = lvalue_desc localized
+and lvalue0 = lvalue_desc localized
+
+type lvalue = {
+  lval: lvalue0;
+  lval_type: global_type option localized
+}
 
 type typed_ident = {
   ti_name: ident;

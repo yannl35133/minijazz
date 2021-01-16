@@ -33,6 +33,7 @@ exception ImpossibleProd of (Location.location * prod_context * fun_context opti
 exception ImpossibleDimension of (netlist_dimension * Location.location)
 exception WrongDimension of (netlist_dimension * netlist_dimension * Location.location * error_context)
 exception WrongType of (option_tritype * option_tritype * Location.location * error_context)
+exception WrongIndication of (option_tritype * option_tritype * Location.location * error_context)
 (* exception UnexpectedState of state_type * Location.location *)
 (* exception UnexpectedStateTransition of state_type * Location.location *)
 exception UndefinedReturnVariables of (string * string * Location.location)
@@ -49,6 +50,14 @@ let print_ot = function
   | OTStateTransition Some s -> Format.dprintf "%t transition" @@ Printers.CommonAst.print_enum_type s
   | OTStateTransition None -> Format.dprintf "state transition"
 
+let rec dimension_of_netlist_type = function
+  | TProd l -> (NProd (List.map dimension_of_netlist_type l))
+  | TNDim l -> (NDim (List.length l))
+
+let global_of_netlist_type = function
+  | BNetlist ti -> BNetlist (dimension_of_netlist_type ti)
+  | BState s -> BState s
+  | BStateTransition s -> BStateTransition s
 
 let new_unknown_parameter () =
   SOIntExp (SUnknown (UIDUnknownStatic.get ()))
@@ -331,7 +340,7 @@ and assert_exp fun_env dim dimensioned e =
   | EMem _ ->
      raise (CannotDimensionYet id) (* The dimension of the result does not give further info to dimension the arguments *)
 
-let rec lvalue dimensioned (lval: StaticScopedAST.lvalue) = match !!lval with
+let rec lvalue0 dimensioned (lval: CommonAST.lvalue0) = match !!lval with
   | LValDrop -> raise (CannotDimensionYet None)
   | LValId id -> begin
       try
@@ -341,7 +350,7 @@ let rec lvalue dimensioned (lval: StaticScopedAST.lvalue) = match !!lval with
       with Not_found -> failwith "Variable not properly added"
       end
   | LValTuple l ->
-      let dim_l = List.map (lvalue dimensioned) l in
+      let dim_l = List.map (lvalue0 dimensioned) l in
       let extract dim = match !??dim with
       | BNetlist n -> n
       | _ -> failwith "Not implemented mixed state / netlist tuples"
@@ -349,7 +358,7 @@ let rec lvalue dimensioned (lval: StaticScopedAST.lvalue) = match !!lval with
       let dim = List.map extract dim_l in
       tritype (LValTuple dim_l) !@lval (BNetlist (NProd dim))
 
-let rec assert_lvalue dim dimensioned (lval: StaticScopedAST.lvalue) = match !!lval with
+let rec assert_lvalue0 dim dimensioned (lval: CommonAST.lvalue0) = match !!lval with
   | LValDrop -> dimensioned, tritype LValDrop !@lval dim
   | LValId id -> begin
       try
@@ -368,7 +377,7 @@ let rec assert_lvalue dim dimensioned (lval: StaticScopedAST.lvalue) = match !!l
         | BNetlist NDim _ -> raise @@ (* Errors. *)ImpossibleProd (!@lval, ProdRev, None)
         | _ -> failwith "Not implemented mixed state / netlist tuples"
       in
-      let dimensioned, dimed_l = Misc.fold_left_map2 (fun dimensioned dim lval -> assert_lvalue dim dimensioned lval) dimensioned dim_l l in
+      let dimensioned, dimed_l = Misc.fold_left_map2 (fun dimensioned dim lval -> assert_lvalue0 dim dimensioned lval) dimensioned dim_l l in
       let extract dim = match !??dim with
       | BNetlist n -> n
       | _ -> failwith "Not implemented mixed state / netlist tuples"
@@ -552,25 +561,34 @@ let state_transition_exp_one fun_env (dimensioned: dim_env) e : dim_env * exp st
     dimensioned, Ok e'
   with CannotDimensionYet id -> dimensioned, Error id
 
-let lvalue_one dimensioned lval : lvalue dimension_option =
+let lvalue_one dimensioned StaticTypedAST.{ lval; lval_type } =
   try
-    Ok (lvalue dimensioned lval)
-  with CannotDimensionYet id -> Error id
+    let dimensioned, lval' = match !!lval_type with
+    | Some ti -> assert_lvalue0 (global_of_netlist_type ti) dimensioned lval
+    | None ->    dimensioned, lvalue0 dimensioned lval
+    in
+    dimensioned, Ok { lval = lval'; lval_type }
+  with CannotDimensionYet id -> (dimensioned, Error id)
 
-let assert_lvalue_one dim dimensioned lval : dim_env * lvalue dimension_option =
+let assert_lvalue_one dim dimensioned StaticTypedAST.{ lval; lval_type } =
+  let () = match !!lval_type with
+  | Some ti -> if dim <> global_of_netlist_type ti then
+      raise @@ (* Errors. *)WrongIndication (ot_of_t dim, ot_of_t @@ global_of_netlist_type ti, !@lval_type, ErSimple)
+  | None -> ()
+  in
   try
-    let dimensioned, lval' = assert_lvalue dim dimensioned lval in
-    dimensioned, Ok lval'
-  with CannotDimensionYet id -> dimensioned, Error id
+    let dimensioned, lval' = assert_lvalue0 dim dimensioned lval in
+    dimensioned, Ok { lval = lval'; lval_type }
+  with CannotDimensionYet id -> (dimensioned, Error id)
 
 let eq_one fun_env dimensioned (lval, e) =
   let dimensioned, e' = tritype_exp_one fun_env dimensioned e in
   let dimensioned, lval' = match e' with
     | Ok a -> assert_lvalue_one (tritype_of_exp a) dimensioned lval
-    | Error _ -> dimensioned, lvalue_one dimensioned lval
+    | Error _ -> lvalue_one dimensioned lval
   in
   let dimensioned, e' = match lval' with
-    | Ok a -> assert_tritype_exp_one fun_env !??a dimensioned e
+    | Ok a -> assert_tritype_exp_one fun_env !??(a.lval) dimensioned e
     | Error _ -> dimensioned, e'
   in
   dimensioned, (lval', e')
@@ -666,15 +684,6 @@ let body fun_env (name, loc) dimensioned b =
   in
   one (dimensioned, b)
 
-let rec dimension_of_netlist_type = function
-  | TProd l -> (NProd (List.map dimension_of_netlist_type l))
-  | TNDim l -> (NDim (List.length l))
-
-let global_of_netlist_type = function
-  | BNetlist ti -> BNetlist (dimension_of_netlist_type ti)
-  | BState s -> BState s
-  | BStateTransition s -> BStateTransition s
-
 let true_global_of_netlist_type = function
   | BNetlist ti -> (dimension_of_netlist_type ti)
   | _ -> failwith "Not implemented state arguments in functions"
@@ -712,10 +721,16 @@ let program ({ p_nodes; p_enums; _ } as program) : program =
     }
   with
   | Errors.SliceTooMuch (found, expected, loc) ->
-    Format.eprintf "%aType Error: This expression has dimension %i but it is sliced %i times@."
-    Location.print_location loc
-    found expected;
-    raise Errors.ErrorDetected
+      Format.eprintf "%aType Error: This expression has dimension %i but it is sliced %i times@."
+      Location.print_location loc
+      found expected;
+      raise Errors.ErrorDetected
+  | WrongIndication (found, hint, loc, _) ->
+      Format.eprintf "%aType Error: This hint indicates a type %t but an expression of type %t was found@."
+      Location.print_location loc
+      (print_ot hint)
+      (print_ot found);
+      raise Errors.ErrorDetected
   | WrongType (found, expected, loc, _) ->
       Format.eprintf "%aType Error: This expression has type %t but an expression of type %t was expected@."
       Location.print_location loc
