@@ -242,8 +242,7 @@ let rec exp (fun_env: fun_env) dimensioned (e: StaticTypedAST.exp) = match !!e w
       in
       dimensioned, dimension (ECall (fname, params, dim_args)) !@e dims_out
   | EMem (mem_kind, (addr_size, word_size, input_file), args) ->
-      let fname = match !!mem_kind with MRom -> "rom" | MRam -> "ram" in
-      let dims_in, dims_out = Misc.option_get (FunEnv.find_opt fname fun_env) in
+      let fname, dims_in, dims_out = match !!mem_kind with MRom -> "rom", [NDim 1], NDim 1 | MRam -> "ram", [NDim 1; NDim 0; NDim 1; NDim 1], NDim 1 in
       let dimensioned, dim_args =
         let f dimensioned dim arg =
           try

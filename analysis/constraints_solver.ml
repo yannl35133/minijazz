@@ -4,6 +4,13 @@ open NetlistConstrainedAST
 
 module IntEnv = Map.Make (Int)
 
+let debug = 0
+let log i =
+  if debug >= i then
+    Format.printf
+  else
+    Format.ifprintf Format.std_formatter
+
 type ternary =
   | Yes
   | No
@@ -479,9 +486,9 @@ let rec order a b = match !!a, !!b with
   | a, b -> compare a b
 
 let rec sum_list l =
-  (* Format.eprintf "Sum_list0: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l); *)
+  log 10 "Sum_list0: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l);
   let l = (List.sort order l) in
-  (* Format.eprintf "Sum_list1: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
+  log 10 "Sum_list1: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l);
   let rec eat_ints = function
   | { desc = UInt 0; _ } :: tl -> tl
   | se' :: { desc = UIUnOp (SNeg, se); _ } :: tl when maybe_equal_int (!!se, !!se') = Yes -> tl
@@ -510,11 +517,11 @@ let rec sum_list l =
   | [] -> acc
   in
   let l = eat_ints l in
-  (* Format.eprintf "Sum_list2: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l); *)
+  log 10 "Sum_list2: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l);
   let l = cancel [] l in
-  (* Format.eprintf "Sum_list3: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
+  log 10 "Sum_list3: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l);
   let l = powers_of_2 [] l in
-  (* Format.eprintf "Sum_list3: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l'); *)
+  log 10 "Sum_list4: @[%t@]@." (print_list_naked (binop_sep "+") print_int_exp l);
   match l with
   | [e] -> !!e
   | l -> UISum (List.rev @@ List.sort order l)
@@ -677,10 +684,10 @@ let analyze_result ue1 ue2 se1 se2 = function
 
 
 let solve_constraint_one env guard (a', b') =
-  (* Format.eprintf "%t@." (print_guard !!guard); *)
-  (* Format.eprintf "@[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b'); *)
+  log 4 "%t@." (print_guard !!guard);
+  log 4 "@[%t et@;<1 2>%t@]@.@." (print_int_exp a') (print_int_exp b');
   let a, b = pre_treatment env (SBool true) (a', b') in
-  (* Format.eprintf "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b); *)
+  log 5 "==> @[%t et@;<1 2>%t@]@.@." (print_int_exp a) (print_int_exp b);
   match !!a, !!b with
   | UIUnknown (d, Uid uid), UIUnknown (_, Uid uid') when not (mem uid env) ->
       add uid (Link (d, uid')) env, true
@@ -693,9 +700,9 @@ let solve_constraint_one env guard (a', b') =
   | _ when no_free_variable_int env a' && no_free_variable_int env b' ->
       let se1 = substitute_env_int env a' in
       let se2 = substitute_env_int env b' in
-      (* Format.eprintf "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2); *)
+      log 5 "| @[%t et@;<1 2>%t@]@.@." (print_int_exp se1) (print_int_exp se2);
       let (se1', se2') = pre_treatment env !!guard (se1, se2) in
-      (* Format.eprintf "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2'); *)
+      log 5 "| ==> @[%t et@;<1 2>%t@]@.@." (print_int_exp se1') (print_int_exp se2');
       analyze_result a' b' se1' se2' @@ maybe_equal_int (!!se1', !!se2');
       env, true
   | _ ->
@@ -710,9 +717,9 @@ let solve_constraints (l: NetlistConstrainedAST.constraints) =
     | [] -> env, acc
     | (guard, hd) :: tl ->
         let env, ok = solve_constraint_one env guard @@ presize_to_uiexp2 hd in
-        (* Format.eprintf "Found equalities@."; *)
-        (* UIDEnv.iter (fun uid union -> Format.eprintf "%t@." (print_env uid union)) env; *)
-        (* Format.eprintf "@."; *)
+        log 4 "Found equalities@.";
+        UIDEnv.iter (fun uid union -> log 4 "%t@." (print_env uid union)) env;
+        log 4 "@.";
         if ok then
           one_round env acc tl
         else
@@ -724,22 +731,22 @@ let solve_constraints (l: NetlistConstrainedAST.constraints) =
     if env <> env' then
       repeat env' remaining
     else begin
-      (* Format.eprintf "%t" @@
+      log 3 "%t" @@
       if List.length l > 0 then
         dprintf "@.Remaining unused constraints:@.%t@." (print_constraints remaining)
       else
-        dprint_nop; *)
+        dprint_nop;
       env
     end
   in
   let (l_unguarded, l_guarded) = List.partition (fun (g1, _) -> match !!g1 with | SBool true -> true | _ -> false) l in
-  (* Format.eprintf "@.All constraints:@.%t@.@." (print_constraints l_unguarded); *)
+  log 1 "@.All constraints:@.%t@.@." (print_constraints l_unguarded);
   let env = repeat env l_unguarded in
-  (* Format.eprintf "@.All constraints:@.%t@.@." (print_constraints l_guarded); *)
+  log 1 "@.All constraints:@.%t@.@." (print_constraints l_guarded);
   let env = repeat env l_guarded in
-  (* Format.eprintf "Found equalities@."; *)
-  (* UIDEnv.iter (fun uid union -> Format.eprintf "%t@." (print_env uid union)) env; *)
-  (* Format.eprintf "@."; *)
+  log 1 "Found equalities@.";
+  UIDEnv.iter (fun uid union -> log 1 "%t@." (print_env uid union)) env;
+  log 1 "@.";
   env
 
 
