@@ -110,6 +110,82 @@ let remove e1 e2 =
 
 let union e1 e2 = Env.union (fun _uid v1 _v2 -> Some v1) e1 e2
 
+(** enable
+    must be done __after__ removing state expressions *)
+
+let bit_type = TNDim [Size (SInt 1)]
+
+let new_en_var _ =
+  let uid = UIDIdent.get () in
+  let id = { id_uid = uid; id_loc = Location.no_location;
+             id_desc = "en" ^ (UIDIdent.to_string uid )} in
+  id, size (EVar id) Location.no_location bit_type
+
+let is_native_fname s =
+  let regex = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\)_\([01]\)|} in
+  Str.string_match regex s 0
+
+let rec en_exp en (e:tritype_exp) = match e with
+  | Exp e -> Exp (en_exp' en e)
+  | StateExp se -> StateExp (en_sexp en se)
+  | StateTransitionExp _ -> assert false
+
+and en_exp_desc en (e:exp_desc) = match e with
+  | EConst _ -> e
+  | EVar _ -> e
+  | EReg e -> EReg (en_exp' en e)
+  | EMem (st1, st2, es) -> EMem (st1, st2, List.map (en_exp' en) es)
+  | ECall ({ desc = fname; _ }, _, _) when is_native_fname fname -> e
+  | ECall ({ desc = "slice_one"; _ }, _, _)
+    | ECall ({ desc = "slice_all"; _ }, _, _)
+    | ECall ({ desc = "slice_from"; _ }, _, _)
+    | ECall ({ desc = "slice_to"; _ }, _, _)
+    | ECall ({ desc = "slice_fromto"; _ }, _, _)
+    | ECall ({ desc = "add_dim_0"; _ }, _, _)
+    | ECall ({ desc = "concat_1"; _ }, _, _)  -> e
+  | ECall (fname, ps, args) ->
+     ECall (fname, ps, List.map (en_exp' en) args)
+
+and en_exp' en e = size (en_exp_desc en e.si_desc) e.si_loc e.si_size
+
+and en_sexp_desc en (e:exp state_exp_desc) = match e with
+  | ESConstr _ -> e
+  | ESVar _ -> e
+  | ESReg e -> ESReg (en_sexp en e)
+  | ESMux (e, se1, se2) -> ESMux (en_exp' en e, en_sexp en se1, en_sexp en se2)
+
+and en_sexp en (e:exp state_exp) = re_state_type e (en_sexp_desc en e.s_desc)
+
+and en_decl en (d:decl) = match d.desc with
+  | Deq ({ b_desc = LValDrop; _ }, _) -> []
+  | Deq (lv, e) ->
+     let lst = gen_lv "tmp" lv in
+     let lst_lv, lst_eq =
+       List.fold_right (fun x (lst_lv, lst_eq)  ->
+           match x with
+           | Some (lv, var_lv, tmp_lv, tmp_var) ->
+              let eq = Deq (lv, (mux en tmp_var (reg var_lv))) in
+              tmp_lv :: lst_lv, (relocalize d.loc @@ eq) :: lst_eq
+           | None -> (tritype LValDrop lv.b_loc lv.b_type) :: lst_lv, lst_eq)
+         lst ([],[])
+     in
+     let tuple = tritype (LValTuple lst_lv) lv.b_loc lv.b_type in
+     (relocalize d.loc @@ Deq (tuple, en_exp en e)):: lst_eq
+  | Dif (sc, b1, b2) ->
+     let b1 = List.concat_map (en_decl en) b1 in
+     let b2 = List.concat_map (en_decl en) b2 in
+     [relocalize d.loc @@ Dif (sc, b1, b2)]
+  | Dmatch (e, m) ->
+     let m_handlers =
+       ConstructEnv.map
+         (fun h -> { h with m_body = List.concat_map (en_decl en) h.m_body })
+         m.m_handlers in
+     [relocalize d.loc @@ Dmatch (en_sexp en e, { m with m_handlers })]
+
+  | Dlocaleq (_, _) -> assert false
+  | Dreset (_, _) -> assert false
+  | Dautomaton _ -> assert false
+
 (* free variables *)
 let rec state_exp (sfv, fv) (e:exp state_exp) =
   let ty_sz = enum_size e.s_type in
@@ -249,52 +325,66 @@ and ti_to_exp t = match (t.ti_type).desc with
 
 and node_of_block_global n =
   let node_body, _, _, _ =
-    List.fold_left (decl n.node_name.desc Env.empty)
+    List.fold_left (decl n.node_name.desc None Env.empty)
       ([], I.empty, Env.empty, Env.empty) n.node_body in
   Hashtbl.replace program_nodes_tbl (UIDIdent.get ())
     { n with node_body }
 
-and node_of_block px env loc ds =
+and node_of_block px en_cond env loc ds =
+  let en_id, en_var = new_en_var () in
+  let en_tid = {
+      ti_name = en_id;
+      ti_type = relocalize en_var.si_loc @@ BNetlist en_var.si_size;
+      ti_loc = en_var.si_loc } in
+  let en_rec = match en_cond with | None -> None | Some _ -> Some en_var in
   let node_body, node_params, node_inputs, node_outputs =
-    List.fold_left (decl px env) ([], I.empty, Env.empty, Env.empty) ds in
+    List.fold_left (decl px en_rec env)
+      ([], I.empty, Env.empty, Env.empty) ds in
   let node : node = {
       node_name = relocalize loc px;
       node_loc  = loc;
       node_params = I.fold (fun _ p lst -> p :: lst) node_params [];
       node_inline = NotInline;
-      node_inputs = Env.fold (fun _ p lst -> p :: lst) node_inputs [];
+      node_inputs =
+        (let inputs = Env.fold (fun _ p lst -> p :: lst) node_inputs [] in
+         match en_cond with
+         | Some _ ->  en_tid :: inputs
+         | None -> inputs);
       node_outputs = Env.fold (fun _ p lst -> p :: lst) node_outputs [];
-      node_body;
-      node_variables = Env.empty
-    } in
+      node_body = (match en_cond with
+                   | Some _ -> List.concat_map (en_decl en_var) node_body
+                   | None -> node_body);
+      node_variables = Env.empty } in
   Hashtbl.replace program_nodes_tbl (UIDIdent.get ()) node;
   let sz, lvs = List.fold_left ti_to_lv ([], [])
                   (List.rev node.node_outputs) in
   let ps = List.map sti_to_stbitype node.node_params in
-  let args = List.map ti_to_exp node.node_inputs in
+  let args = List.map (fun tid -> if tid = en_tid then Option.get en_cond
+                                 else ti_to_exp tid) node.node_inputs in
   tritype (LValTuple lvs) loc (BNetlist (TProd sz)),
   size (ECall (node.node_name, ps, args)) loc (TProd sz),
   node_params, node_inputs, node_outputs
 
 
-and decl px env (b, p, i, o) (d:decl) = match d.desc with
+and decl px (en:exp option) env (b, p, i, o) (d:decl) = match d.desc with
   | Dmatch (e, m) ->
      let p, i, e = state_exp (p, i) e in
-     let _lvs, b, _, p, i, o =
+     let _, b, _, p, i, o =
        ConstructEnv.fold
          (fun c h (lvs, b, defs, _p, _i, _o) ->
            let px = px ^ h.m_state.id_desc in
-           let lv, exp, p, i, o =
-              node_of_block px env h.m_hloc h.m_body in
-           let new_defs, new_lv = rename_lv px defs lv in
            let cond = slice e (index c) in
+           let en = match en with
+             | None -> Some cond
+             | Some en -> Some (eand en cond) in
+           let lv, exp, p, i, o = node_of_block px en env h.m_hloc h.m_body in
+           let new_defs, new_lv = rename_lv px defs lv in
            let b = mux_lv cond defs b lv new_lv in
            lv :: lvs,
            M.add new_lv exp b,
            new_defs, p, i, o)
          m.m_handlers ([], list_to_env b, Env.empty, p, i, o)
      in
-     (* TODO enable *)
      env_to_list b, p, i, o
 
   | Deq ({ b_desc = LValDrop; _ }, _) -> b, p, i, o
@@ -310,8 +400,8 @@ and decl px env (b, p, i, o) (d:decl) = match d.desc with
 
   | Dif (c, b1, b2) ->
      let p, i = static_bool_exp (p, i) !!c in
-     let b1, p, i1, o1 = List.fold_left (decl px env) ([], p, i, o) b1 in
-     let b2, p, i2, o2 = List.fold_left (decl px env) ([], p, i, o) b2 in
+     let b1, p, i1, o1 = List.fold_left (decl px en env) ([], p, i, o) b1 in
+     let b2, p, i2, o2 = List.fold_left (decl px en env) ([], p, i, o) b2 in
      [relocalize d.loc @@ Dif (c, b1, b2)], p,
      union i1 i2, inter o1 o2 (* TODO probably incorrect or useless *)
 
@@ -320,93 +410,12 @@ and decl px env (b, p, i, o) (d:decl) = match d.desc with
   | Dlocaleq (_, _) -> assert false
   | Dautomaton _ -> assert false
 
-(** enable
-    must be done __after__ removing state expressions *)
-
-let bit_type = TNDim [Size (SInt 1)]
-
-let new_en_var _ =
-  let uid = UIDIdent.get () in
-  let id = { id_uid = uid; id_loc = Location.no_location;
-             id_desc = "en" ^ (UIDIdent.to_string uid )} in
-  id, size (EVar id) Location.no_location bit_type
-
-let is_native_fname s =
-  let regex = Str.regexp {|\(or\|and\|xor\|nand\|nor\|not\|mux\)_\([01]\)|} in
-  Str.string_match regex s 0
-
-let rec en_exp en (e:tritype_exp) = match e with
-  | Exp e -> Exp (en_exp' en e)
-  | StateExp se -> StateExp (en_sexp en se)
-  | StateTransitionExp _ -> assert false
-
-and en_exp_desc en (e:exp_desc) = match e with
-  | EConst _ -> e
-  | EVar _ -> e
-  | EReg e -> EReg (en_exp' en e)
-  | EMem (st1, st2, es) -> EMem (st1, st2, List.map (en_exp' en) es)
-  | ECall ({ desc = fname; _ }, _, _) when is_native_fname fname -> e
-  | ECall ({ desc = "slice_one"; _ }, _, _)
-    | ECall ({ desc = "slice_all"; _ }, _, _)
-    | ECall ({ desc = "slice_from"; _ }, _, _)
-    | ECall ({ desc = "slice_to"; _ }, _, _)
-    | ECall ({ desc = "slice_fromto"; _ }, _, _)
-    | ECall ({ desc = "add_dim_0"; _ }, _, _)
-    | ECall ({ desc = "concat_1"; _ }, _, _)  -> e
-  | ECall (fname, ps, args) ->
-     ECall (fname, ps, en :: List.map (en_exp' en) args)
-
-and en_exp' en e = size (en_exp_desc en e.si_desc) e.si_loc e.si_size
-
-and en_sexp_desc en (e:exp state_exp_desc) = match e with
-  | ESConstr _ -> e
-  | ESVar _ -> e
-  | ESReg e -> ESReg (en_sexp en e)
-  | ESMux (e, se1, se2) -> ESMux (en_exp' en e, en_sexp en se1, en_sexp en se2)
-
-and en_sexp en (e:exp state_exp) = re_state_type e (en_sexp_desc en e.s_desc)
-
-and en_decl en (d:decl) = match d.desc with
-  | Deq ({ b_desc = LValDrop; _ }, _) -> []
-  | Deq (lv, e) ->
-     let lst = gen_lv "tmp" lv in
-     let lst_lv, lst_eq =
-       List.fold_right (fun x (lst_lv, lst_eq)  ->
-           match x with
-           | Some (lv, var_lv, tmp_lv, tmp_var) ->
-              let eq = Deq (lv, (mux en tmp_var (reg var_lv))) in
-              tmp_lv :: lst_lv, (relocalize d.loc @@ eq) :: lst_eq
-           | None -> (tritype LValDrop lv.b_loc lv.b_type) :: lst_lv, lst_eq)
-         lst ([],[])
-     in
-     let tuple = tritype (LValTuple lst_lv) lv.b_loc lv.b_type in
-     (relocalize d.loc @@ Deq (tuple, en_exp en e)):: lst_eq
-  | Dif (sc, b1, b2) ->
-     let b1 = List.concat_map (en_decl en) b1 in
-     let b2 = List.concat_map (en_decl en) b2 in
-     [relocalize d.loc @@ Dif (sc, b1, b2)]
-  | Dmatch (e, m) ->
-     let m_handlers =
-       ConstructEnv.map
-         (fun h -> { h with m_body = List.concat_map (en_decl en) h.m_body })
-         m.m_handlers in
-     [relocalize d.loc @@ Dmatch (en_sexp en e, { m with m_handlers })]
-
-  | Dlocaleq (_, _) -> assert false
-  | Dreset (_, _) -> assert false
-  | Dautomaton _ -> assert false
-
-let en_node (n:node) =
-  let id, en = new_en_var () in
-  let node_inputs = { ti_name = id;
-                      ti_type = no_localize @@ BNetlist bit_type;
-                      ti_loc = Location.no_location } :: n.node_inputs in
-  let node_body = List.concat_map (en_decl en) n.node_body in
-
-  { n with node_inputs; node_body }
-
 (** [Matcher.program p] compiles match from a automaton-reset-free ast *)
 let program (p:program) =
+  Hashtbl.clear enum_tbl;
+  Hashtbl.clear constr_tbl;
+  Hashtbl.clear program_nodes_tbl;
+
   ConstructEnv.iter (fun _ e ->
       let sz = List.length e.enum_constructors_names in
       Hashtbl.replace enum_tbl e.enum_name.id_uid sz;
