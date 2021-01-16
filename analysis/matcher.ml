@@ -44,15 +44,26 @@ let rec gen_lv prefix (lv:lvalue) =
      [Some (lv, lvvar, tritype (LValId ident) id.id_loc lv.b_type, var)]
   | LValTuple lvs -> List.concat_map (gen_lv prefix) lvs
 
+let compute_size = function
+  | TNDim [] -> SInt 1
+  | TNDim [Size sz] -> sz
+  | TNDim (Size sz :: lst) ->
+     List.fold_left (fun se e ->
+         let x = match e with Size x -> no_localize x in
+         SIBinOp (SAdd, no_localize se, x)) sz lst
+  | TProd _ -> assert false
+
+let emux e e1 e2 =
+  let n = compute_size e1.si_size in
+  { e1 with si_desc = ECall (relocalize e.si_loc "mux_1",
+                             [relocalize e.si_loc (SIntExp n)],
+                             [e; e1; e2])}
+
 let mux (e:exp) (e1:tritype_exp) e2 = match e1, e2 with
-  | Exp e1, Exp e2 ->
-     Exp { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e1; e2])}
+  | Exp e1, Exp e2 -> Exp (emux e e1 e2)
   | StateExp e1, StateExp e2 ->
      StateExp { e1 with s_desc = ESMux (e, e1, e2) }
   | _ -> assert false
-
-let emux e e1 e2 =
-  { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e1; e2])}
 
 let ereg e = { e with si_desc = EReg e }
 
@@ -117,7 +128,9 @@ let rec state_exp (sfv, fv) (e:exp state_exp) =
        let sfv, fv, e1 = state_exp (sfv, fv) e1 in
        let sfv, fv, e2 = state_exp (sfv, fv) e2 in
        let sfv, fv = exp (sfv, fv) ce in
-       sfv, fv, ECall (relocalize e.s_loc "mux", [], [ce; e1; e2])
+       let sz = compute_size e1.si_size in
+       sfv, fv, ECall (relocalize e.s_loc "mux_1",
+                       [relocalize e.s_loc (SIntExp sz)], [ce; e1; e2])
   in
   sfv, fv, size desc e.s_loc ty
 
@@ -255,7 +268,8 @@ and node_of_block px env loc ds =
       node_variables = Env.empty
     } in
   Hashtbl.replace program_nodes_tbl (UIDIdent.get ()) node;
-  let sz, lvs = List.fold_left ti_to_lv ([], []) node.node_outputs in
+  let sz, lvs = List.fold_left ti_to_lv ([], [])
+                  (List.rev node.node_outputs) in
   let ps = List.map sti_to_stbitype node.node_params in
   let args = List.map ti_to_exp node.node_inputs in
   tritype (LValTuple lvs) loc (BNetlist (TProd sz)),
