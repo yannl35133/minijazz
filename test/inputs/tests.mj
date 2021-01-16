@@ -1,12 +1,19 @@
 (*
-mux_n<n, p>(switch:[n], cases:[2^n, p]) = o:[_] where
-    if n = 0 then
-        o = cases[0];
+power<n>(b) = o:[n] where
+    if n = 1 then
+        o = [b];
     else
-        o = mux(switch[0], mux_n(switch[1..], cases[..2^n-1]), mux_n(switch[1..], cases[2^n..]));
+        o = [b] . power(b);
     end if
 end where
-*)
+
+mux00_2<n, m, p>(switch:[n], case1:[m, p], case2:[m, p]) = o:[m, p] where
+    if n = 0 then
+        o = mux(switch[0], case1, case2);
+    else
+        o = mux(switch[0], mux00_2<n-1, m, p>(switch[1..], case1, case2), case2);
+    end if
+end where
 
 update_addr<n, p>(addr:[n], data:[p], mem:[2^n, p]) = mem2:[2^n, p] where
     if n = 0 then
@@ -14,10 +21,29 @@ update_addr<n, p>(addr:[n], data:[p], mem:[2^n, p]) = mem2:[2^n, p] where
     else
         mem2 = mux(addr[0],
             update_addr(addr[1..], data, mem[..2^(n-1) - 1]) . mem[2^(n-1) .. ],
-            mem[..2^(n-1) - 1]) . update_addr(addr[1..], data, mem[2^(n-1) .. ])
+            mem[..2^(n-1) - 1] . update_addr(addr[1..], data, mem[2^(n-1) .. ]))
     end if
 end where
 
+register_box(read1:[5], read2:[5], write:[5], data:[64]) = (value1:[64], value2:[64]) where
+
+	registers_pre = reg registers;
+	(*value1 = mux_n(read1, registers_pre);*)value1 = power(0);
+	(*value2 = mux_n(read2, registers_pre);*)value2 = power(0);
+
+	registers = mux00_2(write, registers_pre, update_addr(write, data, registers_pre));
+
+end where
+*)
+update_addr<n, p>(addr:[n], data:[p], mem:[2^n, p]) = mem2:[2^n, p] where
+    if n = 0 then
+        mem2 = [data];
+    else
+        mem2 = mux(addr[0],
+            update_addr(addr[1..], data, mem[..2^(n-1) - 1]) . mem[2^(n-1) .. ],
+            mem[..2^(n-1) - 1] . update_addr(addr[1..], data, mem[2^(n-1) .. ]))
+    end if
+end where
 (*
 main(clk1) = (o2) where
   front_edge3 = clk1 && not(reg clk1);
@@ -31,15 +57,12 @@ main(clk1) = (o2) where
   nx_stateauto1st07 = mux(down_edge4, 01, 10);
   nx_stateauto1st0 = mux(reg nx_stateauto1st0[1],
                              nx_stateauto1st19,
-                             nx_stateauto1st07)
-end where;
-*)
-(*
-main() = () where
-  i = [[0b100, 0b001]];
+                             nx_stateauto1st07);
+
+  i:[1,2][3] = [[0b100, 0b001]];
   o = i[0, .. , 0..1];
-  a = recursive<4, 2>(0b0101)
-end where
+  a = recursive<4, 2>(0b0101);
+end where;
 
 
 fulladder(a,b,c) = (s, r) where

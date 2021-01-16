@@ -722,28 +722,32 @@ let program ({ p_nodes; p_enums; _ } as program) : program =
   with
   | Errors.SliceTooMuch (found, expected, loc) ->
       Format.eprintf "%aType Error: This expression has dimension %i but it is sliced %i times@."
-      Location.print_location loc
-      found expected;
+        Location.print_location loc
+        found expected;
+      raise Errors.ErrorDetected
+  | UnexpectedProd (loc, _) ->
+      Format.eprintf "%aType Error: This expression is a tuple, but no tuple were expected@.@."
+        Location.print_location loc;
       raise Errors.ErrorDetected
   | WrongIndication (found, hint, loc, _) ->
       Format.eprintf "%aType Error: This hint indicates a type %t but an expression of type %t was found@."
-      Location.print_location loc
-      (print_ot hint)
-      (print_ot found);
+        Location.print_location loc
+        (print_ot hint)
+        (print_ot found);
       raise Errors.ErrorDetected
   | WrongType (found, expected, loc, _) ->
       Format.eprintf "%aType Error: This expression has type %t but an expression of type %t was expected@."
-      Location.print_location loc
-      (print_ot found)
-      (print_ot expected);
+        Location.print_location loc
+        (print_ot found)
+        (print_ot expected);
       raise Errors.ErrorDetected
   | WrongDimension (found, expected, loc, _) ->
       Format.eprintf "%aType Error: This expression has type %t but an expression of type %t was expected@."
-      Location.print_location loc
-      (print_netlist_dimension found)
-      (print_netlist_dimension expected);
+        Location.print_location loc
+        (print_netlist_dimension found)
+        (print_netlist_dimension expected);
       raise Errors.ErrorDetected
   | Errors.WrongNumberArguments (found, loc, expected, fname) ->
       Format.eprintf "%aType Error: Function %s has %i arguments but %i were given@."
-      Location.print_location loc fname expected found;
+        Location.print_location loc fname expected found;
       raise Errors.ErrorDetected
