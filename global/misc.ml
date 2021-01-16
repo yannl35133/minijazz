@@ -141,12 +141,13 @@ let bool_list_of_int (nbits, v) =
   List.init nbits (fun n -> v land (1 lsl (nbits - 1 - n)) <> 0)
 
 let exp a n =
-  let rec aux acc n =
-    if n = 0 then 1
-    else if n = 1 then acc
-    else if n land 1 <> 0 then aux (a * acc * acc) (n lsr 1)
-    else aux (acc * acc) (n lsr 1)
-  in aux a n
+  let rec aux a acc = function
+    | 0 -> a
+    | n when n mod 2 = 1 ->
+        aux (a * a) (a * acc) (n lsr 1)
+    | n ->
+        aux (a * a) (1 * acc) (n lsr 1)
+    in aux a 1 n
 
 let bool_list_of_dec_int (nbits, v) =
   List.init (-nbits)
