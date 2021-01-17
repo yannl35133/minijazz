@@ -445,7 +445,7 @@ let rec assert_state_exp (exp_env, enum_env as env) s dimensioned (e: StaticType
         | Some BState s' when s <> s' ->
             raise @@ WrongType (ot_of_t (BState s'), ot_of_t (BState s), !@e, ErRev)
         | None ->
-            Env.add !**id (Some (BStateTransition s)) dimensioned, state_type (ESVar id) !@e s
+            Env.add !**id (Some (BState s)) dimensioned, state_type (ESVar id) !@e s
         | Some BState _ ->
             dimensioned, state_type (ESVar id) !@e s
       with Not_found -> raise (Errors.Scope_error (!*!id, !*@id))

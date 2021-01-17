@@ -65,7 +65,7 @@ let () = List.iter (fun (str, tok) -> Hashtbl.add keyword_table str tok) [
   (* "let", LET;
   "in", IN; *)
   "unless", UNLESS;
-  "until", UNLESS;
+  "until", UNTIL;
   "continue", CONTINUE;
   "restart", RESTART;
   (* "do", DO;

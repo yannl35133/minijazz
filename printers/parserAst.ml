@@ -235,15 +235,7 @@ let print_const const_desc =
     (print_sexp const_desc.const_right)
 
 let print_program prog =
-  dprintf "@[<v>%t%t%t%t%t@]@."
-    (print_list_naked dprint_newline print_enum prog.p_enums)
-    ( match prog.p_enums, prog.p_consts with
-      | [], _ | _, [] -> dprint_nop
-      | _             -> dprint_newline
-    )
-    (print_list_naked dprint_newline print_const prog.p_consts)
-    ( match prog.p_consts, prog.p_nodes with
-      | [], _ | _, [] -> dprint_nop
-      | _             -> dprint_newline
-    )
-    (print_list_naked dprint_newline print_node prog.p_nodes)
+  dprintf "@[<v>%t@ %t@ %t@ @]@."
+    (print_list_naked (dprintf "@ @ ") print_enum  prog.p_enums)
+    (print_list_naked (dprintf "@ @ ") print_const prog.p_consts)
+    (print_list_naked (dprintf "@ @ ") print_node  prog.p_nodes)

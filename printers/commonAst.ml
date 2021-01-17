@@ -226,15 +226,7 @@ let print_program (print_static_type, print_static_exp, print_size, print_decl) 
   |> List.of_seq
   |> List.map snd
   in
-  dprintf "@[<v>%t%t%t%t%t@]@."
-    (print_list_naked dprint_newline print_full_enum p_enums)
-    ( match p_enums, p_consts with
-      | [], _ | _, [] -> dprint_nop
-      | _             -> dprint_newline
-    )
-    (print_list_naked dprint_newline (print_const print_static_exp) p_consts)
-    ( match p_consts, p_nodes with
-      | [], _ | _, [] -> dprint_nop
-      | _             -> dprint_newline
-    )
-    (print_list_naked dprint_newline (print_node (print_static_type, print_size, print_decl)) p_nodes)
+  dprintf "@[<v>%t@ %t@ %t@ @]@."
+    (print_list_naked (dprintf "@ @ ") print_full_enum p_enums)
+    (print_list_naked (dprintf "@ @ ") (print_const print_static_exp) p_consts)
+    (print_list_naked (dprintf "@ @ ") (print_node (print_static_type, print_size, print_decl)) p_nodes)

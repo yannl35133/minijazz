@@ -45,19 +45,19 @@ let rec gen_lv prefix (lv:lvalue) =
   | LValTuple lvs -> List.concat_map (gen_lv prefix) lvs
 
 let compute_size = function
-  | TNDim [] -> SInt 1
-  | TNDim [Size sz] -> sz
-  | TNDim (Size sz :: lst) ->
-     List.fold_left (fun se e ->
-         let x = match e with Size x -> no_localize x in
-         SIBinOp (SAdd, no_localize se, x)) sz lst
+  | TNDim [] -> None
+  | TNDim [Size sz] -> Some sz
+  | TNDim (_ :: _) -> assert false
   | TProd _ -> assert false
 
 let emux e e1 e2 =
-  let n = compute_size e1.si_size in
-  { e1 with si_desc = ECall (relocalize e.si_loc "mux_1",
-                             [relocalize e.si_loc (SIntExp n)],
-                             [e; e1; e2])}
+  match compute_size e1.si_size with
+  | Some n ->
+      { e1 with si_desc = ECall (relocalize e.si_loc "mux_1",
+                                [relocalize e.si_loc (SIntExp n)],
+                                [e; e1; e2])}
+  | None ->
+      { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e1; e2])}
 
 let mux (e:exp) (e1:tritype_exp) e2 = match e1, e2 with
   | Exp e1, Exp e2 -> Exp (emux e e1 e2)
@@ -113,7 +113,7 @@ let union e1 e2 = Env.union (fun _uid v1 _v2 -> Some v1) e1 e2
 (** enable
     must be done __after__ removing state expressions *)
 
-let bit_type = TNDim [Size (SInt 1)]
+let bit_type = TNDim []
 
 let new_en_var _ =
   let uid = UIDIdent.get () in
@@ -169,8 +169,11 @@ and en_decl en (d:decl) = match d.desc with
            | None -> (tritype LValDrop lv.b_loc lv.b_type) :: lst_lv, lst_eq)
          lst ([],[])
      in
-     let tuple = tritype (LValTuple lst_lv) lv.b_loc lv.b_type in
-     (relocalize d.loc @@ Deq (tuple, en_exp en e)):: lst_eq
+     let tuple = match lst_lv with
+      | [el] -> el
+      | lst_lv -> tritype (LValTuple lst_lv) lv.b_loc lv.b_type
+    in
+    (relocalize d.loc @@ Deq (tuple, en_exp en e)):: lst_eq
   | Dif (sc, b1, b2) ->
      let b1 = List.concat_map (en_decl en) b1 in
      let b2 = List.concat_map (en_decl en) b2 in
@@ -201,12 +204,11 @@ let rec state_exp (sfv, fv) (e:exp state_exp) =
        sfv, Env.add v.id_uid ti fv, EVar v
     | ESReg e -> let sfv, fv, e = state_exp (sfv, fv) e in sfv, fv, EReg e
     | ESMux (ce, e1, e2) ->
-       let sfv, fv, e1 = state_exp (sfv, fv) e1 in
-       let sfv, fv, e2 = state_exp (sfv, fv) e2 in
-       let sfv, fv = exp (sfv, fv) ce in
-       let sz = compute_size e1.si_size in
-       sfv, fv, ECall (relocalize e.s_loc "mux_1",
-                       [relocalize e.s_loc (SIntExp sz)], [ce; e1; e2])
+        let sfv, fv, e1 = state_exp (sfv, fv) e1 in
+        let sfv, fv, e2 = state_exp (sfv, fv) e2 in
+        let sfv, fv = exp (sfv, fv) ce in
+        let emux = !$!(emux ce e1 e2) in
+        sfv, fv, emux
   in
   sfv, fv, size desc e.s_loc ty
 
