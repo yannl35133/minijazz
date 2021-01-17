@@ -26,7 +26,7 @@
 open Ast_old
 open Static
 
-let debug = 0
+let debug = 5
 let log i =
   if debug >= i then
     Format.printf
@@ -101,14 +101,34 @@ let rec simplify_exp e = match e.e_desc with
 let simplify_eq (pat,e) =
   (pat, simplify_exp e)
 
+(* let find_duplicates (id, exp) eqs =
+  let dups, keeps = List.partition (fun (_, exp') -> equal_expressions (exp.e_desc, exp'.e_desc)) eqs in
+  let dups_ids = List.map (function
+    | Evarpat id, _ -> id
+    | Etuplepat ids, _ -> Format.eprintf "Unexpected pattern: %a@." Printer.print_pat (Etuplepat ids); assert false
+    ) dups in
+  let eqs = List.fold_left (fun eqs id' -> List.map (fun (a, b) -> a, subst id' id b) eqs) keeps dups_ids in
+  (Evarpat id, exp) :: eqs, dups_ids
+
+let find_trivials eqs =
+  let trivials, keeps = List.partition (function (_, {e_desc=Evar id';_}) -> true | _ -> false) eqs in
+  let trivials_ids = List.map (function
+    | Evarpat id, {e_desc=Evar id';_} -> (id', id)
+    | _ -> assert false
+    ) trivials in
+  let eqs = List.fold_left (fun eqs (id', id) -> List.map (fun (a, b) -> a, subst id' id b) eqs) keeps trivials_ids in
+  eqs, List.map snd trivials_ids *)
+
 let rec find_duplicates i j k removed acc = function
   | (Etuplepat _ids, _) :: _ -> Format.eprintf "Unexpected pattern: %a@." Printer.print_pat (Etuplepat _ids); assert false
   | (Evarpat id, { e_desc = Evar id'; _ }) :: tl ->
-      log 2 "%i, %i, %i@." j i k;
-      find_duplicates 0 (j+1) (k+1) (id' :: removed) (List.map (fun (p, e) -> p, subst id' id e) acc) (List.map (fun (p, e) -> p, subst id' id e) tl)
+      log 2 "%i, %i, %i remove %a for %a@." j i k Ident.print_ident id' Ident.print_ident id;
+      let subst_list = List.map (fun (p, e) -> p, subst id' id e) in
+      find_duplicates 0 (j+1) (k+1) (id'.i_id :: removed) (subst_list acc) (subst_list tl)
   | (Evarpat id, exp) :: (Evarpat id', exp') :: tl when equal_expressions (exp.e_desc, exp'.e_desc) ->
-      log 2 "%i, %i, %i@." j i k;
-      find_duplicates 0 (j+1) (k+1) (id' :: removed) (List.map (fun (p, e) -> p, subst id' id e) acc) (List.map (fun (p, e) -> p, subst id' id e) ((Evarpat id, exp) :: tl))
+      log 2 "%i, %i, %i remove %a for %a@." j i k Ident.print_ident id' Ident.print_ident id;
+      let subst_list = List.map (fun (p, e) -> p, subst id' id e) in
+      find_duplicates 0 (j+1) (k+1) (id'.i_id :: removed) (subst_list acc) (subst_list ((Evarpat id, exp) :: tl))
   | hd :: tl ->
       log 2 "%i, %i, %i@." j i k;
       find_duplicates (i+1) j (k+1) removed (hd :: acc) tl
@@ -148,20 +168,25 @@ let is_useless (id: ident) eqs =
 
 let remove_useless (eqs, vds) =
   List.fold_left (fun (i, j, k, eqs, vds) v ->
-    log 2 "%i, %i, %i@." i j k;
     let eqs', useless = is_useless v.v_ident eqs in
-    if useless then
-      (i+1), 0, (k+1), eqs', List.filter (fun v' -> v' <> v) vds
-    else
+    if useless then begin
+      log 2 "%i, %i, %i useless %s@." i j k v.v_ident.i_name;
+      (i+1), 0, (k+1), eqs', List.filter (fun v' -> v'.v_ident.i_id <> v.v_ident.i_id) vds
+    end else begin
+      log 2 "%i, %i, %i@." i j k;
       i, j+1, k+1, eqs, vds
+    end
     ) (0,0,0,eqs, vds) vds
 
 let rec remove_duplicates (eqs, vds) =
-  let removed, eqs = find_duplicates 0 0 0 [] [] (List.sort (fun (_, a) (_, b) -> compare a.e_desc b.e_desc) eqs) in
-  if removed <> [] then
-    let vds = List.filter (fun v -> not @@ List.mem v.v_ident removed) vds in
-    remove_duplicates (eqs, vds)
-  else
+  (* Format.eprintf "@.%a@." (Printer.print_list_nlr Printer.print_var_dec "" ", " "") vds; *)
+  (* let removed, eqs = find_duplicates 0 0 0 [] [] (List.sort (fun (_, a) (_, b) -> compare a.e_desc b.e_desc) eqs) in *)
+  (* Printer.print_list_nlr Format.pp_print_int "" ", " "" Format.err_formatter removed; *)
+  (* if removed <> [] then *)
+    (* let vds, vds' = List.partition (fun v -> not @@ List.exists (fun uid -> uid = v.v_ident.i_id) removed) vds in *)
+    (* Format.eprintf "@.%a@.@." (Printer.print_list_nlr Printer.print_var_dec "" ", " "") vds'; *)
+    (* remove_duplicates (eqs, vds) *)
+  (* else *)
     remove_useless (eqs, vds)
 
 let rec block b = match b with
