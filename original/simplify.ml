@@ -109,7 +109,7 @@ let rec find_duplicates removed acc = function
 let rec remove_duplicates (eqs, vds) =
   let removed, eqs = find_duplicates [] [] (List.sort (fun (_, a) (_, b) -> compare a.e_desc b.e_desc) eqs) in
   if removed <> [] then
-    let vds = List.filter (fun v -> List.mem v.v_ident removed) vds in
+    let vds = List.filter (fun v -> not @@ List.mem v.v_ident removed) vds in
     remove_duplicates (eqs, vds)
   else
     (eqs, vds)
