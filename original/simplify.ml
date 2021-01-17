@@ -95,16 +95,50 @@ let simplify_eq (pat,e) =
   (pat, simplify_exp e)
 
 let rec find_duplicates removed acc = function
-  | (pat, exp) :: (pat', exp') :: tl when equal_expressions (exp.e_desc, exp'.e_desc) ->
-    let tr_pat pat = match pat with
-      | Evarpat id -> id
-      | Etuplepat _ids ->
-          Format.eprintf "Unexpected pattern: %a@." Printer.print_pat pat;
-          assert false
-    in
-    find_duplicates (tr_pat pat' :: removed) [] @@ List.map (fun (p, e) -> p, subst (tr_pat pat') (tr_pat pat) e) @@ List.rev_append acc ((pat, exp) :: tl)
+  | (Etuplepat _ids, _) :: _ -> Format.eprintf "Unexpected pattern: %a@." Printer.print_pat (Etuplepat _ids); assert false
+  | (Evarpat id, { e_desc = Evar id'; _ }) :: tl ->
+      find_duplicates (id' :: removed) [] @@ List.map (fun (p, e) -> p, subst id' id e) @@ List.rev_append acc tl
+  | (Evarpat id, exp) :: (Evarpat id', exp') :: tl when equal_expressions (exp.e_desc, exp'.e_desc) ->
+      find_duplicates (id' :: removed) [] @@ List.map (fun (p, e) -> p, subst id' id e) @@ List.rev_append acc ((Evarpat id, exp) :: tl)
   | hd :: tl -> find_duplicates removed (hd :: acc) tl
   | [] -> removed, acc
+
+let rec depends_on (id: ident) e = match e.e_desc with
+  | Econst _ -> false
+  | Evar id' -> id.i_id = id'.i_id
+  | Ereg e -> depends_on id e
+  | Ecall (_, _, l) | Emem (_, _, _, _, l) -> List.exists (depends_on id) l
+
+
+let is_useless (id: ident) eqs =
+  let exps = List.filter_map (function (Etuplepat _, _) -> assert false | Evarpat id', exp -> if id.i_id = id'.i_id then Some exp else None) eqs in
+  let exp = match exps with
+  | [exp] -> exp
+  | _ -> assert false
+  in
+  match exp.e_desc with
+  | Ecall ("slice", min::_max::_, e) ->
+      let useless = ref true in
+      let eqs' = List.map (function
+      | (pat, {e_desc=Ecall ("slice", min'::max'::r, [{e_desc=Evar id'; _}]); e_ty; e_loc}) when id.i_id = id'.i_id ->
+          (pat, {e_desc=Ecall ("slice", {se_desc=SBinOp(SAdd, min, min');se_loc=Location.no_location} :: max' :: r, e); e_ty; e_loc})
+      | (pat, {e_desc=Ecall ("select", idx::r, [{e_desc=Evar id'; _}]); e_ty; e_loc}) when id.i_id = id'.i_id ->
+          (pat, {e_desc=Ecall ("select", {se_desc=SBinOp(SAdd, min, idx);se_loc=Location.no_location} :: r, e); e_ty; e_loc})
+      | (_, e) as eq when depends_on id e -> useless := false; eq
+      | eq -> eq
+      ) eqs in
+      eqs', !useless
+  | _ ->
+      eqs, false
+
+let remove_useless (eqs, vds) =
+  List.fold_left (fun (eqs, vds) v ->
+    let eqs', useless = is_useless v.v_ident eqs in
+    if useless then
+      eqs', List.filter (fun v' -> v' <> v) vds
+    else
+      eqs, vds
+    ) (eqs, vds) vds
 
 let rec remove_duplicates (eqs, vds) =
   let removed, eqs = find_duplicates [] [] (List.sort (fun (_, a) (_, b) -> compare a.e_desc b.e_desc) eqs) in
@@ -112,7 +146,7 @@ let rec remove_duplicates (eqs, vds) =
     let vds = List.filter (fun v -> not @@ List.mem v.v_ident removed) vds in
     remove_duplicates (eqs, vds)
   else
-    (eqs, vds)
+    remove_useless (eqs, vds)
 
 let rec block b = match b with
   | BEqs(eqs, vds) ->
