@@ -196,7 +196,7 @@ let rec block b = match b with
       let vds = List.filter (fun vd -> is_not_zero vd.v_ty) vds in
       let eqs = List.filter (fun (_, e) -> is_not_zero e.e_ty) eqs in
 
-      let _,_,_,eqs, vds = remove_duplicates (eqs, vds) in
+      (* let _,_,_,eqs, vds = remove_duplicates (eqs, vds) in *)
 
       BEqs(eqs, vds)
   | BIf(se, trueb, elseb) -> BIf(se, block trueb, block elseb)
