@@ -368,15 +368,20 @@ let fun_env { node_inputs; node_outputs; _ } =
   | l -> TProd l
 
 let program ({ p_nodes; _ } as program) : program =
-  let fun_env = FunEnv.map fun_env p_nodes in
+  try
+    let fun_env = FunEnv.map fun_env p_nodes in
 
-  let constraints = ref [] in
-  let f nod =
-    let c, r = node fun_env nod in
-    constraints := c @ !constraints;
-    r
-  in
-  let p_nodes = FunEnv.map f p_nodes in
-  { program with
-    p_nodes
-  }, !constraints
+    let constraints = ref [] in
+    let f nod =
+      let c, r = node fun_env nod in
+      constraints := c @ !constraints;
+      r
+    in
+    let p_nodes = FunEnv.map f p_nodes in
+    { program with
+      p_nodes
+    }, !constraints
+  with Errors.WrongType (found, expected, loc) ->
+    Format.eprintf "%aType Error: This expression is a %s but a %s was expected@."
+      Location.print_location loc found expected;
+    raise Errors.ErrorDetected
