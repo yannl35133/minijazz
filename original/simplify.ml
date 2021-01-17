@@ -26,7 +26,7 @@
 open Ast_old
 open Static
 
-let debug = 5
+let debug = 0
 let log i =
   if debug >= i then
     Format.printf
