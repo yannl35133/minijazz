@@ -1,5 +1,11 @@
+f(x) = o where
+  o = reg x;
+  reset y = o every x
+end where
+
 main (i) = o where
   reset
+    x = f(o);
     o = o & reg(o);
   every i
 end where
