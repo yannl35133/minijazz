@@ -336,3 +336,7 @@ let program ParserAST.{ p_enums; p_consts; p_nodes } : program =
       Format.eprintf "%aVariable %s is not declared in this part@." Location.print_location loc id; raise Errors.ErrorDetected
   | Errors.Scope_error (id, loc) ->
       Format.eprintf "%aVariable %s is not declared@." Location.print_location loc id; raise Errors.ErrorDetected
+  | Errors.WrongType (s1, s2, loc) ->
+      Format.eprintf "%aType Error: This expression has type %s but an expression of type %s was expected@."
+      Location.print_location loc s1 s2;
+    raise Errors.ErrorDetected
