@@ -111,7 +111,8 @@ let rec depends_on (id: ident) e = match e.e_desc with
 
 
 let is_useless (id: ident) eqs =
-  let exps = List.filter_map (function (Etuplepat _, _) -> assert false | Evarpat id', exp -> if id.i_id = id'.i_id then Some exp else None) eqs in
+  let (neqs, eqs') = List.partition (function (Etuplepat _, _) -> assert false | Evarpat id', _ -> id.i_id = id'.i_id) eqs in
+  let exps = List.map snd neqs in
   let e_desc = match exps with
   | [exp] -> exp.e_desc
   | [] -> Econst (VBit false)
@@ -127,7 +128,7 @@ let is_useless (id: ident) eqs =
           (pat, {e_desc=Ecall ("select", {se_desc=SBinOp(SAdd, min, idx);se_loc=Location.no_location} :: r, e); e_ty; e_loc})
       | (_, e) as eq when depends_on id e -> useless := false; eq
       | eq -> eq
-      ) eqs in
+      ) eqs' in
       eqs', !useless
   | _ ->
       eqs, false
