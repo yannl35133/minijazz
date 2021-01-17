@@ -102,7 +102,7 @@ let rec find_duplicates removed acc = function
           Format.eprintf "Unexpected pattern: %a@." Printer.print_pat pat;
           assert false
     in
-    find_duplicates (tr_pat pat' :: removed) [] @@ List.map (fun (p, e) -> p, subst (tr_pat pat') (tr_pat pat) e) @@ List.rev_append acc tl
+    find_duplicates (tr_pat pat' :: removed) [] @@ List.map (fun (p, e) -> p, subst (tr_pat pat') (tr_pat pat) e) @@ List.rev_append acc ((pat, exp) :: tl)
   | hd :: tl -> find_duplicates removed (hd :: acc) tl
   | [] -> removed, acc
 
