@@ -26,6 +26,13 @@
 open Ast_old
 open Static
 
+let debug = 0
+let log i =
+  if debug >= i then
+    Format.printf
+  else
+    Format.ifprintf Format.std_formatter
+
 let equal_values = function
   | VBit b, VBit b'
   | VBitArray [| b |], VBit b'
@@ -94,14 +101,20 @@ let rec simplify_exp e = match e.e_desc with
 let simplify_eq (pat,e) =
   (pat, simplify_exp e)
 
-let rec find_duplicates removed acc = function
+let rec find_duplicates i j k removed acc = function
   | (Etuplepat _ids, _) :: _ -> Format.eprintf "Unexpected pattern: %a@." Printer.print_pat (Etuplepat _ids); assert false
   | (Evarpat id, { e_desc = Evar id'; _ }) :: tl ->
-      find_duplicates (id' :: removed) [] @@ List.map (fun (p, e) -> p, subst id' id e) @@ List.rev_append acc tl
+      log 2 "%i, %i, %i@." j i k;
+      find_duplicates 0 (j+1) (k+1) (id' :: removed) (List.map (fun (p, e) -> p, subst id' id e) acc) (List.map (fun (p, e) -> p, subst id' id e) tl)
   | (Evarpat id, exp) :: (Evarpat id', exp') :: tl when equal_expressions (exp.e_desc, exp'.e_desc) ->
-      find_duplicates (id' :: removed) [] @@ List.map (fun (p, e) -> p, subst id' id e) @@ List.rev_append acc ((Evarpat id, exp) :: tl)
-  | hd :: tl -> find_duplicates removed (hd :: acc) tl
-  | [] -> removed, acc
+      log 2 "%i, %i, %i@." j i k;
+      find_duplicates 0 (j+1) (k+1) (id' :: removed) (List.map (fun (p, e) -> p, subst id' id e) acc) (List.map (fun (p, e) -> p, subst id' id e) ((Evarpat id, exp) :: tl))
+  | hd :: tl ->
+      log 2 "%i, %i, %i@." j i k;
+      find_duplicates (i+1) j (k+1) removed (hd :: acc) tl
+  | [] ->
+      log 1 "%i, %i, %i fini@." j i k;
+      removed, acc
 
 let rec depends_on (id: ident) e = match e.e_desc with
   | Econst _ -> false
@@ -134,16 +147,17 @@ let is_useless (id: ident) eqs =
       eqs, false
 
 let remove_useless (eqs, vds) =
-  List.fold_left (fun (eqs, vds) v ->
+  List.fold_left (fun (i, j, k, eqs, vds) v ->
+    log 2 "%i, %i, %i@." i j k;
     let eqs', useless = is_useless v.v_ident eqs in
     if useless then
-      eqs', List.filter (fun v' -> v' <> v) vds
+      (i+1), 0, (k+1), eqs', List.filter (fun v' -> v' <> v) vds
     else
-      eqs, vds
-    ) (eqs, vds) vds
+      i, j+1, k+1, eqs, vds
+    ) (0,0,0,eqs, vds) vds
 
 let rec remove_duplicates (eqs, vds) =
-  let removed, eqs = find_duplicates [] [] (List.sort (fun (_, a) (_, b) -> compare a.e_desc b.e_desc) eqs) in
+  let removed, eqs = find_duplicates 0 0 0 [] [] (List.sort (fun (_, a) (_, b) -> compare a.e_desc b.e_desc) eqs) in
   if removed <> [] then
     let vds = List.filter (fun v -> not @@ List.mem v.v_ident removed) vds in
     remove_duplicates (eqs, vds)
@@ -157,7 +171,7 @@ let rec block b = match b with
       let vds = List.filter (fun vd -> is_not_zero vd.v_ty) vds in
       let eqs = List.filter (fun (_, e) -> is_not_zero e.e_ty) eqs in
 
-      let eqs, vds = remove_duplicates (eqs, vds) in
+      let _,_,_,eqs, vds = remove_duplicates (eqs, vds) in
 
       BEqs(eqs, vds)
   | BIf(se, trueb, elseb) -> BIf(se, block trueb, block elseb)
