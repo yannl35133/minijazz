@@ -112,11 +112,12 @@ let rec depends_on (id: ident) e = match e.e_desc with
 
 let is_useless (id: ident) eqs =
   let exps = List.filter_map (function (Etuplepat _, _) -> assert false | Evarpat id', exp -> if id.i_id = id'.i_id then Some exp else None) eqs in
-  let exp = match exps with
-  | [exp] -> exp
+  let e_desc = match exps with
+  | [exp] -> exp.e_desc
+  | [] -> Econst (VBit false)
   | _ -> assert false
   in
-  match exp.e_desc with
+  match e_desc with
   | Ecall ("slice", min::_max::_, e) ->
       let useless = ref true in
       let eqs' = List.map (function
