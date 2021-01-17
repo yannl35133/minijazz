@@ -3,6 +3,8 @@ open CommonAST
 
 (* Helpers *)
 
+let debug = 0
+
 let dprint_bool b = dprintf "%s" (if b then "1" else "0")
 let dprint_nop = dprintf ""
 
@@ -61,7 +63,7 @@ let print_localized printer (e: 'a localized) = dprintf "%t" (printer e.desc)
 
 let print_identified printer (e: ('a, 'uid) identified) = dprintf "%t" (printer e.id_desc)
 
-let print_ident (id: ident) = dprintf "%s" id.id_desc (* "%t" (print_ident_desc id) *)
+let print_ident (id: ident) = if debug < 1 then dprintf "%s" !*!id else dprintf "%s#%a" !*!id UIDIdent.print !**id (* "%t" (print_ident_desc id) *)
 let print_constructor (id: constructor) = dprintf "%s" id.id_desc (* "%t" (print_ident_desc id) *)
 
 let print_full_enum { enum_name; enum_constructors_names; _ } =
@@ -137,7 +139,7 @@ let print_typed_ident print_size { ti_name; ti_type; _ } =
 
 
 let rec print_match_handler print_decl { m_state; m_body; _ } =
-  dprintf "| %t ->@[<hv2>@ %t@]"
+  dprintf "@[<hv4>| %t ->@ %t@]"
     (print_constructor m_state)
     (print_block print_decl m_body)
 
@@ -156,7 +158,7 @@ and print_usual_transition (print_exp1, print_exp2) =
         (print_exp2 e2))
 
 and print_automaton_handler (print_exp1, print_exp2, print_decl) { a_state; a_body; a_weak_transition; a_strong_transition; _ } =
-  dprintf "@[<hv2>| %t ->@ %t@ %t@ %t@]"
+  dprintf "@[<hv4>| %t ->@ %t@ %t@ %t@]"
     (print_constructor a_state)
     (print_block print_decl a_body)
     (dprint_if (a_weak_transition <> [])
@@ -177,7 +179,7 @@ and print_automaton (print_exp1, print_exp2, print_decl) { a_handlers; a_fst_sta
 
 
 and print_block print_decl =
-  print_list_naked dprint_newline print_decl
+  print_list_naked dprint_nop print_decl
 
 
 let print_inline_status = function

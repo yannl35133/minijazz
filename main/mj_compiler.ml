@@ -82,6 +82,7 @@ let lexbuf_from_file file_name =
 
 let dbg_printer p =
   ParserAst.print_program (Sizer_to_parser.program p)
+  (* NetlistSizedAst.print_program p *)
 
 let compile_impl filename =
   (* input and output files *)
@@ -109,10 +110,10 @@ let compile_impl filename =
     let p = do_pass "Sizing"                  Netlist_sizer.program p NetlistSizedAst.print_program in
 
     let p = pass "dedimension"  true            Dedimension.program p dbg_printer in
-    let p = pass "rename_local" true       Automaton.rename_program p dbg_printer in
+    let p = pass "rename_local" false          Rename_local.program p dbg_printer in
     let p = pass "deautomaton"  true              Automaton.program p dbg_printer in
     let p = pass "dereset"      true                  Reset.program p dbg_printer in
-    let p = pass "dematch"      true               Matcher.program p dbg_printer in
+    let p = pass "dematch"      true                Matcher.program p dbg_printer in
 
     let p = do_pass "Translate to MJ original" Sized_to_old.program p printer_original in
 

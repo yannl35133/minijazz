@@ -31,7 +31,7 @@ let rec gen_lv prefix (lv:lvalue) =
   | LValDrop -> [None]
   | LValId id ->
      let ident = { id_uid  = uid;
-                   id_desc = prefix ^ id.id_desc ^ (UIDIdent.to_string uid);
+                   id_desc = prefix ^ id.id_desc ^ "_" ^ (UIDIdent.to_string uid);
                    id_loc  = id.id_loc } in
      let lvvar, var = match lv.b_type with
        | BNetlist sz ->
@@ -118,7 +118,7 @@ let bit_type = TNDim []
 let new_en_var _ =
   let uid = UIDIdent.get () in
   let id = { id_uid = uid; id_loc = Location.no_location;
-             id_desc = "en" ^ (UIDIdent.to_string uid )} in
+             id_desc = "en" ^ (UIDIdent.to_string uid)} in
   id, size (EVar id) Location.no_location bit_type
 
 let is_native_fname s =
@@ -159,7 +159,7 @@ and en_sexp en (e:exp state_exp) = re_state_type e (en_sexp_desc en e.s_desc)
 and en_decl en (d:decl) = match d.desc with
   | Deq ({ b_desc = LValDrop; _ }, _) -> []
   | Deq (lv, e) ->
-     let lst = gen_lv "tmp" lv in
+     let lst = gen_lv "tmp_" lv in
      let lst_lv, lst_eq =
        List.fold_right (fun x (lst_lv, lst_eq)  ->
            match x with
@@ -374,7 +374,7 @@ and decl px (en:exp option) env (b, p, i, o) (d:decl) = match d.desc with
      let _, b, _, p, i, o =
        ConstructEnv.fold
          (fun c h (lvs, b, defs, _p, _i, _o) ->
-           let px = px ^ h.m_state.id_desc in
+           let px = px ^ "_" ^ h.m_state.id_desc in
            let cond = slice e (index c) in
            let en = match en with
              | None -> Some cond

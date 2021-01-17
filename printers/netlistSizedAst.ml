@@ -18,7 +18,7 @@ let rec print_exp_desc = function
   | EVar id  -> print_ident id
   | EReg e   -> dprintf "reg@ %t" (print_exp e)
   | ECall (fname, params, args) ->
-      dprintf "%t@[<hv4>%t@,%t@]"
+      dprintf "%t@[<hv>%t%t@]"
         (print_funname fname)
         (print_list_if_nonempty chev comma_sep print_bitype_exp params)
         (print_list par comma_sep print_exp args)
@@ -40,13 +40,13 @@ let print_lvalue = print_lvalue0 print_type
 
 let rec print_decl_desc = function
   | Deq (lv, exp) ->
-      dprintf "@[%t%t@;<1 4>%t@]%t"
+      dprintf "@[<4>%t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_tritype_exp exp)
         (semicolon_sep)
   | Dlocaleq (lv, exp) ->
-      dprintf "@[local %t%t@;<1 4>%t@]%t"
+      dprintf "@[<4>local %t%t%t@]%t"
         (print_lvalue lv)
         (binop_sep "=")
         (print_tritype_exp exp)
@@ -60,7 +60,7 @@ let rec print_decl_desc = function
      dprintf "@[<v2>automaton@ %t@]@ end"
       (print_automaton (print_exp, print_state_transition_exp print_exp, print_decl) auto)
   | Dmatch (e, matcher) ->
-      dprintf "@[<v2>match %t with@ %t@]@ end"
+      dprintf "@[<v2>match @[%t@] with@ %t@]@ end"
         (print_state_exp print_exp e)
         (print_matcher print_decl matcher)
   | Dif (se, b1, b2) ->
