@@ -129,6 +129,7 @@ let compile_impl filename =
 
     if not !no_netlist then begin
       let net = open_out net_name in
+      let p = Netlist_simplify.simplify p in
       Netlist_printer.print_program net p;
       close_out net
     end
