@@ -179,14 +179,13 @@ let remove_useless (eqs, vds) =
     ) (0,0,0,eqs, vds) vds
 
 let rec remove_duplicates (eqs, vds) =
-  (* Format.eprintf "@.%a@." (Printer.print_list_nlr Printer.print_var_dec "" ", " "") vds; *)
-  (* let removed, eqs = find_duplicates 0 0 0 [] [] (List.sort (fun (_, a) (_, b) -> compare a.e_desc b.e_desc) eqs) in *)
-  (* Printer.print_list_nlr Format.pp_print_int "" ", " "" Format.err_formatter removed; *)
-  (* if removed <> [] then *)
-    (* let vds, vds' = List.partition (fun v -> not @@ List.exists (fun uid -> uid = v.v_ident.i_id) removed) vds in *)
-    (* Format.eprintf "@.%a@.@." (Printer.print_list_nlr Printer.print_var_dec "" ", " "") vds'; *)
-    (* remove_duplicates (eqs, vds) *)
-  (* else *)
+  log 3 "@.%a@." (Printer.print_list_nlr Printer.print_var_dec "" ", " "") vds;
+  let removed, eqs = find_duplicates 0 0 0 [] [] (List.sort (fun (_, a) (_, b) -> compare a.e_desc b.e_desc) eqs) in
+  log 3 "%a" (Printer.print_list_nlr Format.pp_print_int "" ", " "") removed;
+  if removed <> [] then
+    let vds = List.fold_left (fun vds uid -> List.filter (fun v' -> v'.v_ident.i_id <> uid) vds) vds removed in
+    remove_duplicates (eqs, vds)
+  else
     remove_useless (eqs, vds)
 
 let rec block b = match b with
