@@ -16,14 +16,14 @@ let array_of = function
 let slice_val s e c = Array.sub (array_of c) s (e+1-s)
 
 let args_of = function
-    | Earg a | Enot a | Erom (_,_,a) 
+    | Earg a | Enot a | Erom (_,_,_,a)
     | Eslice (_,_,a) | Eselect (_, a)
         -> [a]
     | Ereg v -> [Avar v]
     | Ebinop (_,a0,a1) | Econcat (a0,a1)
         -> [a0;a1]
     | Emux (a0,a1,a2) -> [a0;a1;a2]
-    | Eram (_,_,a0,a1,a2,a3) -> [a0;a1;a2;a3]
+    | Eram (_,_,_,a0,a1,a2,a3) -> [a0;a1;a2;a3]
 let deps_of exp =
     List.fold_left (fun rt -> function
         | Avar v -> v::rt
@@ -33,18 +33,18 @@ let deps_of exp =
 
 let simplify : program -> program
 = fun prg ->
-    
-    (* Phase 1 : précalcul des valeurs *) 
+
+    (* Phase 1 : précalcul des valeurs *)
 let prec_vals : exp Env.t -> exp Env.t
 = fun eq_ev ->
     let add e k v = e := Env.add k v !e in
 
-    let def_pv v_n = 
+    let def_pv v_n =
         let sz = size_of (Env.find v_n prg.p_vars)
         in PSub (v_n, (v_n,0,sz)) in
-    
+
     let pv = ref (List.fold_left
-        (fun e v_n -> Env.add v_n (def_pv v_n) e) 
+        (fun e v_n -> Env.add v_n (def_pv v_n) e)
         Env.empty prg.p_inputs)   in
     let new_exp  =  ref Env.empty in
     let dfs_tg   =  ref Env.empty in
@@ -58,16 +58,16 @@ let prec_vals : exp Env.t -> exp Env.t
         isc_ p a
         (fun c -> Aconst c)
         (fun (u_n,_) -> Avar u_n)
-    in 
+    in
     (* 1a: logique combinatoire *)
     let rec prcv v_n =
-        begin try Env.find v_n !pv 
+        begin try Env.find v_n !pv
         with Not_found ->
             if Env.mem v_n !dfs_tg
             then raise Scheduler.Combinational_cycle
             else begin
                 add dfs_tg v_n ();
-                let m_exp, m_pv 
+                let m_exp, m_pv
                     = do_prcv v_n (Env.find v_n eq_ev) in
                 add pv v_n m_pv;
                 add new_exp v_n m_exp;
@@ -83,12 +83,12 @@ let prec_vals : exp Env.t -> exp Env.t
     | Earg a ->
         isc a gcst
         (fun (u_n,w) -> Earg (Avar u_n), PSub (u_n,w))
-    | Ereg _ | Eram (_,_,_,_,_,_) as e
+    | Ereg _ | Eram (_,_,_,_,_,_,_) as e
         -> e, dpv
     | Enot a -> Enot (extr a), dpv
     | Ebinop (o, a0, a1) -> Ebinop (o, extr a0, extr a1), dpv
     | Emux (a0, a1, a2) -> Emux (extr a0, extr a1, extr a2), dpv
-    | Erom (i,j,a) -> Erom (i,j, extr a), dpv
+    | Erom (i,j,f,a) -> Erom (i,j,f, extr a), dpv
     | Econcat (a0, a1) -> Econcat (extr a0, extr a1), dpv
     | Eslice (s, e, a) ->
         let cst c = gcst (VBitArray (slice_val s e c))
@@ -114,8 +114,8 @@ let prec_vals : exp Env.t -> exp Env.t
             | PConst _ -> Ereg v_n
             | PSub (u_n, _) -> Ereg u_n
             end
-        | Eram (i,j,ra,we,wa,wd) ->
-                Eram (i,j,extr ra,extr we,extr wa,extr wd)
+        | Eram (i,j,f,ra,we,wa,wd) ->
+                Eram (i,j,f,extr ra,extr we,extr wa,extr wd)
         | e -> e
     in
     Env.iter (fun v_n _ -> let _ = prcv v_n in ()) eq_ev;
@@ -124,7 +124,7 @@ let prec_vals : exp Env.t -> exp Env.t
     in let new_exp = prec_vals (Env.of_list prg.p_eqs) in
 
     (* Phase 2 : sélection des variables utiles *)
-    let keep = List.fold_left 
+    let keep = List.fold_left
         (fun e v_n -> Env.add v_n (Ereg ""(*non utilisé*)) e)
         Env.empty prg.p_inputs
 

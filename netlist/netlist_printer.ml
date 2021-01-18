@@ -68,15 +68,19 @@ let print_op ff op = match op with
   | Or -> fprintf ff "OR"
   | Xor -> fprintf ff "XOR"
 
+let print_file ff = function
+| None -> ()
+| Some f -> fprintf ff "\"%s\"" f
+
 let print_exp ff e = match e with
   | Earg a -> print_arg ff a
   | Ereg x -> fprintf ff "REG %s" x
   | Enot x -> fprintf ff "NOT %a" print_arg x
   | Ebinop(op, x, y) -> fprintf ff  "%a %a %a" print_op op  print_arg x  print_arg y
   | Emux (c, x, y) -> fprintf ff "MUX %a %a %a " print_arg c  print_arg x  print_arg y
-  | Erom (addr, word, ra) -> fprintf ff "ROM %d %d %a" addr word  print_arg ra
-  | Eram (addr, word, ra, we, wa, data) ->
-      fprintf ff "RAM %d %d %a %a %a %a" addr word
+  | Erom (addr, word, file, ra) -> fprintf ff "ROM %d %d %a %a" addr word  print_file file  print_arg ra
+  | Eram (addr, word, file, ra, we, wa, data) ->
+      fprintf ff "RAM %d %d %a %a %a %a %a" addr word  print_file file
         print_arg ra  print_arg we
         print_arg wa  print_arg data
   | Eselect (idx, x) -> fprintf ff "SELECT %d %a" idx print_arg x

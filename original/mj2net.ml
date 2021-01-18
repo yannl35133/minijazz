@@ -93,10 +93,10 @@ let tr_exp e = match e.e_desc with
       Netlist_ast.Eslice (expect_int min, expect_int max, expect_arg e)
   | Ecall("concat", _, [e1; e2]) ->
       Netlist_ast.Econcat (expect_arg e1, expect_arg e2)
-  | Emem(MRom, addr_size, word_size, _, [e]) ->
-      Netlist_ast.Erom (expect_int addr_size, expect_int word_size, expect_arg e)
-  | Emem(MRam, addr_size, word_size, _, [ra; we; wa; data]) ->
-      Netlist_ast.Eram (expect_int addr_size, expect_int word_size,
+  | Emem(MRom, addr_size, word_size, file, [e]) ->
+      Netlist_ast.Erom (expect_int addr_size, expect_int word_size, file, expect_arg e)
+  | Emem(MRam, addr_size, word_size, file, [ra; we; wa; data]) ->
+      Netlist_ast.Eram (expect_int addr_size, expect_int word_size, file,
                        expect_arg ra, expect_arg we, expect_arg wa, expect_arg data)
   | _ -> assert false
 

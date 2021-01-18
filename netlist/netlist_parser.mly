@@ -50,6 +50,7 @@
 
 %token <string> CONST
 %token <string> NAME
+%token <string> FILE
 %token AND MUX NAND OR RAM ROM XOR REG NOT
 %token CONCAT SELECT SLICE
 %token COLON EQUAL COMMA VAR IN INPUT OUTPUT
@@ -77,10 +78,10 @@ exp:
   | NAND x=arg y=arg { Ebinop(Nand, x, y) }
   | XOR x=arg y=arg { Ebinop(Xor, x, y) }
   | MUX x=arg y=arg z=arg { Emux(x, y, z) }
-  | ROM addr=int word=int ra=arg
-    { Erom(addr, word, ra) }
-  | RAM addr=int word=int ra=arg we=arg wa=arg data=arg
-    { Eram(addr, word, ra, we, wa, data) }
+  | ROM addr=int word=int file=FILE? ra=arg
+     { Erom (addr, word, file, ra) }
+  | RAM addr=int word=int file=FILE? ra=arg we=arg wa=arg data=arg
+     { Eram (addr, word, file, ra, we, wa, data) }
   | CONCAT x=arg y=arg
      { Econcat(x, y) }
   | SELECT idx=int x=arg

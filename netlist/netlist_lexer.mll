@@ -50,6 +50,11 @@ let keyword_list =
 
 }
 
+let digit = ['0'-'9']
+let alpha = ['a'-'z' 'A'-'Z']
+let alphanum = alpha | digit | ['-' ''' '_']
+let filename = alphanum | '.'
+
 rule token = parse
     '\n'
       { new_line lexbuf; token lexbuf }     (* skip blanks *)
@@ -59,6 +64,7 @@ rule token = parse
   | ":"            { COLON }
   | ","            { COMMA }
   | ['0'-'9']+ as lxm { CONST lxm }
+  | "\"" (filename+ as file) "\""     { FILE file }
   | ('_' ? ['A'-'Z' 'a'-'z']('_' ? ['A'-'Z' 'a'-'z' ''' '0'-'9']) * as id)
       { let s = Lexing.lexeme lexbuf in
         try List.assoc s keyword_list
