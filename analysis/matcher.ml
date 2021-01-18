@@ -50,19 +50,20 @@ let compute_size = function
   | TNDim (_ :: _) -> assert false
   | TProd _ -> assert false
 
+(* if e = 1 then e1 else e2 *)
 let emux e e1 e2 =
   match compute_size e1.si_size with
   | Some n ->
       { e1 with si_desc = ECall (relocalize e.si_loc "mux_1",
                                 [relocalize e.si_loc (SIntExp n)],
-                                [e; e1; e2])}
+                                [e; e2; e1])}
   | None ->
-      { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e1; e2])}
+      { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e2; e1])}
 
 let mux (e:exp) (e1:tritype_exp) e2 = match e1, e2 with
   | Exp e1, Exp e2 -> Exp (emux e e1 e2)
   | StateExp e1, StateExp e2 ->
-     StateExp { e1 with s_desc = ESMux (e, e1, e2) }
+     StateExp { e1 with s_desc = ESMux (e, e2, e1) }
   | _ -> assert false
 
 let ereg e = { e with si_desc = EReg e }
@@ -81,16 +82,46 @@ let id_to_var ty id =
 let one =
   size (EConst (VBit true)) (Location.no_location) (TNDim [Size (SInt 1)])
 
+let enot e =
+  { e with si_desc = ECall (relocalize e.si_loc "not", [], [e]) }
+
+let concat e1 e2 =
+  let n1, n2 = match e1.si_size, e1.si_size with
+    | TNDim [Size n1], TNDim [Size n2] -> n1, n2
+    | _ -> assert false
+  in
+  { e1 with si_desc = ECall (relocalize e1.si_loc "concat_1",
+                             [relocalize e1.si_loc @@ SIntExp n1;
+                              relocalize e2.si_loc @@ SIntExp n2],
+                             [e1; e2]);
+            si_size = TNDim [Size (SIBinOp(SAdd,
+                                           relocalize e1.si_loc n1,
+                                           relocalize e2.si_loc n2))]}
+
 let eand e1 e2 =
   { e1 with si_desc = ECall (relocalize e1.si_loc "and", [], [e1;e2])}
 
 let slice e i =
   let n = match e.si_size with
-    | TNDim [Size n] -> relocalize e.si_loc @@ SIntExp n
+    | TNDim [Size n] -> n
     | _ -> assert false
   in
   let i = relocalize e.si_loc @@ SIntExp (SInt i) in
-  { e with si_desc = ECall (relocalize e.si_loc "slice_one", [n; i], [e])}
+  { e with si_desc = ECall (relocalize e.si_loc "slice_one",
+                            [relocalize e.si_loc @@ SIntExp n; i], [e]);
+           si_size = TNDim [Size (SInt 1)]}
+
+let slice_from e i =
+  let n = match e.si_size with
+    | TNDim [Size n] -> n
+    | _ -> assert false
+  in
+  let si = relocalize e.si_loc @@ SIntExp (SInt i) in
+  { e with si_desc = ECall (relocalize e.si_loc "slice_from",
+                            [relocalize e.si_loc @@ SIntExp n; si], [e]);
+           si_size = TNDim [Size (SIBinOp(SMinus,
+                                          relocalize e.si_loc n,
+                                          relocalize e.si_loc (SInt i)))] }
 
 let enum_tbl : (UIDIdent.t, int) Hashtbl.t = Hashtbl.create 16
 let constr_tbl : (UIDConstructor.t, int) Hashtbl.t = Hashtbl.create 16
@@ -202,7 +233,10 @@ let rec state_exp (sfv, fv) (e:exp state_exp) =
                   ti_type = relocalize v.id_loc @@ BNetlist ty;
                   ti_loc = e.s_loc } in
        sfv, Env.add v.id_uid ti fv, EVar v
-    | ESReg e -> let sfv, fv, e = state_exp (sfv, fv) e in sfv, fv, EReg e
+    | ESReg e ->
+       let sfv, fv, e = state_exp (sfv, fv) e in
+       let exp = concat (enot(ereg(enot(slice e 0)))) (ereg (slice_from e 1)) in
+       sfv, fv, exp.si_desc
     | ESMux (ce, e1, e2) ->
         let sfv, fv, e1 = state_exp (sfv, fv) e1 in
         let sfv, fv, e2 = state_exp (sfv, fv) e2 in

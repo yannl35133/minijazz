@@ -9,7 +9,7 @@ let zero = { si_desc = EConst (VBit false);
 let rst (c:exp) (exp:tritype_exp) =
   match exp with
   | Exp e ->
-     let si_desc = ECall (relocalize e.si_loc "mux", [], [c; zero; e]) in
+     let si_desc = ECall (relocalize e.si_loc "mux", [], [c; e; zero]) in
      Exp { e with si_desc }
   | StateExp e -> StateExp { e with s_desc = ESReg e }
   | StateTransitionExp _ -> assert false

@@ -21,8 +21,9 @@ let ereg (e:exp) = { e with si_desc = EReg e }
 let eor (e1:exp) (e2:exp) =
   { e1 with si_desc = ECall (relocalize e1.si_loc "or", [], [e1; e2])}
 
+(* if e = 1 then e1 else e2 *)
 let mux (e:exp) e1 e2 =
-  { e1 with s_desc = ESMux (e, e1, e2)}
+  { e1 with s_desc = ESMux (e, e2, e1) }
 
 let eeq (v:exp) (e:exp) =
   match v.si_desc with
