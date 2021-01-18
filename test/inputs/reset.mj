@@ -6,6 +6,6 @@ end where
 main (i) = o where
   reset
     x = f(o);
-    o = o & reg(o);
+    o = 1 + reg(o);
   every i
 end where
