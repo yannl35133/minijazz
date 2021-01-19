@@ -281,7 +281,7 @@ let rec state_exp (sfv, fv) (e:exp state_exp) =
        sfv, Env.add v.id_uid ti fv, EVar v
     | ESReg e ->
        let sfv, fv, e' = state_exp (sfv, fv) e in
-       let exp = emux init (ereg e') (fst_state ty_sz) in
+       let exp = emux init (fst_state ty_sz) (ereg e') in
        sfv, fv, exp.si_desc
     | ESMux (ce, e1, e2) ->
         let sfv, fv, e1 = state_exp (sfv, fv) e1 in
