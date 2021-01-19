@@ -123,6 +123,52 @@ let slice_from e i =
                                           relocalize e.si_loc n,
                                           relocalize e.si_loc (SInt i)))] }
 
+
+
+
+let (init_f, init) : node * exp =
+  let nl = no_localize in
+  let nL = Location.no_location in
+  let var_ident = identify nL "init" (UIDIdent.get ()) in
+  let var_one = identify nL "one" (UIDIdent.get ()) in
+  let f = { node_name=nl "$init"; node_loc=nL; node_params=[]; node_inline=Inline;
+            node_inputs=[]; node_outputs = [{ti_name=var_ident; ti_loc=nL; ti_type=nl @@ BNetlist (TNDim [])}];
+            node_variables=Env.add !**var_one (tritype var_one nL (BNetlist (TNDim []))) @@ Env.singleton !**var_ident (tritype var_ident nL (BNetlist (TNDim [])));
+            node_body = [
+              nl @@ Deq (tritype (LValId var_one) nL (BNetlist (TNDim [])), Exp (size (EConst (VBit true)) nL (TNDim [])) );
+              nl @@ Deq (tritype (LValId var_ident) nL (BNetlist (TNDim [])), Exp (size (EReg (size (EVar var_one) nL (TNDim []))) nL (TNDim [])) );
+            ]}
+  in
+  f, size (ECall (nl "$init", [], [])) nL (TNDim [])
+
+
+let (fst_state_f, fst_state) : node * (int -> exp) =
+  let nl = no_localize in
+  let nL = Location.no_location in
+  let p_size = identify nL "state_size" 0 in
+  let p_size_m1 = SIBinOp (SMinus, nl @@ SIParam p_size, nl @@ SInt 1) in
+  let var_ident = identify nL "fst_state" (UIDIdent.get ()) in
+  let siz = TNDim [Size (SIParam p_size)] in
+
+  let f = { node_name=nl "$fst_state"; node_loc=nL; node_params=[{ sti_name=p_size; sti_loc=nL; sti_type=nl TInt}]; node_inline=Inline;
+            node_inputs=[]; node_outputs = [{ti_name=var_ident; ti_loc=nL; ti_type=nl @@ BNetlist siz}];
+            node_variables=Env.singleton !**var_ident (tritype var_ident nL (BNetlist siz));
+            node_body = [
+              nl @@ Dif ( nl @@ SBBinIntOp (SEq, nl @@ SIParam p_size, nl @@ SInt 1)
+                , [nl @@ Deq (tritype (LValId var_ident) nL (BNetlist siz), Exp (size (EConst (VNDim [VBit true])) nL siz))]
+                , [nl @@ Deq (tritype (LValId var_ident) nL (BNetlist siz),
+                    Exp (size (ECall (nl "concat_1", [nl @@ SIntExp p_size_m1; nl @@ SIntExp (SInt 1)],
+                        [
+                          (size (ECall (nl "$fst_state", [nl @@ SIntExp p_size_m1], [])) nL (TNDim [Size p_size_m1]));
+                          (size (EConst (VNDim [VBit false])) nL (TNDim [Size (SInt 1)]))
+                        ])) nL siz))]
+              )]}
+  in
+  f, fun n -> size (ECall (nl "$fst_state", [nl @@ SIntExp (SInt n)], [])) nL siz
+
+
+
+
 let enum_tbl : (UIDIdent.t, int) Hashtbl.t = Hashtbl.create 16
 let constr_tbl : (UIDConstructor.t, int) Hashtbl.t = Hashtbl.create 16
 
@@ -234,8 +280,8 @@ let rec state_exp (sfv, fv) (e:exp state_exp) =
                   ti_loc = e.s_loc } in
        sfv, Env.add v.id_uid ti fv, EVar v
     | ESReg e ->
-       let sfv, fv, e = state_exp (sfv, fv) e in
-       let exp = concat (enot(ereg(enot(slice e 0)))) (ereg (slice_from e 1)) in
+       let sfv, fv, e' = state_exp (sfv, fv) e in
+       let exp = emux init (fst_state ty_sz) (ereg e') in
        sfv, fv, exp.si_desc
     | ESMux (ce, e1, e2) ->
         let sfv, fv, e1 = state_exp (sfv, fv) e1 in
@@ -463,4 +509,4 @@ let program (p:program) =
     p_enums = ConstructEnv.empty;
     p_nodes = Hashtbl.fold (fun _ node p_nodes ->
                   FunEnv.add node.node_name.desc node p_nodes)
-                program_nodes_tbl FunEnv.empty }
+                program_nodes_tbl (FunEnv.add "$fst_state" fst_state_f @@ FunEnv.singleton "$init" init_f) }
