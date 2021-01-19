@@ -379,11 +379,11 @@ let rec rename_lv px (env: ident Env.t) (lv:lvalue) =
 and mux_lv cond defs b lv new_lv : exp M.t =
   match lv.b_desc, new_lv.b_desc with
   | LValDrop, LValDrop -> b
-  | LValId id, LValId nid ->
+  | LValId _, LValId nid ->
      let var = id_to_var lv.b_type nid in
-     begin match Env.find_opt id.id_uid defs with
+     begin match M.find_opt lv b with
      | None -> M.add lv var b
-     | Some id2 -> M.add lv (emux cond var (id_to_var lv.b_type id2)) b
+     | Some e2 -> M.add lv (emux cond var e2) b
      end
   | LValTuple lvs, LValTuple new_lvs ->
      List.fold_left2 (mux_lv cond defs) b lvs new_lvs
