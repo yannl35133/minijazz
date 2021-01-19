@@ -332,6 +332,8 @@ let program ParserAST.{ p_enums; p_consts; p_nodes } : program =
     in
     { p_enums = enum_constrs; p_consts; p_consts_order; p_nodes }
   with
+  | VariableAlreadyDeclared (id, loc) ->
+      Format.eprintf "%aVariable %s is not declared twice in this part@." Location.print_location loc id; raise Errors.ErrorDetected
   | MissingVariable (id, loc) ->
       Format.eprintf "%aVariable %s is not declared in this part@." Location.print_location loc id; raise Errors.ErrorDetected
   | Errors.Scope_error (id, loc) ->

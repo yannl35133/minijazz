@@ -110,7 +110,7 @@ let rec print_exp_desc = function
         (binop_sep op.desc)
         (print_exp e2)
   | ECall (fname, params, args) ->
-      dprintf "%t@[<hv4>%t%t@]"
+      dprintf "%t@[<hv4>%t@,%t@]"
         (print_ident fname)
         (print_list_if_nonempty chev comma_sep print_opt_sexp params)
         (print_list par comma_sep print_exp args)

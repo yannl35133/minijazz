@@ -152,7 +152,7 @@ let exp a n =
 
 let bool_list_of_dec_int (nbits, v) =
   List.init (-nbits)
-    (fun n -> match v / (exp 10 n) mod 10 with
+    (fun n -> match v / (exp 10 (-nbits - n - 1)) mod 10 with
     | 0 -> false
     | 1 -> true
     | _ -> invalid_arg "bool_list_of_dec_int"
