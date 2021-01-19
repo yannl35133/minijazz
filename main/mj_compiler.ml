@@ -128,8 +128,8 @@ let compile_impl filename =
     let p = silent_pass "Simplify netlist" !netlist_simplify Netlist_simplify.simplify p in
 
     if not !no_netlist then begin
-      let net = open_out net_name in
       let p = Netlist_simplify.simplify p in
+      let net = open_out net_name in
       Netlist_printer.print_program net p;
       close_out net
     end
