@@ -50,20 +50,20 @@ let compute_size = function
   | TNDim (_ :: _) -> assert false
   | TProd _ -> assert false
 
-(* if e = 1 then e1 else e2 *)
+(* if e = 0 then e1 else e2 *)
 let emux e e1 e2 =
   match compute_size e1.si_size with
   | Some n ->
       { e1 with si_desc = ECall (relocalize e.si_loc "mux_1",
                                 [relocalize e.si_loc (SIntExp n)],
-                                [e; e2; e1])}
+                                [e; e1; e2])}
   | None ->
-      { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e2; e1])}
+      { e1 with si_desc = ECall (relocalize e.si_loc "mux", [], [e; e1; e2])}
 
 let mux (e:exp) (e1:tritype_exp) e2 = match e1, e2 with
   | Exp e1, Exp e2 -> Exp (emux e e1 e2)
   | StateExp e1, StateExp e2 ->
-     StateExp { e1 with s_desc = ESMux (e, e2, e1) }
+     StateExp { e1 with s_desc = ESMux (e, e1, e2) }
   | _ -> assert false
 
 let ereg e = { e with si_desc = EReg e }
@@ -241,7 +241,7 @@ and en_decl en (d:decl) = match d.desc with
        List.fold_right (fun x (lst_lv, lst_eq)  ->
            match x with
            | Some (lv, var_lv, tmp_lv, tmp_var) ->
-              let eq = Deq (lv, (mux en tmp_var (reg var_lv))) in
+              let eq = Deq (lv, (mux en (reg var_lv) tmp_var)) in
               tmp_lv :: lst_lv, (relocalize d.loc @@ eq) :: lst_eq
            | None -> (tritype LValDrop lv.b_loc lv.b_type) :: lst_lv, lst_eq)
          lst ([],[])
@@ -281,7 +281,7 @@ let rec state_exp (sfv, fv) (e:exp state_exp) =
        sfv, Env.add v.id_uid ti fv, EVar v
     | ESReg e ->
        let sfv, fv, e' = state_exp (sfv, fv) e in
-       let exp = emux init (fst_state ty_sz) (ereg e') in
+       let exp = emux init (ereg e') (fst_state ty_sz) in
        sfv, fv, exp.si_desc
     | ESMux (ce, e1, e2) ->
         let sfv, fv, e1 = state_exp (sfv, fv) e1 in
@@ -383,7 +383,7 @@ and mux_lv cond defs b lv new_lv : exp M.t =
      let var = id_to_var lv.b_type nid in
      begin match M.find_opt lv b with
      | None -> M.add lv var b
-     | Some e2 -> M.add lv (emux cond var e2) b
+     | Some e2 -> M.add lv (emux cond e2 var) b
      end
   | LValTuple lvs, LValTuple new_lvs ->
      List.fold_left2 (mux_lv cond defs) b lvs new_lvs
