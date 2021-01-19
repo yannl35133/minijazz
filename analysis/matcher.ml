@@ -86,7 +86,7 @@ let enot e =
   { e with si_desc = ECall (relocalize e.si_loc "not", [], [e]) }
 
 let concat e1 e2 =
-  let n1, n2 = match e1.si_size, e1.si_size with
+  let n1, n2 = match e1.si_size, e2.si_size with
     | TNDim [Size n1], TNDim [Size n2] -> n1, n2
     | _ -> assert false
   in
